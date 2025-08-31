@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RawStor Benchmark Dashboard</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>📊 RawStor Performance Dashboard</h1>
+            <p>Интерактивная визуализация результатов FIO тестов</p>
+        </header>
+
+        <div class="filters">
+            <div class="filter-group">
+                <h3>📋 Конфигурации:</h3>
+                <div id="config-filters"></div>
+            </div>
+            <div class="filter-group">
+                <h3>🌿 Ветки:</h3>
+                <div id="branch-filters"></div>
+            </div>
+            <div class="filter-group">
+                <h3>📈 Метрики:</h3>
+                <div id="metric-filters"></div>
+            </div>
+        </div>
+
+        <div class="charts-container">
+            <div class="chart" id="iops-chart">
+                <h2>🚀 IOPS Performance</h2>
+                <div class="chart-content"></div>
+            </div>
+            
+            <div class="chart" id="latency-chart">
+                <h2>⏱️ Latency Performance</h2>
+                <div class="chart-content"></div>
+            </div>
+        </div>
+
+        <div class="legend" id="legend"></div>
+
+        <footer>
+            <p>Данные обновляются автоматически | <span id="last-update"></span></p>
+        </footer>
+    </div>
+
+    <div id="tooltip" class="tooltip"></div>
+
+    <script src="data-loader.js"></script>
+    <script src="charts.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
