@@ -693,6 +693,7 @@
 
 | Date | Branch | Commit | Read IOPS | Read Latency | Write IOPS | Write Latency |
 | :--- | :---   | :---   |      ---: |         ---: |       ---: |          ---: |
+| [2025-08-31T20:58:11+00:00](perftest--without-liburing-4k-2-1/cabcdb8eebd7baa671f25a90410fe44f421850d8.md) | refs/heads/main | [cabcdb8eebd7baa671f25a90410fe44f421850d8](https://github.com/rawstor/librawstor/commit/cabcdb8eebd7baa671f25a90410fe44f421850d8) | 10213.1 | 90376.208174 | 10194.0 | 103120.036737 |
 | [2025-08-31T13:18:01+00:00](perftest--without-liburing-4k-2-1/8173024b13c30ae735733876cab701b34b4973fc.md) | refs/heads/feat/op | [8173024b13c30ae735733876cab701b34b4973fc](https://github.com/rawstor/librawstor/commit/8173024b13c30ae735733876cab701b34b4973fc) | 10324.3 | 89492.494494 | 10305.6 | 102077.723393 |
 | [2025-08-31T12:29:05+00:00](perftest--without-liburing-4k-2-1/c8372b35dcf66cff441b5250b19dfd8624d51033.md) | refs/heads/main | [c8372b35dcf66cff441b5250b19dfd8624d51033](https://github.com/rawstor/librawstor/commit/c8372b35dcf66cff441b5250b19dfd8624d51033) | 10099.2 | 91494.136912 | 10083.3 | 104168.63391 |
 | [2025-08-31T12:26:31+00:00](perftest--without-liburing-4k-2-1/7a327eaf980ebafc192abd39e5181088f87a7c5b.md) | refs/heads/fix/objcleanup | [7a327eaf980ebafc192abd39e5181088f87a7c5b](https://github.com/rawstor/librawstor/commit/7a327eaf980ebafc192abd39e5181088f87a7c5b) | 9688.6 | 95646.250088 | 9668.3 | 108411.195164 |
