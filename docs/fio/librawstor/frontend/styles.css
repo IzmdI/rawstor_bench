@@ -177,6 +177,44 @@ header p {
     font-size: 14px;
 }
 
+.chart-filters {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 15px;
+    margin-top: 20px;
+    padding: 15px;
+    background: #f8f9fa;
+    border-radius: 8px;
+    border: 1px solid #e0e0e0;
+}
+
+.chart-filters .filter-group {
+    margin-bottom: 10px;
+}
+
+.chart-filters .filter-group:last-child {
+    margin-bottom: 0;
+}
+
+.chart-filters h3 {
+    font-size: 12px;
+    margin-bottom: 8px;
+    color: #2c3e50;
+    font-weight: 600;
+}
+
+.chart-filters label {
+    display: block;
+    margin: 3px 0;
+    font-size: 11px;
+    cursor: pointer;
+}
+
+.chart-filters input[type="checkbox"] {
+    margin-right: 6px;
+    transform: scale(0.9);
+}
+
 footer {
     text-align: center;
     margin-top: 30px;
@@ -189,4 +227,20 @@ footer {
     .charts-container {
         grid-template-columns: 1fr 1fr;
     }
+}
+
+/* Адаптивность для мобильных */
+@media (max-width: 768px) {
+    .chart-filters {
+        grid-template-columns: 1fr;
+    }
+
+    .charts-container {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* Убираем старые общие фильтры */
+.filters {
+    display: none;
 }

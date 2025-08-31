@@ -189,13 +189,13 @@ class BenchmarkCharts {
     showTooltip(event, pointData, lineInfo, metricType) {
         const tooltip = d3.select('#tooltip');
         const metricName = metricType === 'iops' ? 'IOPS' : 'Latency';
-        const value = metricType === 'iops' ? 
-            `${pointData.value.toLocaleString()} IOPS` : 
+        const value = metricType === 'iops' ?
+            `${pointData.value.toLocaleString()} IOPS` :
             `${pointData.value.toLocaleString()} ns`;
 
         tooltip.html(`
             <h3>${pointData.rawData.dateLabel}</h3>
-            <p><strong>Конфигурация:</strong> ${lineInfo.config}</p>
+            <p><strong>Конфигурация:</strong> ${lineInfo.config.replace('perftest--', '')}</p>
             <p><strong>Ветка:</strong> ${lineInfo.branch}</p>
             <p><strong>Тип:</strong> ${lineInfo.type === 'read' ? 'Чтение' : 'Запись'}</p>
             <p><strong>${metricName}:</strong> ${value}</p>
