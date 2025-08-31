@@ -215,6 +215,94 @@ header p {
     transform: scale(0.9);
 }
 
+.zoom-controls rect {
+    transition: fill 0.2s ease;
+}
+
+.zoom-controls rect:hover {
+    fill: #2980b9;
+}
+
+.zoom-controls text {
+    font-weight: bold;
+    font-size: 14px;
+    pointer-events: none;
+}
+
+.zoomable-svg {
+    cursor: move;
+    cursor: grab;
+}
+
+.zoomable-svg:active {
+    cursor: grabbing;
+}
+
+/* Индикатор загрузки */
+.loading {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 200px;
+    color: #7f8c8d;
+    font-size: 16px;
+}
+
+.loading::after {
+    content: '';
+    width: 20px;
+    height: 20px;
+    margin-left: 10px;
+    border: 2px solid #3498db;
+    border-top: 2px solid transparent;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* Оптимизация для большого количества линий */
+.line {
+    transition: opacity 0.3s ease, stroke-width 0.3s ease;
+}
+
+.line:hover {
+    stroke-width: 3;
+}
+
+.point {
+    transition: opacity 0.3s ease, r 0.2s ease;
+}
+
+.point:hover {
+    r: 6;
+    stroke-width: 2;
+}
+
+/* Улучшаем производительность при масштабировании */
+.zoomable-svg * {
+    vector-effect: non-scaling-stroke;
+}
+
+.export-btn {
+    padding: 8px 16px;
+    margin: 0 10px;
+    border: none;
+    border-radius: 6px;
+    background: #27ae60;
+    color: white;
+    cursor: pointer;
+    font-size: 12px;
+    transition: background 0.2s ease;
+}
+
+.export-btn:hover {
+    background: #219a52;
+}
+
 footer {
     text-align: center;
     margin-top: 30px;

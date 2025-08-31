@@ -21,6 +21,35 @@ class BenchmarkDashboard {
         this.init();
     }
 
+    async init() {
+        console.log('📊 Инициализация dashboard...');
+        this.showLoading();
+
+        try {
+            this.data = await this.dataLoader.loadAllData();
+            this.hideLoading();
+            this.createCharts();
+            this.createFilters();
+            this.createLegend();
+            this.addExportButtons(); // ← Добавляем кнопки экспорта
+            this.updateDataInfo();
+
+            console.log('✅ Dashboard готов!');
+        } catch (error) {
+            console.error('❌ Ошибка инициализации:', error);
+            this.showError('Ошибка загрузки данных');
+        }
+    }
+
+    showLoading() {
+        const containers = d3.selectAll('.chart-content');
+        containers.html('<div class="loading">Загрузка данных...</div>');
+    }
+
+    hideLoading() {
+        d3.selectAll('.loading').remove();
+    }
+
     createFilters() {
         this.createIOPSFilters();
         this.createLatencyFilters();
@@ -134,6 +163,37 @@ class BenchmarkDashboard {
         
         d3.select('#last-update').text(`Последнее обновление: ${lastUpdate}`);
         d3.select('#data-info').text(this.data.allData.length);
+    }
+
+    addExportButtons() {
+        const header = d3.select('header');
+
+        // Кнопка экспорта IOPS
+        header.append('button')
+            .attr('class', 'export-btn')
+            .text('📥 Экспорт IOPS')
+            .on('click', () => this.exportChart('iops'));
+
+        // Кнопка экспорта Latency
+        header.append('button')
+            .attr('class', 'export-btn')
+            .text('📥 Экспорт Latency')
+            .on('click', () => this.exportChart('latency'));
+    }
+
+    exportChart(chartType) {
+        const chart = chartType === 'iops' ? this.iopsChart : this.latencyChart;
+        const svgString = new XMLSerializer().serializeToString(chart.svg.node());
+
+        const blob = new Blob([svgString], { type: 'image/svg+xml' });
+        const url = URL.createObjectURL(blob);
+
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `rawstor-${chartType}-${new Date().toISOString().split('T')[0]}.svg`;
+        link.click();
+
+        URL.revokeObjectURL(url);
     }
 }
 

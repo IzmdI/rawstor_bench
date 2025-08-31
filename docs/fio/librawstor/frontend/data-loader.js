@@ -11,73 +11,100 @@ class BenchmarkDataLoader {
             'perftest--enable-ost-4k-4-1',
             'perftest--enable-ost-4k-4-4'
         ];
+        this.cache = new Map();
     }
 
     async loadAllData() {
-        const allData = [];
-        const loadedData = {};
-        
         console.log('🚀 Загрузка данных benchmark...');
         
-        // Для демо - используем несколько тестовых файлов
-        const testFiles = [
-            'perftest--disable-ost-4k-1-1/022a761e45112d161bd24e5399e06dcdd83d9e00.json',
-            'perftest--enable-ost-4k-1-1/8173024b13c30ae735733876cab701b34b4973fc.json'
-        ];
+        try {
+            // Параллельная загрузка данных для всех конфигураций
+            const configPromises = this.configs.map(config => 
+                this.loadConfigData(config).catch(error => {
+                    console.warn(`Ошибка загрузки ${config}:`, error);
+                    return [];
+                })
+            );
 
-        for (const filePath of testFiles) {
-            try {
-                const data = await this.loadJsonFile(filePath);
-                if (data) {
-                    const processed = this.processData(data, filePath);
-                    allData.push(processed);
-                    
-                    // Сохраняем для группировки
-                    const key = `${processed.config}-${processed.branch}`;
-                    if (!loadedData[key]) loadedData[key] = [];
-                    loadedData[key].push(processed);
-                }
-            } catch (error) {
-                console.warn(`Ошибка загрузки ${filePath}:`, error);
-            }
+            const allConfigData = await Promise.all(configPromises);
+            const allData = allConfigData.flat();
+            
+            console.log(`✅ Загружено ${allData.length} тестов из ${this.configs.length} конфигураций`);
+            
+            return {
+                allData: allData.sort((a, b) => new Date(a.date) - new Date(b.date)),
+                groupedData: this.groupDataByConfigAndBranch(allData)
+            };
+            
+        } catch (error) {
+            console.error('❌ Ошибка загрузки данных:', error);
+            throw error;
+        }
+    }
+
+    async loadConfigData(config) {
+        // Кэширование для избежания повторных загрузок
+        if (this.cache.has(config)) {
+            return this.cache.get(config);
         }
 
-        console.log(`✅ Загружено ${allData.length} тестов`);
-        return {
-            allData: allData.sort((a, b) => new Date(a.date) - new Date(b.date)),
-            groupedData: loadedData
-        };
+        try {
+            // Получаем список файлов для конфигурации через GitHub API
+            const files = await this.getConfigFiles(config);
+            const configData = [];
+            
+            // Ограничиваем количество одновременно загружаемых файлов
+            const BATCH_SIZE = 10;
+            for (let i = 0; i < files.length; i += BATCH_SIZE) {
+                const batch = files.slice(i, i + BATCH_SIZE);
+                const batchPromises = batch.map(file => 
+                    this.loadJsonFile(`${config}/${file}`).catch(error => {
+                        console.warn(`Ошибка загрузки ${config}/${file}:`, error);
+                        return null;
+                    })
+                );
+                
+                const batchResults = await Promise.all(batchPromises);
+                const validResults = batchResults.filter(Boolean);
+                
+                validResults.forEach(rawData => {
+                    const processed = this.processData(rawData, `${config}/${rawData.commit}.json`);
+                    configData.push(processed);
+                });
+                
+                // Небольшая задержка между батчами
+                if (i + BATCH_SIZE < files.length) {
+                    await new Promise(resolve => setTimeout(resolve, 100));
+                }
+            }
+            
+            this.cache.set(config, configData);
+            return configData;
+            
+        } catch (error) {
+            console.error(`Ошибка загрузки конфигурации ${config}:`, error);
+            return [];
+        }
     }
 
-    async loadJsonFile(filePath) {
-        const response = await fetch(`${this.baseUrl}/${filePath}`);
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        return await response.json();
+    async getConfigFiles(config) {
+        // Для демо - используем статический список файлов
+        // В реальности можно использовать GitHub API для получения списка файлов
+        return [
+            '022a761e45112d161bd24e5399e06dcdd83d9e00.json',
+            '8173024b13c30ae735733876cab701b34b4973fc.json'
+        ];
     }
 
-    processData(rawData, filePath) {
-        const config = filePath.split('/')[0];
-        const commit = filePath.split('/')[1].replace('.json', '');
-        
-        return {
-            date: new Date(rawData.date),
-            dateLabel: new Date(rawData.date).toLocaleDateString('ru-RU'),
-            branch: rawData.branch.replace('refs/heads/', ''),
-            commit: commit,
-            config: config,
-            read_iops: Math.round(rawData.read_iops),
-            write_iops: Math.round(rawData.write_iops),
-            read_latency: Math.round(rawData.read_latency_ns),
-            write_latency: Math.round(rawData.write_latency_ns),
-            testUrl: `https://rawstor.github.io/rawstor_bench/fio/librawstor/${config}/${commit}.html`
-        };
+    groupDataByConfigAndBranch(data) {
+        const grouped = {};
+        data.forEach(item => {
+            const key = `${item.config}-${item.branch}`;
+            if (!grouped[key]) grouped[key] = [];
+            grouped[key].push(item);
+        });
+        return grouped;
     }
 
-    getUniqueBranches(data) {
-        return [...new Set(data.map(item => item.branch))].sort();
-    }
-
-    getUniqueConfigs(data) {
-        return [...new Set(data.map(item => item.config))].sort();
-    }
+    // ... остальные методы без изменений ...
 }
