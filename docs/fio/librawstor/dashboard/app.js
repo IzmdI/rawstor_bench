@@ -355,22 +355,20 @@ class BenchmarkDashboard {
         this.showLoading();
 
         try {
-            // Очищаем кэш загрузчика
             if (this.dataLoader.clearCache) {
                 this.dataLoader.clearCache();
             }
 
-            // Перезагружаем данные
             this.data = await this.dataLoader.loadAllData();
             this.hideLoading();
 
-            // Очищаем старые фильтры перед созданием новых
-            this.clearFilters();
+            // Статистика по meta файлам
+            const withMeta = this.data.allData.filter(item => item.hasMeta).length;
+            console.log(`📊 Meta файлов: ${withMeta}/${this.data.allData.length}`);
 
-            // Пересоздаем графики и фильтры
+            this.clearFilters();
             this.createCharts();
             this.createFilters();
-            this.createLegend();
             this.updateDataInfo();
 
             console.log('✅ Данные обновлены!');

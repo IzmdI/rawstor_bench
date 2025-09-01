@@ -55,53 +55,64 @@ class BenchmarkDataLoader {
 
     async loadConfigData(config) {
         try {
-            // Получаем список JSON файлов в директории конфигурации
             const files = await this.getConfigFiles(config);
             const configData = [];
 
-            // Загружаем все файлы параллельно
-            const filePromises = files.map(file =>
-                this.loadJsonFile(`${config}/${file}`).catch(error => {
-                    console.warn(`Ошибка файла ${config}/${file}:`, error.message);
-                    return null;
-                })
-            );
+            console.log(`🔍 Загрузка ${config}, файлов: ${files.length}`);
 
-            const fileResults = await Promise.all(filePromises);
+            for (const file of files.slice(0, 10)) {
+                try {
+                    const jsonFile = file;
+                    const metaFile = file.replace('.json', '.meta');
 
-            // Обрабатываем успешные результаты
-            fileResults.filter(Boolean).forEach(rawData => {
-                const processed = this.processData(rawData, `${config}/${rawData.commit}.json`);
-                configData.push(processed);
-            });
+                    // Загружаем оба файла параллельно
+                    const [jsonData, metaData] = await Promise.all([
+                        this.loadJsonFile(`${config}/${jsonFile}`),
+                        this.loadJsonFile(`${config}/${metaFile}`).catch(error => {
+                            console.warn(`⚠️ Meta файл не найден: ${config}/${metaFile}`);
+                            return null; // Продолжаем без meta файла
+                        })
+                    ]);
 
+                    console.log(`📄 ${file}:`, {
+                        hasJson: !!jsonData,
+                        hasMeta: !!metaData,
+                        branchFromMeta: metaData?.branch
+                    });
+
+                    const processed = this.processData(jsonData, metaData, `${config}/${jsonFile}`);
+                    if (processed) {
+                        configData.push(processed);
+                    }
+                } catch (error) {
+                    console.warn(`❌ Ошибка ${config}/${file}:`, error.message);
+                }
+            }
+
+            console.log(`✅ ${config}: обработано ${configData.length} файлов`);
             return configData;
-
         } catch (error) {
-            console.warn(`Ошибка загрузки конфигурации ${config}:`, error.message);
+            console.warn(`❌ Ошибка конфигурации ${config}:`, error.message);
             return [];
         }
     }
 
     async getConfigFiles(config) {
         try {
-            // Используем GitHub API для получения списка файлов
             const apiUrl = `https://api.github.com/repos/rawstor/rawstor_bench/contents/data/fio/librawstor/${config}?ref=frontend`;
             const response = await fetch(apiUrl);
-            
-            if (!response.ok) {
-                throw new Error(`GitHub API: ${response.status}`);
-            }
-            
+
+            if (!response.ok) throw new Error(`API: ${response.status}`);
+
             const contents = await response.json();
-            
-            // Фильтруем только JSON файлы
+
+            // Фильтруем только JSON файлы (исключаем .meta)
             return contents
-                .filter(item => item.type === 'file' && item.name.endsWith('.json'))
+                .filter(item => item.type === 'file' && item.name.endsWith('.json') && !item.name.endsWith('.meta'))
                 .map(item => item.name);
-                
+
         } catch (error) {
-            console.warn(`Не удалось получить список файлов для ${config}:`, error.message);
+            console.warn(`GitHub API недоступно для ${config}:`, error.message);
             return [];
         }
     }
@@ -116,17 +127,23 @@ class BenchmarkDataLoader {
         return await response.json();
     }
 
-    processData(rawData, filePath) {
+    processData(jsonData, metaData, filePath) {
         try {
             const config = filePath.split('/')[0];
             const fileName = filePath.split('/')[1];
             const commit = fileName.replace('.json', '');
+            
+            // Извлекаем данные из JSON
+            if (!jsonData.jobs || !Array.isArray(jsonData.jobs) || jsonData.jobs.length === 0) {
+                console.warn('No jobs data in:', jsonData);
+                return null;
+            }
 
-            let read_iops, write_iops, read_latency, write_latency, date, branch;
+            let read_iops, write_iops, read_latency, write_latency, date;
 
             // Способ 1: Новая структура (jobs array)
-            if (rawData.jobs && Array.isArray(rawData.jobs) && rawData.jobs.length > 0) {
-                const job = rawData.jobs[0];
+            if (jsonData.jobs && Array.isArray(jsonData.jobs) && jsonData.jobs.length > 0) {
+                const job = jsonData.jobs[0];
                 read_iops = Math.round(Number(job.read?.iops_mean) || 0);
                 write_iops = Math.round(Number(job.write?.iops_mean) || 0);
                 read_latency = Math.round(Number(job.read?.lat_ns?.mean) || 0);
@@ -134,27 +151,29 @@ class BenchmarkDataLoader {
             }
             // Способ 2: Старая структура (прямые поля)
             else {
-                read_iops = Math.round(Number(rawData.read_iops) || 0);
-                write_iops = Math.round(Number(rawData.write_iops) || 0);
-                read_latency = Math.round(Number(rawData.read_latency_ns) || 0);
-                write_latency = Math.round(Number(rawData.write_latency_ns) || 0);
+                read_iops = Math.round(Number(jsonData.read_iops) || 0);
+                write_iops = Math.round(Number(jsonData.write_iops) || 0);
+                read_latency = Math.round(Number(jsonData.read_latency_ns) || 0);
+                write_latency = Math.round(Number(jsonData.write_latency_ns) || 0);
             }
 
             // Дата из timestamp или time
-            if (rawData.timestamp) {
-                date = new Date(rawData.timestamp * 1000);
-            } else if (rawData.time) {
-                date = new Date(rawData.time);
+            if (jsonData.timestamp) {
+                date = new Date(jsonData.timestamp * 1000);
+            } else if (jsonData.time) {
+                date = new Date(jsonData.time);
             } else {
                 date = new Date();
             }
 
-            // Ветка из разных возможных мест
-            branch = 'main';
-            if (rawData.branch) {
-                branch = String(rawData.branch).replace(/refs\/heads\/|heads\//g, '');
-            } else if (rawData.global_options?.branch) {
-                branch = String(rawData.global_options.branch).replace(/refs\/heads\/|heads\//g, '');
+            // ВЕТКА: сначала пробуем из meta файла, потом из JSON как fallback
+            let branch = 'main';
+            if (metaData && metaData.branch) {
+                branch = String(metaData.branch).replace(/refs\/heads\/|heads\//g, '');
+            } else if (jsonData.branch) {
+                branch = String(jsonData.branch).replace(/refs\/heads\/|heads\//g, '');
+            } else if (jsonData.global_options?.branch) {
+                branch = String(jsonData.global_options.branch).replace(/refs\/heads\/|heads\//g, '');
             }
 
             // Валидация
@@ -167,7 +186,13 @@ class BenchmarkDataLoader {
             return {
                 id: `${config}-${commit}-${Date.now()}`,
                 date: date,
-                dateLabel: date.toLocaleDateString('ru-RU'),
+                dateLabel: date.toLocaleDateString('ru-RU', {
+                    year: 'numeric',
+                    month: '2-digit',
+                    day: '2-digit',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                }),
                 branch: branch,
                 commit: commit,
                 config: config,
@@ -175,7 +200,8 @@ class BenchmarkDataLoader {
                 write_iops: write_iops,
                 read_latency: read_latency,
                 write_latency: write_latency,
-                testUrl: `../${config}/${commit}.html`
+                testUrl: `../${config}/${commit}.html`,
+                hasMeta: !!metaData // Флаг что meta файл был найден
             };
         } catch (error) {
             console.warn('Error processing data:', error);
