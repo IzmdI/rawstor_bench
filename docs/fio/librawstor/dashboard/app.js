@@ -24,16 +24,16 @@ class BenchmarkDashboard {
     async init() {
         console.log('📊 Инициализация dashboard...');
         this.showLoading();
-
+        
         try {
             this.data = await this.dataLoader.loadAllData();
             this.hideLoading();
             this.createCharts();
             this.createFilters();
             this.createLegend();
-            this.addExportButtons(); // ← Добавляем кнопки экспорта
+            this.addExportButtons();
             this.updateDataInfo();
-
+            
             console.log('✅ Dashboard готов!');
         } catch (error) {
             console.error('❌ Ошибка инициализации:', error);
@@ -41,13 +41,17 @@ class BenchmarkDashboard {
         }
     }
 
-    showLoading() {
-        const containers = d3.selectAll('.chart-content');
-        containers.html('<div class="loading">Загрузка данных...</div>');
-    }
+    createCharts() {
+        if (!this.data || this.data.allData.length === 0) {
+            this.showError('Нет данных для отображения');
+            return;
+        }
 
-    hideLoading() {
-        d3.selectAll('.loading').remove();
+        const iopsContainer = d3.select('#iops-chart .chart-content');
+        const latencyContainer = d3.select('#latency-chart .chart-content');
+        
+        this.iopsChart = this.charts.createIOPSChart(iopsContainer, this.data.allData);
+        this.latencyChart = this.charts.createLatencyChart(latencyContainer, this.data.allData);
     }
 
     createFilters() {
@@ -63,7 +67,7 @@ class BenchmarkDashboard {
         const configContainer = d3.select('#iops-config-filters');
         configs.forEach(config => {
             this.createFilterCheckbox(configContainer, config, 'configs', 'iops', 
-                                    config.replace('perftest--', ''));
+                                    DataUtils.getConfigDisplayName(config));
         });
 
         // Ветки для IOPS
@@ -91,7 +95,7 @@ class BenchmarkDashboard {
         const configContainer = d3.select('#latency-config-filters');
         configs.forEach(config => {
             this.createFilterCheckbox(configContainer, config, 'configs', 'latency', 
-                                    config.replace('perftest--', ''));
+                                    DataUtils.getConfigDisplayName(config));
         });
 
         // Ветки для Latency
@@ -145,6 +149,8 @@ class BenchmarkDashboard {
         const chart = chartType === 'iops' ? this.iopsChart : this.latencyChart;
         const filters = this.filters[chartType];
         
+        if (!chart || !chart.lineData) return;
+
         chart.lineData.forEach(line => {
             const isConfigVisible = filters.configs.has(line.config);
             const isBranchVisible = filters.branches.has(line.branch);
@@ -156,48 +162,187 @@ class BenchmarkDashboard {
         });
     }
 
-    updateDataInfo() {
-        const lastUpdate = this.data.allData.length > 0 ? 
-            this.data.allData[this.data.allData.length - 1].date.toLocaleDateString('ru-RU') : 
-            'нет данных';
+    createLegend() {
+        const legend = d3.select('#legend');
+        legend.html('');
         
-        d3.select('#last-update').text(`Последнее обновление: ${lastUpdate}`);
-        d3.select('#data-info').text(this.data.allData.length);
+        if (!this.iopsChart || !this.iopsChart.lineData) return;
+
+        const allLines = [...this.iopsChart.lineData, ...(this.latencyChart?.lineData || [])];
+        const uniqueLines = [...new Set(allLines.map(line => line.id))];
+        
+        uniqueLines.forEach(lineId => {
+            const line = allLines.find(l => l.id === lineId);
+            if (!line) return;
+            
+            const legendItem = legend.append('div')
+                .attr('class', 'legend-item')
+                .attr('data-line', lineId)
+                .style('opacity', line.visible ? 1 : 0.3)
+                .on('click', () => {
+                    const isCurrentlyVisible = line.visible;
+                    line.visible = !isCurrentlyVisible;
+                    this.toggleLineVisibility(lineId, !isCurrentlyVisible);
+                });
+            
+            legendItem.append('div')
+                .attr('class', 'legend-color')
+                .style('background', line.color);
+            
+            const displayName = `${DataUtils.getConfigDisplayName(line.config)} - ${line.branch} - ${line.type}`;
+            legendItem.append('span')
+                .text(displayName)
+                .style('font-size', '11px');
+        });
+    }
+
+    toggleLineVisibility(lineId, isVisible) {
+        if (this.iopsChart) {
+            this.charts.updateLineVisibility(this.iopsChart, lineId, isVisible);
+        }
+        if (this.latencyChart) {
+            this.charts.updateLineVisibility(this.latencyChart, lineId, isVisible);
+        }
+        
+        d3.selectAll(`.legend-item[data-line="${lineId}"]`)
+            .style('opacity', isVisible ? 1 : 0.3);
+    }
+
+    updateLegend() {
+        this.createLegend();
     }
 
     addExportButtons() {
         const header = d3.select('header');
-
+        
         // Кнопка экспорта IOPS
         header.append('button')
             .attr('class', 'export-btn')
             .text('📥 Экспорт IOPS')
+            .style('margin', '10px 5px')
             .on('click', () => this.exportChart('iops'));
-
+        
         // Кнопка экспорта Latency
         header.append('button')
             .attr('class', 'export-btn')
             .text('📥 Экспорт Latency')
+            .style('margin', '10px 5px')
             .on('click', () => this.exportChart('latency'));
+        
+        // Кнопка обновления данных
+        header.append('button')
+            .attr('class', 'export-btn')
+            .text('🔄 Обновить данные')
+            .style('margin', '10px 5px')
+            .on('click', () => this.refreshData());
     }
 
     exportChart(chartType) {
         const chart = chartType === 'iops' ? this.iopsChart : this.latencyChart;
-        const svgString = new XMLSerializer().serializeToString(chart.svg.node());
+        if (!chart || !chart.svg) {
+            alert('График не доступен для экспорта');
+            return;
+        }
 
-        const blob = new Blob([svgString], { type: 'image/svg+xml' });
-        const url = URL.createObjectURL(blob);
+        try {
+            const svgString = new XMLSerializer().serializeToString(chart.svg.node());
+            const blob = new Blob([svgString], { type: 'image/svg+xml' });
+            const url = URL.createObjectURL(blob);
+            
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `rawstor-${chartType}-${new Date().toISOString().split('T')[0]}.svg`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            
+            URL.revokeObjectURL(url);
+        } catch (error) {
+            console.error('Ошибка экспорта:', error);
+            alert('Ошибка при экспорте графика');
+        }
+    }
 
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = `rawstor-${chartType}-${new Date().toISOString().split('T')[0]}.svg`;
-        link.click();
+    async refreshData() {
+        console.log('🔄 Обновление данных...');
+        this.showLoading();
+        
+        try {
+            // Очищаем кэш загрузчика
+            if (this.dataLoader.clearCache) {
+                this.dataLoader.clearCache();
+            }
+            
+            // Перезагружаем данные
+            this.data = await this.dataLoader.loadAllData();
+            this.hideLoading();
+            
+            // Пересоздаем графики
+            this.createCharts();
+            this.createFilters();
+            this.createLegend();
+            this.updateDataInfo();
+            
+            console.log('✅ Данные обновлены!');
+        } catch (error) {
+            console.error('❌ Ошибка обновления:', error);
+            this.hideLoading();
+            alert('Ошибка при обновлении данных');
+        }
+    }
 
-        URL.revokeObjectURL(url);
+    showLoading() {
+        const containers = d3.selectAll('.chart-content');
+        containers.html('<div class="loading">Загрузка данных...</div>');
+    }
+
+    hideLoading() {
+        d3.selectAll('.loading').remove();
+    }
+
+    updateDataInfo() {
+        if (!this.data || this.data.allData.length === 0) {
+            d3.select('#last-update').text('нет данных');
+            d3.select('#data-info').text('0');
+            return;
+        }
+
+        const lastUpdate = this.data.allData[this.data.allData.length - 1].date.toLocaleDateString('ru-RU');
+        const totalTests = this.data.allData.length;
+        
+        d3.select('#last-update').text(`Последнее обновление: ${lastUpdate}`);
+        d3.select('#data-info').text(totalTests);
+    }
+
+    showError(message) {
+        const containers = d3.selectAll('.chart-content');
+        containers.html(`
+            <div style="color: #e74c3c; text-align: center; padding: 50px;">
+                ${message}
+                <br><br>
+                <button onclick="location.reload()" style="padding: 10px 20px; background: #3498db; color: white; border: none; border-radius: 5px; cursor: pointer;">
+                    Попробовать снова
+                </button>
+            </div>
+        `);
+    }
+
+    setupEventListeners() {
+        // Обработчик изменения размера окна
+        window.addEventListener('resize', () => {
+            if (this.data && this.data.allData.length > 0) {
+                this.createCharts();
+                this.createFilters();
+            }
+        });
     }
 }
 
-// Запуск приложения
+// Инициализация при загрузке страницы
 document.addEventListener('DOMContentLoaded', () => {
-    new BenchmarkDashboard();
+    const dashboard = new BenchmarkDashboard();
+    dashboard.setupEventListeners();
+    
+    // Глобальная ссылка для отладки
+    window.benchmarkDashboard = dashboard;
 });
