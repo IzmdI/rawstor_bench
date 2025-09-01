@@ -79,76 +79,191 @@ class BenchmarkDashboard {
     createIOPSFilters() {
         const configs = this.dataLoader.getUniqueConfigs(this.data.allData);
         const branches = this.dataLoader.getUniqueBranches(this.data.allData);
-        
-        // Конфигурации для IOPS
+
+        // Очищаем контейнеры
+        d3.select('#iops-config-filters').html('');
+        d3.select('#iops-branch-filters').html('');
+        d3.select('#iops-metric-filters').html('');
+
+        // Получаем цвета для конфигураций
+        const configColors = this.getConfigColors();
+
+        // Конфигурации для IOPS с цветами
         const configContainer = d3.select('#iops-config-filters');
         configs.forEach(config => {
-            this.createFilterCheckbox(configContainer, config, 'configs', 'iops', 
-                                    DataUtils.getConfigDisplayName(config));
+            this.createFilterCheckboxWithColor(
+                configContainer,
+                config,
+                'configs',
+                'iops',
+                DataUtils.getConfigDisplayName(config),
+                configColors[config]
+            );
         });
 
         // Ветки для IOPS
         const branchContainer = d3.select('#iops-branch-filters');
         branches.forEach(branch => {
-            this.createFilterCheckbox(branchContainer, branch, 'branches', 'iops', branch);
+            this.createFilterCheckbox(
+                branchContainer,
+                branch,
+                'branches',
+                'iops',
+                branch
+            );
         });
 
         // Метрики для IOPS
         const metricContainer = d3.select('#iops-metric-filters');
         const iopsMetrics = [
-            { id: 'read_iops', label: 'Read IOPS' },
-            { id: 'write_iops', label: 'Write IOPS' }
+            { id: 'read_iops', label: 'Read IOPS', color: '#1f77b4' },
+            { id: 'write_iops', label: 'Write IOPS', color: '#d62728' }
         ];
         iopsMetrics.forEach(metric => {
-            this.createFilterCheckbox(metricContainer, metric.id, 'metrics', 'iops', metric.label);
+            this.createFilterCheckboxWithColor(
+                metricContainer,
+                metric.id,
+                'metrics',
+                'iops',
+                metric.label,
+                metric.color
+            );
         });
     }
 
     createLatencyFilters() {
         const configs = this.dataLoader.getUniqueConfigs(this.data.allData);
         const branches = this.dataLoader.getUniqueBranches(this.data.allData);
-        
-        // Конфигурации для Latency
+
+        // Очищаем контейнеры
+        d3.select('#latency-config-filters').html('');
+        d3.select('#latency-branch-filters').html('');
+        d3.select('#latency-metric-filters').html('');
+
+        // Получаем цвета для конфигураций
+        const configColors = this.getConfigColors();
+
+        // Конфигурации для Latency с цветами
         const configContainer = d3.select('#latency-config-filters');
         configs.forEach(config => {
-            this.createFilterCheckbox(configContainer, config, 'configs', 'latency', 
-                                    DataUtils.getConfigDisplayName(config));
+            this.createFilterCheckboxWithColor(
+                configContainer,
+                config,
+                'configs',
+                'latency',
+                DataUtils.getConfigDisplayName(config),
+                configColors[config]
+            );
         });
 
         // Ветки для Latency
         const branchContainer = d3.select('#latency-branch-filters');
         branches.forEach(branch => {
-            this.createFilterCheckbox(branchContainer, branch, 'branches', 'latency', branch);
+            this.createFilterCheckbox(
+                branchContainer,
+                branch,
+                'branches',
+                'latency',
+                branch
+            );
         });
 
         // Метрики для Latency
         const metricContainer = d3.select('#latency-metric-filters');
         const latencyMetrics = [
-            { id: 'read_latency', label: 'Read Latency' },
-            { id: 'write_latency', label: 'Write Latency' }
+            { id: 'read_latency', label: 'Read Latency', color: '#2ca02c' },
+            { id: 'write_latency', label: 'Write Latency', color: '#ff7f0e' }
         ];
         latencyMetrics.forEach(metric => {
-            this.createFilterCheckbox(metricContainer, metric.id, 'metrics', 'latency', metric.label);
+            this.createFilterCheckboxWithColor(
+                metricContainer,
+                metric.id,
+                'metrics',
+                'latency',
+                metric.label,
+                metric.color
+            );
         });
     }
 
-    createFilterCheckbox(container, value, filterType, chartType, label) {
-        const checkbox = container.append('label')
-            .style('display', 'block')
-            .style('margin', '3px 0');
-            
-        checkbox.append('input')
+    // Новый метод для создания чекбоксов с цветами
+    createFilterCheckboxWithColor(container, value, filterType, chartType, label, color) {
+        const filterItem = container.append('div')
+            .attr('class', 'filter-item')
+            .attr('data-value', value)
+            .attr('data-type', filterType)
+            .attr('data-chart', chartType)
+            .style('opacity', 1);
+
+        // Цветовой индикатор
+        filterItem.append('div')
+            .attr('class', 'filter-color')
+            .style('background', color);
+
+        // Чекбокс
+        const labelElement = filterItem.append('label');
+
+        labelElement.append('input')
             .attr('type', 'checkbox')
             .attr('name', `${chartType}-${filterType}`)
             .attr('value', value)
             .attr('checked', true)
             .on('change', (event) => {
                 this.handleFilterChange(filterType, value, event.target.checked, chartType);
+                this.updateFilterItemVisibility(filterItem, event.target.checked);
             });
-            
-        checkbox.append('span')
-            .text(label)
-            .style('font-size', '11px');
+
+        labelElement.append('span')
+            .text(label);
+    }
+
+    // Старый метод для чекбоксов без цвета (для веток)
+    createFilterCheckbox(container, value, filterType, chartType, label) {
+        const filterItem = container.append('div')
+            .attr('class', 'filter-item')
+            .attr('data-value', value)
+            .attr('data-type', filterType)
+            .attr('data-chart', chartType)
+            .style('opacity', 1);
+
+        const labelElement = filterItem.append('label');
+
+        labelElement.append('input')
+            .attr('type', 'checkbox')
+            .attr('name', `${chartType}-${filterType}`)
+            .attr('value', value)
+            .attr('checked', true)
+            .on('change', (event) => {
+                this.handleFilterChange(filterType, value, event.target.checked, chartType);
+                this.updateFilterItemVisibility(filterItem, event.target.checked);
+            });
+
+        labelElement.append('span')
+            .text(label);
+    }
+
+    // Метод для обновления видимости элементов фильтра
+    updateFilterItemVisibility(filterItem, isVisible) {
+        filterItem.style('opacity', isVisible ? 1 : 0.3);
+    }
+
+    // Метод для получения цветов конфигураций
+    getConfigColors() {
+        const colors = d3.scaleOrdinal(d3.schemeCategory10);
+        const configs = this.dataLoader.getUniqueConfigs(this.data.allData);
+        const colorMap = {};
+
+        configs.forEach((config, index) => {
+            colorMap[config] = colors(config);
+        });
+
+        return colorMap;
+    }
+
+    // Убираем старый метод createLegend() так как он больше не нужен
+    createLegend() {
+        // Легенда теперь встроена в фильтры, поэтому этот метод можно оставить пустым
+        d3.select('#legend').html('');
     }
 
     handleFilterChange(filterType, value, isChecked, chartType) {
@@ -157,9 +272,14 @@ class BenchmarkDashboard {
         } else {
             this.filters[chartType][filterType].delete(value);
         }
-        
+
         this.updateChartVisibility(chartType);
-        this.updateLegend();
+
+        // Обновляем видимость элементов фильтра
+        const filterItem = d3.select(`.filter-item[data-value="${value}"][data-type="${filterType}"][data-chart="${chartType}"]`);
+        if (!filterItem.empty()) {
+            this.updateFilterItemVisibility(filterItem, isChecked);
+        }
     }
 
     updateChartVisibility(chartType) {
@@ -177,56 +297,6 @@ class BenchmarkDashboard {
             const isVisible = isConfigVisible && isBranchVisible && isMetricVisible;
             this.charts.updateLineVisibility(chart, line.id, isVisible);
         });
-    }
-
-    createLegend() {
-        const legend = d3.select('#legend');
-        legend.html('');
-        
-        if (!this.iopsChart || !this.iopsChart.lineData) return;
-
-        const allLines = [...this.iopsChart.lineData, ...(this.latencyChart?.lineData || [])];
-        const uniqueLines = [...new Set(allLines.map(line => line.id))];
-        
-        uniqueLines.forEach(lineId => {
-            const line = allLines.find(l => l.id === lineId);
-            if (!line) return;
-            
-            const legendItem = legend.append('div')
-                .attr('class', 'legend-item')
-                .attr('data-line', lineId)
-                .style('opacity', line.visible ? 1 : 0.3)
-                .on('click', () => {
-                    const isCurrentlyVisible = line.visible;
-                    line.visible = !isCurrentlyVisible;
-                    this.toggleLineVisibility(lineId, !isCurrentlyVisible);
-                });
-            
-            legendItem.append('div')
-                .attr('class', 'legend-color')
-                .style('background', line.color);
-            
-            const displayName = `${DataUtils.getConfigDisplayName(line.config)} - ${line.branch} - ${line.type}`;
-            legendItem.append('span')
-                .text(displayName)
-                .style('font-size', '11px');
-        });
-    }
-
-    toggleLineVisibility(lineId, isVisible) {
-        if (this.iopsChart) {
-            this.charts.updateLineVisibility(this.iopsChart, lineId, isVisible);
-        }
-        if (this.latencyChart) {
-            this.charts.updateLineVisibility(this.latencyChart, lineId, isVisible);
-        }
-        
-        d3.selectAll(`.legend-item[data-line="${lineId}"]`)
-            .style('opacity', isVisible ? 1 : 0.3);
-    }
-
-    updateLegend() {
-        this.createLegend();
     }
 
     addExportButtons() {
