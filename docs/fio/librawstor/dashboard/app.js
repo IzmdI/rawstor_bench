@@ -3,37 +3,37 @@ class BenchmarkDashboard {
         this.dataLoader = new BenchmarkDataLoader();
         this.charts = new BenchmarkCharts();
         this.data = null;
-        this.iopsChart = null;
-        this.latencyChart = null;
+        // Отдельные графики для каждой группировки
+        this.iopsConfigChart = null;
+        this.latencyConfigChart = null;
+        this.iopsBranchChart = null;
+        this.latencyBranchChart = null;
+        // Раздельные фильтры
         this.filters = {
-            iops: {
-                configs: new Set(),
-                branches: new Set(),
-                metrics: new Set(['read_iops', 'write_iops'])
+            config: {
+                iops: { configs: new Set(), metrics: new Set(['read_iops', 'write_iops']) },
+                latency: { configs: new Set(), metrics: new Set(['read_latency', 'write_latency']) }
             },
-            latency: {
-                configs: new Set(),
-                branches: new Set(),
-                metrics: new Set(['read_latency', 'write_latency'])
+            branch: {
+                iops: { branches: new Set(), metrics: new Set(['read_iops', 'write_iops']) },
+                latency: { branches: new Set(), metrics: new Set(['read_latency', 'write_latency']) }
             }
         };
-        
+
         this.init();
     }
 
     async init() {
         console.log('📊 Инициализация dashboard...');
         this.showLoading();
-        
+
         try {
             this.data = await this.dataLoader.loadAllData();
             this.hideLoading();
             this.createCharts();
             this.createFilters();
-            this.createLegend();
-            this.addExportButtons();
             this.updateDataInfo();
-            
+
             console.log('✅ Dashboard готов!');
         } catch (error) {
             console.error('❌ Ошибка инициализации:', error);
@@ -47,33 +47,131 @@ class BenchmarkDashboard {
             return;
         }
 
-        // Фильтруем данные с NaN
-        const validData = this.data.allData.filter(item =>
-            item.date instanceof Date &&
-            !isNaN(item.date.getTime()) &&
-            !isNaN(item.read_iops) &&
-            !isNaN(item.write_iops) &&
-            !isNaN(item.read_latency) &&
-            !isNaN(item.write_latency)
-        );
+        // Графики с группировкой по конфигурациям
+        const iopsConfigContainer = d3.select('#iops-by-config-chart .chart-content');
+        const latencyConfigContainer = d3.select('#latency-by-config-chart .chart-content');
 
-        if (validData.length === 0) {
-            this.showError('Все данные содержат ошибки (NaN значения)');
-            return;
-        }
+        // Графики с группировкой по веткам
+        const iopsBranchContainer = d3.select('#iops-by-branch-chart .chart-content');
+        const latencyBranchContainer = d3.select('#latency-by-branch-chart .chart-content');
 
-        console.log(`📊 Valid данных: ${validData.length}/${this.data.allData.length}`);
-
-        const iopsContainer = d3.select('#iops-chart .chart-content');
-        const latencyContainer = d3.select('#latency-chart .chart-content');
-        
-        this.iopsChart = this.charts.createIOPSChart(iopsContainer, this.data.allData);
-        this.latencyChart = this.charts.createLatencyChart(latencyContainer, this.data.allData);
+        this.iopsConfigChart = this.charts.createIOPSChart(iopsConfigContainer, this.data.allData, 'config');
+        this.latencyConfigChart = this.charts.createLatencyChart(latencyConfigContainer, this.data.allData, 'config');
+        this.iopsBranchChart = this.charts.createIOPSChart(iopsBranchContainer, this.data.allData, 'branch');
+        this.latencyBranchChart = this.charts.createLatencyChart(latencyBranchContainer, this.data.allData, 'branch');
     }
 
     createFilters() {
         this.createIOPSFilters();
         this.createLatencyFilters();
+    }
+
+    createConfigFilters() {
+        const configs = this.dataLoader.getUniqueConfigs(this.data.allData);
+
+        // Конфигурации для IOPS
+        const iopsConfigContainer = d3.select('#iops-config-filters');
+        configs.forEach(config => {
+            this.createFilterCheckboxWithColor(
+                iopsConfigContainer,
+                config,
+                'configs',
+                'config',
+                'iops',
+                DataUtils.getConfigDisplayName(config),
+                this.getConfigColor(config)
+            );
+        });
+
+        // Конфигурации для Latency
+        const latencyConfigContainer = d3.select('#latency-config-filters');
+        configs.forEach(config => {
+            this.createFilterCheckboxWithColor(
+                latencyConfigContainer,
+                config,
+                'configs',
+                'config',
+                'latency',
+                DataUtils.getConfigDisplayName(config),
+                this.getConfigColor(config)
+            );
+        });
+
+        // Метрики для конфигурационных графиков
+        this.createMetricFilters('config');
+    }
+
+    createBranchFilters() {
+        const branches = this.dataLoader.getUniqueBranches(this.data.allData);
+
+        // Ветки для IOPS
+        const iopsBranchContainer = d3.select('#iops-branch-filters');
+        branches.forEach(branch => {
+            this.createFilterCheckbox(
+                iopsBranchContainer,
+                branch,
+                'branches',
+                'branch',
+                'iops',
+                branch
+            );
+        });
+
+        // Ветки для Latency
+        const latencyBranchContainer = d3.select('#latency-branch-filters');
+        branches.forEach(branch => {
+            this.createFilterCheckbox(
+                latencyBranchContainer,
+                branch,
+                'branches',
+                'branch',
+                'latency',
+                branch
+            );
+        });
+
+        // Метрики для branch графиков
+        this.createMetricFilters('branch');
+    }
+
+    createMetricFilters(groupType) {
+        const iopsMetrics = [
+            { id: 'read_iops', label: 'Read IOPS', color: '#1f77b4' },
+            { id: 'write_iops', label: 'Write IOPS', color: '#d62728' }
+        ];
+
+        const latencyMetrics = [
+            { id: 'read_latency', label: 'Read Latency', color: '#2ca02c' },
+            { id: 'write_latency', label: 'Write Latency', color: '#ff7f0e' }
+        ];
+
+        // Метрики для IOPS
+        const iopsMetricContainer = d3.select(groupType === 'config' ? '#iops-metric-filters' : '#iops-branch-metric-filters');
+        iopsMetrics.forEach(metric => {
+            this.createFilterCheckboxWithColor(
+                iopsMetricContainer,
+                metric.id,
+                'metrics',
+                groupType,
+                'iops',
+                metric.label,
+                metric.color
+            );
+        });
+
+        // Метрики для Latency
+        const latencyMetricContainer = d3.select(groupType === 'config' ? '#latency-metric-filters' : '#latency-branch-metric-filters');
+        latencyMetrics.forEach(metric => {
+            this.createFilterCheckboxWithColor(
+                latencyMetricContainer,
+                metric.id,
+                'metrics',
+                groupType,
+                'latency',
+                metric.label,
+                metric.color
+            );
+        });
     }
 
     createIOPSFilters() {
@@ -282,40 +380,56 @@ class BenchmarkDashboard {
         }
     }
 
-    updateChartVisibility(chartType) {
-        const chart = chartType === 'iops' ? this.iopsChart : this.latencyChart;
-        const filters = this.filters[chartType];
-        
+updateChartVisibility(groupType, chartType) {
+        const chart = this.getChart(groupType, chartType);
+        const filters = this.filters[groupType][chartType];
+
         if (!chart || !chart.lineData) return;
 
         chart.lineData.forEach(line => {
-            const isConfigVisible = filters.configs.has(line.config);
-            const isBranchVisible = filters.branches.has(line.branch);
-            const metricType = chartType === 'iops' ? 'iops' : 'latency';
-            const isMetricVisible = filters.metrics.has(`${line.type}_${metricType}`);
-            
-            const isVisible = isConfigVisible && isBranchVisible && isMetricVisible;
+            let isVisible = true;
+
+            if (groupType === 'config') {
+                const isConfigVisible = filters.configs.has(line.config);
+                const isMetricVisible = filters.metrics.has(`${line.type}_${chartType}`);
+                isVisible = isConfigVisible && isMetricVisible;
+            } else {
+                const isBranchVisible = filters.branches.has(line.branch);
+                const isMetricVisible = filters.metrics.has(`${line.type}_${chartType}`);
+                isVisible = isBranchVisible && isMetricVisible;
+            }
+
             this.charts.updateLineVisibility(chart, line.id, isVisible);
         });
     }
 
+    getChart(groupType, chartType) {
+        const charts = {
+            'config_iops': this.iopsConfigChart,
+            'config_latency': this.latencyConfigChart,
+            'branch_iops': this.iopsBranchChart,
+            'branch_latency': this.latencyBranchChart
+        };
+        return charts[`${groupType}_${chartType}`];
+    }
+
     addExportButtons() {
         const header = d3.select('header');
-        
+
         // Кнопка экспорта IOPS
         header.append('button')
             .attr('class', 'export-btn')
             .text('📥 Экспорт IOPS')
             .style('margin', '10px 5px')
             .on('click', () => this.exportChart('iops'));
-        
+
         // Кнопка экспорта Latency
         header.append('button')
             .attr('class', 'export-btn')
             .text('📥 Экспорт Latency')
             .style('margin', '10px 5px')
             .on('click', () => this.exportChart('latency'));
-        
+
         // Кнопка обновления данных
         header.append('button')
             .attr('class', 'export-btn')
@@ -335,14 +449,14 @@ class BenchmarkDashboard {
             const svgString = new XMLSerializer().serializeToString(chart.svg.node());
             const blob = new Blob([svgString], { type: 'image/svg+xml' });
             const url = URL.createObjectURL(blob);
-            
+
             const link = document.createElement('a');
             link.href = url;
             link.download = `rawstor-${chartType}-${new Date().toISOString().split('T')[0]}.svg`;
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
-            
+
             URL.revokeObjectURL(url);
         } catch (error) {
             console.error('Ошибка экспорта:', error);
@@ -427,7 +541,7 @@ class BenchmarkDashboard {
 
         const lastUpdate = this.data.allData[this.data.allData.length - 1].date.toLocaleDateString('ru-RU');
         const totalTests = this.data.allData.length;
-        
+
         d3.select('#last-update').text(`Последнее обновление: ${lastUpdate}`);
         d3.select('#data-info').text(totalTests);
     }
@@ -460,7 +574,7 @@ class BenchmarkDashboard {
 document.addEventListener('DOMContentLoaded', () => {
     const dashboard = new BenchmarkDashboard();
     dashboard.setupEventListeners();
-    
+
     // Глобальная ссылка для отладки
     window.benchmarkDashboard = dashboard;
 });

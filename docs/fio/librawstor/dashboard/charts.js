@@ -5,7 +5,7 @@ class BenchmarkCharts {
         this.zoomBehavior = null;
     }
 
-    createIOPSChart(container, data) {
+    createIOPSChart(container, data, groupType) {
         // Фильтруем данные перед созданием scales
         const validData = data.filter(item =>
             !isNaN(item.date.getTime()) &&
@@ -46,7 +46,7 @@ class BenchmarkCharts {
         this.addAxes(g, xScale, yScale, innerWidth, innerHeight, 'IOPS');
 
         // Группируем данные для линий
-        const lineData = this.prepareLineData(data, 'iops');
+        const lineData = this.prepareLineData(data, 'iops', groupType);
 
         // Создаем линии
         this.drawLines(g, lineData, xScale, yScale, 'iops');
@@ -103,9 +103,10 @@ class BenchmarkCharts {
         };
     }
 
-    prepareLineData(data, metricType) {
+    prepareLineData(data, metricType, groupType) {
         const lines = [];
         const groups = {};
+
         const validData = data.filter(item =>
             !isNaN(item.date.getTime()) &&
             !isNaN(item.read_iops) &&
@@ -113,20 +114,21 @@ class BenchmarkCharts {
             !isNaN(item.read_latency) &&
             !isNaN(item.write_latency)
         );
+
         validData.forEach(item => {
-            const config = item.config;
-            const branch = item.branch;
-            
+            // Ключ группировки зависит от типа
+            const groupKey = groupType === 'config' ? item.config : item.branch;
+
             // Read metrics
-            const readKey = `${config}-${branch}-read`;
+            const readKey = `${groupKey}-read`;
             if (!groups[readKey]) {
                 groups[readKey] = {
                     id: readKey,
                     type: 'read',
-                    config: config,
-                    branch: branch,
+                    group: groupKey,
+                    groupType: groupType,
                     points: [],
-                    color: this.colors(readKey),
+                    color: groupType === 'config' ? this.colors(groupKey) : this.colors(readKey),
                     visible: true
                 };
             }
@@ -139,15 +141,15 @@ class BenchmarkCharts {
             });
 
             // Write metrics
-            const writeKey = `${config}-${branch}-write`;
+            const writeKey = `${groupKey}-write`;
             if (!groups[writeKey]) {
                 groups[writeKey] = {
                     id: writeKey,
-                    type: 'write', 
-                    config: config,
-                    branch: branch,
+                    type: 'write',
+                    group: groupKey,
+                    groupType: groupType,
                     points: [],
-                    color: this.colors(writeKey),
+                    color: groupType === 'config' ? this.colors(groupKey) : this.colors(writeKey),
                     visible: true
                 };
             }
@@ -160,7 +162,6 @@ class BenchmarkCharts {
             });
         });
 
-        // Сортируем точки по дате и преобразуем в массив
         for (const key in groups) {
             groups[key].points.sort((a, b) => a.date - b.date);
             lines.push(groups[key]);
