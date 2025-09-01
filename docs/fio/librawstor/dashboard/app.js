@@ -283,29 +283,62 @@ class BenchmarkDashboard {
     async refreshData() {
         console.log('🔄 Обновление данных...');
         this.showLoading();
-        
+
         try {
             // Очищаем кэш загрузчика
             if (this.dataLoader.clearCache) {
                 this.dataLoader.clearCache();
             }
-            
+
             // Перезагружаем данные
             this.data = await this.dataLoader.loadAllData();
             this.hideLoading();
-            
-            // Пересоздаем графики
+
+            // Очищаем старые фильтры перед созданием новых
+            this.clearFilters();
+
+            // Пересоздаем графики и фильтры
             this.createCharts();
             this.createFilters();
             this.createLegend();
             this.updateDataInfo();
-            
+
             console.log('✅ Данные обновлены!');
         } catch (error) {
             console.error('❌ Ошибка обновления:', error);
             this.hideLoading();
             alert('Ошибка при обновлении данных');
         }
+    }
+
+    clearFilters() {
+        // Очищаем все контейнеры фильтров
+        const filterContainers = [
+            '#iops-config-filters',
+            '#iops-branch-filters',
+            '#iops-metric-filters',
+            '#latency-config-filters',
+            '#latency-branch-filters',
+            '#latency-metric-filters'
+        ];
+
+        filterContainers.forEach(selector => {
+            d3.select(selector).html('');
+        });
+
+        // Сбрасываем состояния фильтров
+        this.filters = {
+            iops: {
+                configs: new Set(),
+                branches: new Set(),
+                metrics: new Set(['read_iops', 'write_iops'])
+            },
+            latency: {
+                configs: new Set(),
+                branches: new Set(),
+                metrics: new Set(['read_latency', 'write_latency'])
+            }
+        };
     }
 
     showLoading() {
