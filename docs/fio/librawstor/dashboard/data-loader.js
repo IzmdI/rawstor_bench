@@ -1,7 +1,7 @@
 class BenchmarkDataLoader {
     constructor() {
         // Путь к данным относительно dashboard
-        this.baseUrl = '../../../data/fio/librawstor';
+        this.baseUrl = 'https://raw.githubusercontent.com/rawstor/rawstor_bench/data/fio/librawstor';
         
         // Все конфигурации из структуры репозитория
         this.configs = [
@@ -166,45 +166,5 @@ class BenchmarkDataLoader {
 
     getUniqueConfigs(data) {
         return [...new Set(data.map(item => item.config))].sort();
-    }
-
-    // Простой тест доступности
-    async testConnection() {
-        console.log('🔍 Проверка подключения к данным...');
-        
-        try {
-            const testUrl = `${this.baseUrl}/perftest-4k-1-1/`;
-            const response = await fetch(testUrl, { method: 'HEAD' });
-            
-            return {
-                success: response.ok,
-                status: response.status,
-                message: response.ok ? 'Подключение успешно' : 'Ошибка подключения'
-            };
-            
-        } catch (error) {
-            return {
-                success: false,
-                status: 'ERROR',
-                message: error.message
-            };
-        }
-    }
-}
-
-// Простые утилиты для форматирования
-class DataUtils {
-    static formatNumber(num) {
-        return new Intl.NumberFormat('ru-RU').format(num);
-    }
-
-    static getMetricName(metric) {
-        const names = {
-            'read_iops': 'Read IOPS',
-            'write_iops': 'Write IOPS', 
-            'read_latency': 'Read Latency',
-            'write_latency': 'Write Latency'
-        };
-        return names[metric] || metric;
     }
 }

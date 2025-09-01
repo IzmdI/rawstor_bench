@@ -73,5 +73,20 @@
     <script src="data-loader.js"></script>
     <script src="charts.js"></script>
     <script src="app.js"></script>
+    <script>
+    // Fix для CORS при разработке
+    if (window.location.hostname === 'localhost') {
+        const originalFetch = window.fetch;
+        window.fetch = function(url, options) {
+            if (url.includes('github.com')) {
+                url = url.replace('github.com', 'github.com');
+                options = options || {};
+                options.mode = 'cors';
+                options.credentials = 'omit';
+            }
+            return originalFetch.call(this, url, options);
+        };
+    }
+    </script>
 </body>
 </html>
