@@ -1,7 +1,7 @@
 class BenchmarkDataLoader {
     constructor() {
         // Путь к данным относительно dashboard
-        this.baseUrl = 'https://raw.githubusercontent.com/rawstor/rawstor_bench/data/fio/librawstor';
+        this.baseUrl = 'https://raw.githubusercontent.com/rawstor/rawstor_bench/frontend/data/fio/librawstor';
         
         // Все конфигурации из структуры репозитория
         this.configs = [
@@ -86,7 +86,7 @@ class BenchmarkDataLoader {
     async getConfigFiles(config) {
         try {
             // Используем GitHub API для получения списка файлов
-            const apiUrl = `https://api.github.com/repos/rawstor/rawstor_bench/contents/data/fio/librawstor/${config}`;
+            const apiUrl = `https://api.github.com/repos/rawstor/rawstor_bench/contents/data/fio/librawstor/${config}?ref=frontend`;
             const response = await fetch(apiUrl);
             
             if (!response.ok) {
