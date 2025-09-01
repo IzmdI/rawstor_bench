@@ -6,6 +6,18 @@ class BenchmarkCharts {
     }
 
     createIOPSChart(container, data) {
+        // Фильтруем данные перед созданием scales
+        const validData = data.filter(item =>
+            !isNaN(item.date.getTime()) &&
+            !isNaN(item.read_iops) &&
+            !isNaN(item.write_iops)
+        );
+
+        if (validData.length === 0) {
+            container.html('<div class="error">Нет valid данных для графика</div>');
+            return null;
+        }
+
         const width = container.node().offsetWidth;
         const height = 400;
         const innerWidth = width - this.margin.left - this.margin.right;
@@ -23,11 +35,11 @@ class BenchmarkCharts {
 
         // Scales
         const xScale = d3.scaleTime()
-            .domain(d3.extent(data, d => d.date))
+            .domain(d3.extent(validData, d => d.date))
             .range([0, innerWidth]);
 
         const yScale = d3.scaleLinear()
-            .domain([0, d3.max(data, d => Math.max(d.read_iops, d.write_iops)) * 1.1])
+            .domain([0, d3.max(validData, d => Math.max(d.read_iops, d.write_iops)) * 1.1])
             .range([innerHeight, 0]);
 
         // Оси
@@ -94,8 +106,14 @@ class BenchmarkCharts {
     prepareLineData(data, metricType) {
         const lines = [];
         const groups = {};
-        
-        data.forEach(item => {
+        const validData = data.filter(item =>
+            !isNaN(item.date.getTime()) &&
+            !isNaN(item.read_iops) &&
+            !isNaN(item.write_iops) &&
+            !isNaN(item.read_latency) &&
+            !isNaN(item.write_latency)
+        );
+        validData.forEach(item => {
             const config = item.config;
             const branch = item.branch;
             
@@ -154,8 +172,14 @@ class BenchmarkCharts {
     drawLines(g, lineData, xScale, yScale, metricType) {
         // Line generator
         const line = d3.line()
-            .x(d => xScale(d.date))
-            .y(d => yScale(d.value))
+            .x(d => {
+                const value = xScale(d.date);
+                return isNaN(value) ? 0 : value; // ← Защита от NaN
+            })
+            .y(d => {
+                const value = yScale(d.value);
+                return isNaN(value) ? 0 : value; // ← Защита от NaN
+            })
             .curve(d3.curveMonotoneX);
 
         // Рисуем линии

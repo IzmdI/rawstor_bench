@@ -18,21 +18,21 @@ class BenchmarkDataLoader {
 
     async loadAllData() {
         console.log('🚀 Загрузка данных benchmark...');
-        
+
         try {
-            // Загружаем данные для всех конфигураций
             const allData = [];
-            
+
             for (const config of this.configs) {
                 try {
                     const configData = await this.loadConfigData(config);
-                    allData.push(...configData);
-                    console.log(`📦 ${config}: ${configData.length} тестов`);
+                    const validData = configData.filter(item => item !== null);
+                    console.log(`📦 ${config}: ${validData.length}/${configData.length} valid тестов`);
+                    allData.push(...validData);
                 } catch (error) {
-                    console.warn(`⚠️  Ошибка загрузки ${config}:`, error.message);
+                    console.warn(`⚠️ ${config}:`, error.message);
                 }
             }
-            
+
             if (allData.length === 0) {
                 throw new Error('Не удалось загрузить ни одного теста');
             }
@@ -58,25 +58,25 @@ class BenchmarkDataLoader {
             // Получаем список JSON файлов в директории конфигурации
             const files = await this.getConfigFiles(config);
             const configData = [];
-            
+
             // Загружаем все файлы параллельно
-            const filePromises = files.map(file => 
+            const filePromises = files.map(file =>
                 this.loadJsonFile(`${config}/${file}`).catch(error => {
                     console.warn(`Ошибка файла ${config}/${file}:`, error.message);
                     return null;
                 })
             );
-            
+
             const fileResults = await Promise.all(filePromises);
-            
+
             // Обрабатываем успешные результаты
             fileResults.filter(Boolean).forEach(rawData => {
                 const processed = this.processData(rawData, `${config}/${rawData.commit}.json`);
                 configData.push(processed);
             });
-            
+
             return configData;
-            
+
         } catch (error) {
             console.warn(`Ошибка загрузки конфигурации ${config}:`, error.message);
             return [];
@@ -117,37 +117,66 @@ class BenchmarkDataLoader {
     }
 
     processData(rawData, filePath) {
-        const config = filePath.split('/')[0];
-        const commit = filePath.split('/')[1].replace('.json', '');
-        
-        // Извлекаем название ветки
-        let branch = rawData.branch || 'main';
-        if (branch.includes('refs/heads/')) {
-            branch = branch.replace('refs/heads/', '');
-        }
-        if (branch.includes('heads/')) {
-            branch = branch.replace('heads/', '');
-        }
+        try {
+            const config = filePath.split('/')[0];
+            const fileName = filePath.split('/')[1];
+            const commit = fileName.replace('.json', '');
 
-        return {
-            id: `${config}-${commit}`,
-            date: new Date(rawData.date),
-            dateLabel: new Date(rawData.date).toLocaleDateString('ru-RU', {
-                year: 'numeric',
-                month: '2-digit',
-                day: '2-digit',
-                hour: '2-digit',
-                minute: '2-digit'
-            }),
-            branch: branch,
-            commit: commit,
-            config: config,
-            read_iops: Math.round(Number(rawData.read_iops) || 0),
-            write_iops: Math.round(Number(rawData.write_iops) || 0),
-            read_latency: Math.round(Number(rawData.read_latency_ns) || 0),
-            write_latency: Math.round(Number(rawData.write_latency_ns) || 0),
-            testUrl: `../${config}/${commit}.html`
-        };
+            // Валидация и нормализация данных
+            if (!rawData.date) {
+                console.warn('Missing date field in:', rawData);
+                return null;
+            }
+
+            // Преобразуем дату
+            const date = new Date(rawData.date);
+            if (isNaN(date.getTime())) {
+                console.warn('Invalid date format:', rawData.date);
+                return null;
+            }
+
+            let branch = 'main';
+            if (rawData.branch) {
+                branch = String(rawData.branch)
+                    .replace('refs/heads/', '')
+                    .replace('heads/', '');
+            }
+
+            // Валидация числовых значений
+            const read_iops = Math.round(Number(rawData.read_iops) || 0);
+            const write_iops = Math.round(Number(rawData.write_iops) || 0);
+            const read_latency = Math.round(Number(rawData.read_latency_ns) || 0);
+            const write_latency = Math.round(Number(rawData.write_latency_ns) || 0);
+
+            // Проверяем на NaN
+            if (isNaN(read_iops) || isNaN(write_iops) || isNaN(read_latency) || isNaN(write_latency)) {
+                console.warn('NaN values in data:', rawData);
+                return null;
+            }
+
+            return {
+                id: `${config}-${commit}-${Date.now()}`,
+                date: date,
+                dateLabel: date.toLocaleDateString('ru-RU', {
+                    year: 'numeric',
+                    month: '2-digit',
+                    day: '2-digit',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                }),
+                branch: branch,
+                commit: commit,
+                config: config,
+                read_iops: read_iops,
+                write_iops: write_iops,
+                read_latency: read_latency,
+                write_latency: write_latency,
+                testUrl: `../${config}/${commit}.html`
+            };
+        } catch (error) {
+            console.warn('Error processing data:', error, rawData);
+            return null;
+        }
     }
 
     groupDataByConfigAndBranch(data) {

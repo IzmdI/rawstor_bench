@@ -47,6 +47,23 @@ class BenchmarkDashboard {
             return;
         }
 
+        // Фильтруем данные с NaN
+        const validData = this.data.allData.filter(item =>
+            item.date instanceof Date &&
+            !isNaN(item.date.getTime()) &&
+            !isNaN(item.read_iops) &&
+            !isNaN(item.write_iops) &&
+            !isNaN(item.read_latency) &&
+            !isNaN(item.write_latency)
+        );
+
+        if (validData.length === 0) {
+            this.showError('Все данные содержат ошибки (NaN значения)');
+            return;
+        }
+
+        console.log(`📊 Valid данных: ${validData.length}/${this.data.allData.length}`);
+
         const iopsContainer = d3.select('#iops-chart .chart-content');
         const latencyContainer = d3.select('#latency-chart .chart-content');
         
