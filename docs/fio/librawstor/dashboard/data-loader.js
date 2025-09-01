@@ -122,48 +122,52 @@ class BenchmarkDataLoader {
             const fileName = filePath.split('/')[1];
             const commit = fileName.replace('.json', '');
 
-            // Валидация и нормализация данных
-            if (!rawData.date) {
-                console.warn('Missing date field in:', rawData);
-                return null;
+            let read_iops, write_iops, read_latency, write_latency, date, branch;
+
+            // Способ 1: Новая структура (jobs array)
+            if (rawData.jobs && Array.isArray(rawData.jobs) && rawData.jobs.length > 0) {
+                const job = rawData.jobs[0];
+                read_iops = Math.round(Number(job.read?.iops_mean) || 0);
+                write_iops = Math.round(Number(job.write?.iops_mean) || 0);
+                read_latency = Math.round(Number(job.read?.lat_ns?.mean) || 0);
+                write_latency = Math.round(Number(job.write?.lat_ns?.mean) || 0);
+            }
+            // Способ 2: Старая структура (прямые поля)
+            else {
+                read_iops = Math.round(Number(rawData.read_iops) || 0);
+                write_iops = Math.round(Number(rawData.write_iops) || 0);
+                read_latency = Math.round(Number(rawData.read_latency_ns) || 0);
+                write_latency = Math.round(Number(rawData.write_latency_ns) || 0);
             }
 
-            // Преобразуем дату
-            const date = new Date(rawData.date);
-            if (isNaN(date.getTime())) {
-                console.warn('Invalid date format:', rawData.date);
-                return null;
+            // Дата из timestamp или time
+            if (rawData.timestamp) {
+                date = new Date(rawData.timestamp * 1000);
+            } else if (rawData.time) {
+                date = new Date(rawData.time);
+            } else {
+                date = new Date();
             }
 
-            let branch = 'main';
+            // Ветка из разных возможных мест
+            branch = 'main';
             if (rawData.branch) {
-                branch = String(rawData.branch)
-                    .replace('refs/heads/', '')
-                    .replace('heads/', '');
+                branch = String(rawData.branch).replace(/refs\/heads\/|heads\//g, '');
+            } else if (rawData.global_options?.branch) {
+                branch = String(rawData.global_options.branch).replace(/refs\/heads\/|heads\//g, '');
             }
 
-            // Валидация числовых значений
-            const read_iops = Math.round(Number(rawData.read_iops) || 0);
-            const write_iops = Math.round(Number(rawData.write_iops) || 0);
-            const read_latency = Math.round(Number(rawData.read_latency_ns) || 0);
-            const write_latency = Math.round(Number(rawData.write_latency_ns) || 0);
-
-            // Проверяем на NaN
-            if (isNaN(read_iops) || isNaN(write_iops) || isNaN(read_latency) || isNaN(write_latency)) {
-                console.warn('NaN values in data:', rawData);
+            // Валидация
+            if (isNaN(date.getTime()) || isNaN(read_iops) || isNaN(write_iops) ||
+                isNaN(read_latency) || isNaN(write_latency)) {
+                console.warn('Invalid data values:', { date, read_iops, write_iops, read_latency, write_latency });
                 return null;
             }
 
             return {
                 id: `${config}-${commit}-${Date.now()}`,
                 date: date,
-                dateLabel: date.toLocaleDateString('ru-RU', {
-                    year: 'numeric',
-                    month: '2-digit',
-                    day: '2-digit',
-                    hour: '2-digit',
-                    minute: '2-digit'
-                }),
+                dateLabel: date.toLocaleDateString('ru-RU'),
                 branch: branch,
                 commit: commit,
                 config: config,
@@ -174,7 +178,7 @@ class BenchmarkDataLoader {
                 testUrl: `../${config}/${commit}.html`
             };
         } catch (error) {
-            console.warn('Error processing data:', error, rawData);
+            console.warn('Error processing data:', error);
             return null;
         }
     }
