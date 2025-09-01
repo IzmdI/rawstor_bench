@@ -36,31 +36,6 @@ header p {
     font-size: 1.1em;
 }
 
-.filters {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-    gap: 20px;
-    margin-bottom: 30px;
-    padding: 20px;
-    background: #f8f9fa;
-    border-radius: 10px;
-}
-
-.filter-group h3 {
-    margin-bottom: 10px;
-    color: #2c3e50;
-}
-
-.filter-group label {
-    display: block;
-    margin: 5px 0;
-    cursor: pointer;
-}
-
-.filter-group input[type="checkbox"] {
-    margin-right: 8px;
-}
-
 .charts-container {
     display: grid;
     grid-template-columns: 1fr;
@@ -80,101 +55,12 @@ header p {
     color: #2c3e50;
     margin-bottom: 20px;
     text-align: center;
+    font-size: 1.4em;
 }
 
 .chart-content {
     height: 400px;
     position: relative;
-}
-
-.legend {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 15px;
-    margin-bottom: 20px;
-    padding: 15px;
-    background: #f8f9fa;
-    border-radius: 8px;
-}
-
-.legend-item {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    cursor: pointer;
-}
-
-.legend-color {
-    width: 15px;
-    height: 15px;
-    border-radius: 3px;
-}
-
-.legend-item.hidden {
-    opacity: 0.3;
-}
-
-.tooltip {
-    position: absolute;
-    background: rgba(0, 0, 0, 0.9);
-    color: white;
-    padding: 12px;
-    border-radius: 8px;
-    pointer-events: none;
-    font-size: 13px;
-    backdrop-filter: blur(10px);
-    border: 1px solid rgba(255, 255, 255, 0.2);
-}
-
-.tooltip h3 {
-    margin: 0 0 8px 0;
-    color: #3498db;
-}
-
-.tooltip p {
-    margin: 4px 0;
-}
-
-.line {
-    transition: opacity 0.3s ease;
-}
-
-.point {
-    transition: opacity 0.3s ease, r 0.2s ease;
-}
-
-.point:hover {
-    r: 6;
-}
-
-.grid line {
-    stroke: #e0e0e0;
-    stroke-dasharray: 2,2;
-}
-
-.grid path {
-    stroke-width: 0;
-}
-
-.filters {
-    background: #f8f9fa;
-    padding: 20px;
-    border-radius: 10px;
-    margin-bottom: 20px;
-}
-
-.filter-group {
-    margin-bottom: 15px;
-}
-
-.filter-group:last-child {
-    margin-bottom: 0;
-}
-
-.filter-group h3 {
-    margin-bottom: 10px;
-    color: #2c3e50;
-    font-size: 14px;
 }
 
 .chart-filters {
@@ -215,8 +101,78 @@ header p {
     transform: scale(0.9);
 }
 
+.legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 15px;
+    margin-bottom: 20px;
+    padding: 15px;
+    background: #f8f9fa;
+    border-radius: 8px;
+}
+
+.legend-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    padding: 5px 10px;
+    border-radius: 5px;
+    background: white;
+    border: 1px solid #e0e0e0;
+    transition: all 0.2s ease;
+}
+
+.legend-item:hover {
+    background: #f0f0f0;
+}
+
+.legend-color {
+    width: 16px;
+    height: 16px;
+    border-radius: 4px;
+}
+
+.legend-item.hidden {
+    opacity: 0.3;
+}
+
+.legend-item span {
+    font-size: 11px;
+    color: #2c3e50;
+}
+
+.tooltip {
+    position: absolute;
+    background: rgba(0, 0, 0, 0.95);
+    color: white;
+    padding: 12px;
+    border-radius: 8px;
+    pointer-events: none;
+    font-size: 13px;
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+    z-index: 1000;
+    max-width: 300px;
+}
+
+.tooltip h3 {
+    margin: 0 0 8px 0;
+    color: #3498db;
+    font-size: 14px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+    padding-bottom: 5px;
+}
+
+.tooltip p {
+    margin: 4px 0;
+    line-height: 1.4;
+}
+
 .zoom-controls rect {
     transition: fill 0.2s ease;
+    cursor: pointer;
 }
 
 .zoom-controls rect:hover {
@@ -238,14 +194,13 @@ header p {
     cursor: grabbing;
 }
 
-/* Индикатор загрузки */
 .loading {
     display: flex;
     justify-content: center;
     align-items: center;
-    height: 200px;
+    height: 300px;
     color: #7f8c8d;
-    font-size: 16px;
+    font-size: 1.2em;
 }
 
 .loading::after {
@@ -264,7 +219,6 @@ header p {
     100% { transform: rotate(360deg); }
 }
 
-/* Оптимизация для большого количества линий */
 .line {
     transition: opacity 0.3s ease, stroke-width 0.3s ease;
 }
@@ -282,9 +236,13 @@ header p {
     stroke-width: 2;
 }
 
-/* Улучшаем производительность при масштабировании */
-.zoomable-svg * {
-    vector-effect: non-scaling-stroke;
+.grid line {
+    stroke: #e0e0e0;
+    stroke-dasharray: 2,2;
+}
+
+.grid path {
+    stroke-width: 0;
 }
 
 .export-btn {
@@ -311,24 +269,50 @@ footer {
     color: #7f8c8d;
 }
 
+footer p {
+    margin: 5px 0;
+}
+
+/* Адаптивность */
 @media (min-width: 1200px) {
     .charts-container {
         grid-template-columns: 1fr 1fr;
     }
 }
 
-/* Адаптивность для мобильных */
 @media (max-width: 768px) {
+    .container {
+        padding: 15px;
+    }
+    
     .chart-filters {
         grid-template-columns: 1fr;
     }
-
+    
+    header h1 {
+        font-size: 2em;
+    }
+    
     .charts-container {
         grid-template-columns: 1fr;
     }
 }
 
-/* Убираем старые общие фильтры */
-.filters {
-    display: none;
+/* Улучшаем производительность при масштабировании */
+.zoomable-svg * {
+    vector-effect: non-scaling-stroke;
+}
+
+/* Стили для осей */
+.x-axis text,
+.y-axis text {
+    font-size: 10px;
+    fill: #7f8c8d;
+}
+
+.x-axis path,
+.y-axis path,
+.x-axis line,
+.y-axis line {
+    stroke: #e0e0e0;
 }
