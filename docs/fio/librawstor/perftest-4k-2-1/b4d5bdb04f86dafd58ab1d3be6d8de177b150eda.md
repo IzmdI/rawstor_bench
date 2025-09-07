@@ -2,7 +2,7 @@
 
 # perftest-4k-2-1
 
-2025-08-10 17:10:02 UTC
+2025-08-10 17:10:02
 
 refs/heads/feat/rawstorstd
 

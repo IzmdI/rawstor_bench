@@ -2,7 +2,7 @@
 
 # perftest--without-liburing-4k-1-1
 
-2025-09-03 09:33:10 UTC
+2025-09-03 09:33:10
 
 refs/heads/feat/opts
 

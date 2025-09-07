@@ -2,7 +2,7 @@
 
 # perftest-4k-2-1
 
-2025-09-06 21:10:02 UTC
+2025-09-06 21:10:02
 
 refs/heads/feat/protocol
 

@@ -2,7 +2,7 @@
 
 # perftest--disable-ost-4k-1-1
 
-2025-09-03 21:22:04 UTC
+2025-09-03 21:22:04
 
 refs/heads/feat/ci
 

@@ -2,7 +2,7 @@
 
 # perftest--disable-ost-4k-1-1
 
-2025-08-07 13:59:36 UTC
+2025-08-07 13:59:36
 
 refs/heads/feat/matrix
 

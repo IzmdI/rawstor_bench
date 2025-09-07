@@ -2,7 +2,7 @@
 
 # perftest--without-liburing--disable-ost-4k-1-1
 
-2025-08-27 21:42:07 UTC
+2025-08-27 21:42:07
 
 refs/heads/main
 

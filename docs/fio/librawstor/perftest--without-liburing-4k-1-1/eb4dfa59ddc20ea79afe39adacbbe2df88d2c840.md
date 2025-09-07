@@ -2,7 +2,7 @@
 
 # perftest--without-liburing-4k-1-1
 
-2025-08-22 22:27:15 UTC
+2025-08-22 22:27:15
 
 refs/heads/main
 

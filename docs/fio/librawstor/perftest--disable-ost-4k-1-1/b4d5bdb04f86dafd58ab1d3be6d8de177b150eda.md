@@ -2,7 +2,7 @@
 
 # perftest--disable-ost-4k-1-1
 
-2025-08-10 17:09:37 UTC
+2025-08-10 17:09:37
 
 refs/heads/feat/rawstorstd
 

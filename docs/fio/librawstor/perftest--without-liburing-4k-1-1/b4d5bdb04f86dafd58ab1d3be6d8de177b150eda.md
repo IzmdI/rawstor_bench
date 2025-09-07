@@ -2,7 +2,7 @@
 
 # perftest--without-liburing-4k-1-1
 
-2025-08-10 17:09:57 UTC
+2025-08-10 17:09:57
 
 refs/heads/feat/rawstorstd
 

@@ -2,7 +2,7 @@
 
 # perftest--without-liburing--disable-ost-4k-2-1
 
-2025-09-01 19:25:37 UTC
+2025-09-01 19:25:37
 
 refs/heads/feat/no_poll
 

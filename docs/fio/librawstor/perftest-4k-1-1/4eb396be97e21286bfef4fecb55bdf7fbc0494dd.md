@@ -2,7 +2,7 @@
 
 # perftest-4k-1-1
 
-2025-09-01 19:26:04 UTC
+2025-09-01 19:26:04
 
 refs/heads/feat/no_poll
 
