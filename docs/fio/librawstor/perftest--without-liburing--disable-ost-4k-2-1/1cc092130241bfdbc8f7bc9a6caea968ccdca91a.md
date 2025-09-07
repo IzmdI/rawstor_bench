@@ -2,11 +2,11 @@
 
 # perftest--without-liburing--disable-ost-4k-2-1
 
-2025-09-03T21:21:48+00:00
+2025-09-03 21:21:48 UTC
 
 refs/heads/feat/ci
 
-[1cc092130241bfdbc8f7bc9a6caea968ccdca91a](https://github.com/rawstor/librawstor/commit/1cc092130241bfdbc8f7bc9a6caea968ccdca91a)
+[1cc0921](https://github.com/rawstor/librawstor/commit/1cc092130241bfdbc8f7bc9a6caea968ccdca91a)
 
 rw = randrw, bs = 4k, iodepth = 2, numjobs = 1
 

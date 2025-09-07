@@ -11,7 +11,11 @@ def get_commit_txt(repo_name, commit_sha):
     commit_url = \
         f"https://github.com/rawstor/{repo_name}/commit/" \
         f"{commit_sha}"
-    return f"[{commit_sha}]({commit_url})"
+    return f"[{commit_sha[:7]}]({commit_url})"
+
+
+def get_date_txt(dt):
+    return dt.strftime("%Y-%m-%d %H:%M:%S UTC")
 
 
 def read_fio_txt(prefix, meta):
@@ -48,7 +52,7 @@ def compile_commit_md(
     with open(filename, "w") as commit_md:
         commit_md.write("[&lt; back](..)\n\n")
         commit_md.write(f"# {name}\n\n")
-        commit_md.write(f"{meta["date"].isoformat()}\n\n")
+        commit_md.write(f"{get_date_txt(meta["date"])}\n\n")
         commit_md.write(f"{meta["branch"]}\n\n")
         commit_md.write(f"{get_commit_txt(repo_name, commit_sha)}\n\n")
         commit_md.write(f"rw = {job["rw"]}, ")
@@ -110,7 +114,7 @@ def compile_repo_md(prefix, dest_abspath, dest_path, repo_name, repo):
 
                 repo_md.write(
                     f"| "
-                    f"[{meta["date"].isoformat()}]({commmit_md_url}) | "
+                    f"[{get_date_txt(meta["date"])}]({commmit_md_url}) | "
                     f"{meta["branch"]} | "
                     f"{get_commit_txt(repo_name, commit_sha)} | "
                     f"{fio["jobs"][0]["read"]["iops_mean"]} | "

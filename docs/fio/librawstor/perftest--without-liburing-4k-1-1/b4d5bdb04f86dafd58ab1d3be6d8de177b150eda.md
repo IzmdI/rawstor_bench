@@ -2,11 +2,11 @@
 
 # perftest--without-liburing-4k-1-1
 
-2025-08-10T17:09:57+00:00
+2025-08-10 17:09:57 UTC
 
 refs/heads/feat/rawstorstd
 
-[b4d5bdb04f86dafd58ab1d3be6d8de177b150eda](https://github.com/rawstor/librawstor/commit/b4d5bdb04f86dafd58ab1d3be6d8de177b150eda)
+[b4d5bdb](https://github.com/rawstor/librawstor/commit/b4d5bdb04f86dafd58ab1d3be6d8de177b150eda)
 
 rw = randrw, bs = 4k, iodepth = 1, numjobs = 1
 

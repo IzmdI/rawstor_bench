@@ -2,11 +2,11 @@
 
 # perftest-4k-1-1
 
-2025-09-01T19:26:04+00:00
+2025-09-01 19:26:04 UTC
 
 refs/heads/feat/no_poll
 
-[4eb396be97e21286bfef4fecb55bdf7fbc0494dd](https://github.com/rawstor/librawstor/commit/4eb396be97e21286bfef4fecb55bdf7fbc0494dd)
+[4eb396b](https://github.com/rawstor/librawstor/commit/4eb396be97e21286bfef4fecb55bdf7fbc0494dd)
 
 rw = randrw, bs = 4k, iodepth = 1, numjobs = 1
 

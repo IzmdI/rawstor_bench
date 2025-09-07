@@ -2,11 +2,11 @@
 
 # perftest-4k-1-1
 
-2025-08-27T21:42:22+00:00
+2025-08-27 21:42:22 UTC
 
 refs/heads/main
 
-[ad80eec81bb26cbbb01dde51a65dd7dfe19a8be1](https://github.com/rawstor/librawstor/commit/ad80eec81bb26cbbb01dde51a65dd7dfe19a8be1)
+[ad80eec](https://github.com/rawstor/librawstor/commit/ad80eec81bb26cbbb01dde51a65dd7dfe19a8be1)
 
 rw = randrw, bs = 4k, iodepth = 1, numjobs = 1
 

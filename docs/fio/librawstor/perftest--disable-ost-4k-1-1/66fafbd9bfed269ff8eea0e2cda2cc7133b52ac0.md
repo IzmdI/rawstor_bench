@@ -2,11 +2,11 @@
 
 # perftest--disable-ost-4k-1-1
 
-2025-08-07T21:42:59+00:00
+2025-08-07 21:42:59 UTC
 
 refs/heads/feat/ost
 
-[66fafbd9bfed269ff8eea0e2cda2cc7133b52ac0](https://github.com/rawstor/librawstor/commit/66fafbd9bfed269ff8eea0e2cda2cc7133b52ac0)
+[66fafbd](https://github.com/rawstor/librawstor/commit/66fafbd9bfed269ff8eea0e2cda2cc7133b52ac0)
 
 rw = randrw, bs = 4k, iodepth = 1, numjobs = 1
 

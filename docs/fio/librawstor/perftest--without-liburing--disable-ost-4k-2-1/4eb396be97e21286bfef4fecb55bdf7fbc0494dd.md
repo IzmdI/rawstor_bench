@@ -2,11 +2,11 @@
 
 # perftest--without-liburing--disable-ost-4k-2-1
 
-2025-09-01T19:25:37+00:00
+2025-09-01 19:25:37 UTC
 
 refs/heads/feat/no_poll
 
-[4eb396be97e21286bfef4fecb55bdf7fbc0494dd](https://github.com/rawstor/librawstor/commit/4eb396be97e21286bfef4fecb55bdf7fbc0494dd)
+[4eb396b](https://github.com/rawstor/librawstor/commit/4eb396be97e21286bfef4fecb55bdf7fbc0494dd)
 
 rw = randrw, bs = 4k, iodepth = 2, numjobs = 1
 

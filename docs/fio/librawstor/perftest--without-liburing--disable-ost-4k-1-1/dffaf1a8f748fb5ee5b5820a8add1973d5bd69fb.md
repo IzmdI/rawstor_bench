@@ -2,11 +2,11 @@
 
 # perftest--without-liburing--disable-ost-4k-1-1
 
-2025-08-07T13:59:38+00:00
+2025-08-07 13:59:38 UTC
 
 refs/heads/feat/matrix
 
-[dffaf1a8f748fb5ee5b5820a8add1973d5bd69fb](https://github.com/rawstor/librawstor/commit/dffaf1a8f748fb5ee5b5820a8add1973d5bd69fb)
+[dffaf1a](https://github.com/rawstor/librawstor/commit/dffaf1a8f748fb5ee5b5820a8add1973d5bd69fb)
 
 rw = randrw, bs = 4k, iodepth = 1, numjobs = 1
 
