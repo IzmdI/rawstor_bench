@@ -4,6 +4,7 @@
 
 | Date | Branch | Commit | Read IOPS | Read Latency | Write IOPS | Write Latency |
 | :--- | :---   | :---   |      ---: |         ---: |       ---: |          ---: |
+| [2025-09-10 11:02:33](perftest--disable-ost-4k-1-1/d365d390a6279a818cfa0f9da9474be04c77d73d.md) | refs/heads/feat/socket | [d365d39](https://github.com/rawstor/librawstor/commit/d365d390a6279a818cfa0f9da9474be04c77d73d) | 33019.263158 | 3014.656879 | 32990.210526 | 26360.784269 |
 | [2025-09-10 09:36:01](perftest--disable-ost-4k-1-1/2dff9338b2e5c25fecd26c20532833753c1aa2d6.md) | refs/heads/feat/no_poll | [2dff933](https://github.com/rawstor/librawstor/commit/2dff9338b2e5c25fecd26c20532833753c1aa2d6) | 29933.789474 | 3511.196421 | 29954.315789 | 28523.350675 |
 | [2025-09-10 09:35:15](perftest--disable-ost-4k-1-1/d67bec8651fe94a3e3b6c8afc1a0b9a35cbbc043.md) | refs/heads/feat/ci | [d67bec8](https://github.com/rawstor/librawstor/commit/d67bec8651fe94a3e3b6c8afc1a0b9a35cbbc043) | 33882.947368 | 2999.084471 | 33860.947368 | 25718.281034 |
 | [2025-09-10 09:34:03](perftest--disable-ost-4k-1-1/7c7dea342fff8e7650d80a04dc5c1976b493fff3.md) | refs/heads/main | [7c7dea3](https://github.com/rawstor/librawstor/commit/7c7dea342fff8e7650d80a04dc5c1976b493fff3) | 31089.894737 | 3232.479796 | 31089.052632 | 27881.332625 |
