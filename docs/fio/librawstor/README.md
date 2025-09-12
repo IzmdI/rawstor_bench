@@ -64,6 +64,7 @@
 
 | Date | Branch | Commit | Read IOPS | Read Latency | Write IOPS | Write Latency |
 | :--- | :---   | :---   |      ---: |         ---: |       ---: |          ---: |
+| [2025-09-12 22:55:04](perftest--without-liburing-4k-1-1/e613c9dfdd0e89af7272382efe321cbcc7f8c35b.md) | refs/heads/feat/no_poll | [e613c9d](https://github.com/rawstor/librawstor/commit/e613c9dfdd0e89af7272382efe321cbcc7f8c35b) | 4155.0 | 119897.940915 | 4137.4 | 118011.806303 |
 | [2025-09-12 22:51:04](perftest--without-liburing-4k-1-1/338ea693385cb7d4702e9eb48ee03c985a5dc07e.md) | refs/heads/feat/ci | [338ea69](https://github.com/rawstor/librawstor/commit/338ea693385cb7d4702e9eb48ee03c985a5dc07e) | 5658.2 | 73558.510074 | 5632.9 | 100120.812619 |
 | [2025-09-12 22:50:05](perftest--without-liburing-4k-1-1/c20e85d778f1ad78def6e3511532f046cb19464b.md) | refs/heads/main | [c20e85d](https://github.com/rawstor/librawstor/commit/c20e85d778f1ad78def6e3511532f046cb19464b) | 6026.2 | 69559.377219 | 6014.8 | 93508.160853 |
 | [2025-09-12 22:46:45](perftest--without-liburing-4k-1-1/6fcf1ca0fbb65da872268b2b6b5fece15a2d5cc8.md) | refs/heads/feat/evqueue | [6fcf1ca](https://github.com/rawstor/librawstor/commit/6fcf1ca0fbb65da872268b2b6b5fece15a2d5cc8) | 5951.3 | 70216.320518 | 5936.6 | 94793.574066 |
@@ -73,7 +74,6 @@
 | [2025-09-11 09:52:43](perftest--without-liburing-4k-1-1/7a4115a2227bc92a38aaf44f39a5b52064b4edaf.md) | refs/heads/feat/ci | [7a4115a](https://github.com/rawstor/librawstor/commit/7a4115a2227bc92a38aaf44f39a5b52064b4edaf) | 5587.6 | 75173.121179 | 5559.8 | 100864.80949 |
 | [2025-09-11 09:52:27](perftest--without-liburing-4k-1-1/61bf67f808fa1d620a4db68b794a51a049486b11.md) | refs/heads/main | [61bf67f](https://github.com/rawstor/librawstor/commit/61bf67f808fa1d620a4db68b794a51a049486b11) | 5554.4 | 76828.309358 | 5525.3 | 100085.110673 |
 | [2025-09-11 08:55:49](perftest--without-liburing-4k-1-1/b9157978130ff8a4a3e158acc359843d9ea07b20.md) | refs/heads/feat/socket | [b915797](https://github.com/rawstor/librawstor/commit/b9157978130ff8a4a3e158acc359843d9ea07b20) | 6075.2 | 68429.244074 | 6056.9 | 93568.370734 |
-| [2025-09-11 08:53:21](perftest--without-liburing-4k-1-1/78229717498f13548eec8e2888e161edb6304b5b.md) | refs/heads/feat/socket | [7822971](https://github.com/rawstor/librawstor/commit/78229717498f13548eec8e2888e161edb6304b5b) | 5913.4 | 70587.548213 | 5895.2 | 95715.379614 |
 
 ## perftest--without-liburing-4k-2-1
 
