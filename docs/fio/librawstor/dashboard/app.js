@@ -79,7 +79,7 @@ class BenchmarkDashboard {
                 'config',
                 'iops',
                 DataUtils.getConfigDisplayName(config),
-                this.getConfigColor(config)
+                this.configColors(config) // Цвет конфигурации
             );
         });
 
@@ -93,12 +93,9 @@ class BenchmarkDashboard {
                 'config',
                 'latency',
                 DataUtils.getConfigDisplayName(config),
-                this.getConfigColor(config)
+                this.configColors(config) // Цвет конфигурации
             );
         });
-
-        // Метрики для конфигурационных графиков
-        this.createMetricFilters('config');
     }
 
     createBranchFilters() {
@@ -129,9 +126,6 @@ class BenchmarkDashboard {
                 branch
             );
         });
-
-        // Метрики для branch графиков
-        this.createMetricFilters('branch');
     }
 
     createMetricFilters(groupType) {
@@ -345,6 +339,21 @@ class BenchmarkDashboard {
         filterItem.style('opacity', isVisible ? 1 : 0.3);
     }
 
+    getConfigColor(config) {
+        // Простая хэш-функция для consistent цветов
+        let hash = 0;
+        for (let i = 0; i < config.length; i++) {
+            hash = config.charCodeAt(i) + ((hash << 5) - hash);
+        }
+
+        const colors = [
+            '#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd',
+            '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf'
+        ];
+
+        return colors[Math.abs(hash) % colors.length];
+    }
+
     // Метод для получения цветов конфигураций
     getConfigColors() {
         const colors = d3.scaleOrdinal(d3.schemeCategory10);
@@ -364,17 +373,17 @@ class BenchmarkDashboard {
         d3.select('#legend').html('');
     }
 
-    handleFilterChange(filterType, value, isChecked, chartType) {
+    handleFilterChange(filterType, value, isChecked, groupType, chartType) {
         if (isChecked) {
-            this.filters[chartType][filterType].add(value);
+            this.filters[groupType][chartType][filterType].add(value);
         } else {
-            this.filters[chartType][filterType].delete(value);
+            this.filters[groupType][chartType][filterType].delete(value);
         }
 
-        this.updateChartVisibility(chartType);
+        this.updateChartVisibility(groupType, chartType);
 
         // Обновляем видимость элементов фильтра
-        const filterItem = d3.select(`.filter-item[data-value="${value}"][data-type="${filterType}"][data-chart="${chartType}"]`);
+        const filterItem = d3.select(`.filter-item[data-value="${value}"][data-type="${filterType}"][data-chart="${chartType}"][data-group="${groupType}"]`);
         if (!filterItem.empty()) {
             this.updateFilterItemVisibility(filterItem, isChecked);
         }
@@ -390,16 +399,22 @@ class BenchmarkDashboard {
             let isVisible = true;
 
             if (groupType === 'config') {
-                const isConfigVisible = filters.configs.has(line.config);
+                // Для графиков по конфигурациям
+                const isConfigVisible = filters.configs.has(line.group);
                 const isMetricVisible = filters.metrics.has(`${line.type}_${chartType}`);
                 isVisible = isConfigVisible && isMetricVisible;
             } else {
-                const isBranchVisible = filters.branches.has(line.branch);
+                // Для графиков по веткам
+                const isBranchVisible = filters.branches.has(line.group);
                 const isMetricVisible = filters.metrics.has(`${line.type}_${chartType}`);
                 isVisible = isBranchVisible && isMetricVisible;
             }
 
+            // Обновляем видимость линии
             this.charts.updateLineVisibility(chart, line.id, isVisible);
+
+            // Сохраняем состояние видимости
+            line.visible = isVisible;
         });
     }
 
