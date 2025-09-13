@@ -89,7 +89,7 @@ class BenchmarkCharts {
                     group: groupKey,
                     groupType: groupType,
                     points: [],
-                    color: this.getLineColor(groupKey, 'read', metricType, groupType),
+                    color: this.getLineColor(groupKey, 'read', metricType, groupType), // Правильный вызов
                     visible: true
                 };
             }
@@ -110,7 +110,7 @@ class BenchmarkCharts {
                     group: groupKey,
                     groupType: groupType,
                     points: [],
-                    color: this.getLineColor(groupKey, 'write', metricType, groupType),
+                    color: this.getLineColor(groupKey, 'write', metricType, groupType), // Правильный вызов
                     visible: true
                 };
             }
@@ -138,7 +138,7 @@ class BenchmarkCharts {
     getLineColor(group, lineType, metricType, groupType) {
         if (groupType === 'config') {
             // Для конфигураций: один цвет на всю конфигурацию
-            return this.configColors(group);
+            return this.colors(group); // Используем this.colors вместо this.configColors
         } else {
             // Для веток: цвет зависит от типа линии (read/write)
             return lineType === 'read' ?
