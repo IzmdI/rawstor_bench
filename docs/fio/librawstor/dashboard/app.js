@@ -380,7 +380,7 @@ class BenchmarkDashboard {
         }
     }
 
-updateChartVisibility(groupType, chartType) {
+    updateChartVisibility(groupType, chartType) {
         const chart = this.getChart(groupType, chartType);
         const filters = this.filters[groupType][chartType];
 
@@ -411,57 +411,6 @@ updateChartVisibility(groupType, chartType) {
             'branch_latency': this.latencyBranchChart
         };
         return charts[`${groupType}_${chartType}`];
-    }
-
-    addExportButtons() {
-        const header = d3.select('header');
-
-        // Кнопка экспорта IOPS
-        header.append('button')
-            .attr('class', 'export-btn')
-            .text('📥 Экспорт IOPS')
-            .style('margin', '10px 5px')
-            .on('click', () => this.exportChart('iops'));
-
-        // Кнопка экспорта Latency
-        header.append('button')
-            .attr('class', 'export-btn')
-            .text('📥 Экспорт Latency')
-            .style('margin', '10px 5px')
-            .on('click', () => this.exportChart('latency'));
-
-        // Кнопка обновления данных
-        header.append('button')
-            .attr('class', 'export-btn')
-            .text('🔄 Обновить данные')
-            .style('margin', '10px 5px')
-            .on('click', () => this.refreshData());
-    }
-
-    exportChart(chartType) {
-        const chart = chartType === 'iops' ? this.iopsChart : this.latencyChart;
-        if (!chart || !chart.svg) {
-            alert('График не доступен для экспорта');
-            return;
-        }
-
-        try {
-            const svgString = new XMLSerializer().serializeToString(chart.svg.node());
-            const blob = new Blob([svgString], { type: 'image/svg+xml' });
-            const url = URL.createObjectURL(blob);
-
-            const link = document.createElement('a');
-            link.href = url;
-            link.download = `rawstor-${chartType}-${new Date().toISOString().split('T')[0]}.svg`;
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-
-            URL.revokeObjectURL(url);
-        } catch (error) {
-            console.error('Ошибка экспорта:', error);
-            alert('Ошибка при экспорте графика');
-        }
     }
 
     async refreshData() {
@@ -566,6 +515,11 @@ updateChartVisibility(groupType, chartType) {
                 this.createCharts();
                 this.createFilters();
             }
+        });
+
+        // Кнопка обновления данных
+        d3.select('#refresh-data').on('click', () => {
+            this.refreshData();
         });
     }
 }
