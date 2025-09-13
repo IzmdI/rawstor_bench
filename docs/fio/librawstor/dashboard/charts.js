@@ -1,8 +1,15 @@
 class BenchmarkCharts {
     constructor() {
-        this.margin = { top: 60, right: 80, bottom: 100, left: 80 };
-        this.colors = d3.scaleOrdinal(d3.schemeCategory10);
-        this.zoomBehavior = null;
+        this.margin = { top: 40, right: 80, bottom: 100, left: 80 };
+
+        // Раздельные цветовые схемы для конфигураций и метрик
+        this.configColors = d3.scaleOrdinal(d3.schemeCategory10);
+        this.metricColors = {
+            'read_iops': '#1f77b4',
+            'write_iops': '#d62728',
+            'read_latency': '#2ca02c',
+            'write_latency': '#ff7f0e'
+        };
     }
 
     createIOPSChart(container, data, groupType) {
@@ -110,7 +117,6 @@ class BenchmarkCharts {
         );
 
         validData.forEach(item => {
-            // Ключ группировки зависит от типа
             const groupKey = groupType === 'config' ? item.config : item.branch;
 
             // Read metrics
@@ -122,7 +128,7 @@ class BenchmarkCharts {
                     group: groupKey,
                     groupType: groupType,
                     points: [],
-                    color: groupType === 'config' ? this.colors(groupKey) : this.colors(readKey),
+                    color: this.getLineColor(groupKey, 'read', metricType, groupType),
                     visible: true
                 };
             }
@@ -143,7 +149,7 @@ class BenchmarkCharts {
                     group: groupKey,
                     groupType: groupType,
                     points: [],
-                    color: groupType === 'config' ? this.colors(groupKey) : this.colors(writeKey),
+                    color: this.getLineColor(groupKey, 'write', metricType, groupType),
                     visible: true
                 };
             }
@@ -162,6 +168,17 @@ class BenchmarkCharts {
         }
 
         return lines;
+    }
+
+    getLineColor(group, metricType, dataType, groupType) {
+        if (groupType === 'config') {
+            // Для конфигураций: цвет зависит только от конфигурации
+            return this.configColors(group);
+        } else {
+            // Для веток: цвет зависит от типа метрики (read/write)
+            const key = `${metricType}_${dataType}`;
+            return this.metricColors[key] || '#000000';
+        }
     }
 
     drawLines(g, lineData, xScale, yScale, metricType) {
@@ -269,12 +286,16 @@ class BenchmarkCharts {
     updateLineVisibility(chart, lineId, isVisible) {
         if (!chart || !chart.g) return;
 
+        // Прячем/показываем линию
         chart.g.selectAll(`.line.${lineId}`)
             .transition().duration(300)
-            .attr('opacity', isVisible ? 1 : 0.3);
+            .attr('opacity', isVisible ? 1 : 0)
+            .style('display', isVisible ? null : 'none');
 
+        // Прячем/показываем точки
         chart.g.selectAll(`.point.${lineId}`)
             .transition().duration(300)
-            .attr('opacity', isVisible ? 1 : 0.3);
+            .attr('opacity', isVisible ? 1 : 0)
+            .style('display', isVisible ? null : 'none');
     }
 }
