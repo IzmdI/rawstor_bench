@@ -64,15 +64,24 @@ class BenchmarkDashboard {
             return;
         }
 
+        // Все графики создаются одинаково
         const iopsConfigContainer = d3.select('#iops-by-config-chart .chart-content');
         const latencyConfigContainer = d3.select('#latency-by-config-chart .chart-content');
         const iopsBranchContainer = d3.select('#iops-by-branch-chart .chart-content');
         const latencyBranchContainer = d3.select('#latency-by-branch-chart .chart-content');
 
-        this.iopsConfigChart = this.charts.createIOPSChart(iopsConfigContainer, validData, 'config');
-        this.latencyConfigChart = this.charts.createLatencyChart(latencyConfigContainer, validData, 'config');
-        this.iopsBranchChart = this.charts.createIOPSChart(iopsBranchContainer, validData, 'branch');
-        this.latencyBranchChart = this.charts.createLatencyChart(latencyBranchContainer, validData, 'branch');
+        this.iopsConfigChart = this.charts.createChart(iopsConfigContainer, validData, 'config', 'iops');
+        this.latencyConfigChart = this.charts.createChart(latencyConfigContainer, validData, 'config', 'latency');
+        this.iopsBranchChart = this.charts.createChart(iopsBranchContainer, validData, 'branch', 'iops');
+        this.latencyBranchChart = this.charts.createChart(latencyBranchContainer, validData, 'branch', 'latency');
+    }
+
+    get configColors() {
+        // Кэшируем цвета для консистентности
+        if (!this._configColors) {
+            this._configColors = d3.scaleOrdinal(d3.schemeCategory10);
+        }
+        return this._configColors;
     }
 
     createFilters() {
@@ -101,47 +110,46 @@ class BenchmarkDashboard {
         const latencyConfigContainer = d3.select('#latency-config-filters');
 
         configs.forEach(config => {
-            const colorRead = this.charts.getLineColor(config, 'read', 'iops', 'config');
-            const colorWrite = this.charts.getLineColor(config, 'write', 'iops', 'config');
+            const color = this.configColors(config);
 
-            // Read IOPS
+            // IOPS - Read
             this.createFilterCheckboxWithColor(
                 iopsConfigContainer,
-                `config-${config}-read`, // Уникальный ID линии
+                `config-${config}-read`,
                 'config',
                 'iops',
                 `${DataUtils.getConfigDisplayName(config)} - Read`,
-                colorRead
+                color
             );
 
-            // Write IOPS
+            // IOPS - Write
             this.createFilterCheckboxWithColor(
                 iopsConfigContainer,
-                `config-${config}-write`, // Уникальный ID линии
+                `config-${config}-write`,
                 'config',
                 'iops',
                 `${DataUtils.getConfigDisplayName(config)} - Write`,
-                colorWrite
+                color
             );
 
-            // Read Latency
+            // Latency - Read
             this.createFilterCheckboxWithColor(
                 latencyConfigContainer,
-                `config-${config}-read`, // Уникальный ID линии
+                `config-${config}-read`,
                 'config',
                 'latency',
                 `${DataUtils.getConfigDisplayName(config)} - Read`,
-                colorRead
+                color
             );
 
-            // Write Latency
+            // Latency - Write
             this.createFilterCheckboxWithColor(
                 latencyConfigContainer,
-                `config-${config}-write`, // Уникальный ID линии
+                `config-${config}-write`,
                 'config',
                 'latency',
                 `${DataUtils.getConfigDisplayName(config)} - Write`,
-                colorWrite
+                color
             );
         });
     }
