@@ -79,6 +79,7 @@
 
 | Date | Branch | Commit | Read IOPS | Read Latency | Write IOPS | Write Latency |
 | :--- | :---   | :---   |      ---: |         ---: |       ---: |          ---: |
+| [2025-09-13 12:20:46](perftest--without-liburing-4k-2-1/ab56db5bd98520a78e808647bcca9da165df2706.md) | refs/heads/feat/ci | [ab56db5](https://github.com/rawstor/librawstor/commit/ab56db5bd98520a78e808647bcca9da165df2706) | 9959.0 | 93129.26325 | 9952.8 | 105132.61615 |
 | [2025-09-13 12:20:02](perftest--without-liburing-4k-2-1/548282e4a36469eca7d77ce9e939c0ed9ac76e25.md) | refs/heads/feat/no_poll | [548282e](https://github.com/rawstor/librawstor/commit/548282e4a36469eca7d77ce9e939c0ed9ac76e25) | 6736.631579 | 151140.540356 | 6704.0 | 143317.491909 |
 | [2025-09-13 12:19:19](perftest--without-liburing-4k-2-1/ac6c11013a1c467a89e12afe17a1e0b57a7779a0.md) | refs/heads/main | [ac6c110](https://github.com/rawstor/librawstor/commit/ac6c11013a1c467a89e12afe17a1e0b57a7779a0) | 10020.9 | 92985.171372 | 10007.7 | 104259.626807 |
 | [2025-09-13 12:16:45](perftest--without-liburing-4k-2-1/85a4472a365f366ef248fe778912869e4fd03697.md) | refs/heads/feat/cppqueue | [85a4472](https://github.com/rawstor/librawstor/commit/85a4472a365f366ef248fe778912869e4fd03697) | 10097.7 | 91024.42787 | 10081.1 | 104724.651308 |
@@ -88,7 +89,6 @@
 | [2025-09-12 22:50:56](perftest--without-liburing-4k-2-1/338ea693385cb7d4702e9eb48ee03c985a5dc07e.md) | refs/heads/feat/ci | [338ea69](https://github.com/rawstor/librawstor/commit/338ea693385cb7d4702e9eb48ee03c985a5dc07e) | 9582.4 | 97558.887074 | 9562.8 | 108723.08325 |
 | [2025-09-12 22:50:26](perftest--without-liburing-4k-2-1/c20e85d778f1ad78def6e3511532f046cb19464b.md) | refs/heads/main | [c20e85d](https://github.com/rawstor/librawstor/commit/c20e85d778f1ad78def6e3511532f046cb19464b) | 10092.0 | 91940.554241 | 10075.1 | 103846.560659 |
 | [2025-09-12 22:46:48](perftest--without-liburing-4k-2-1/6fcf1ca0fbb65da872268b2b6b5fece15a2d5cc8.md) | refs/heads/feat/evqueue | [6fcf1ca](https://github.com/rawstor/librawstor/commit/6fcf1ca0fbb65da872268b2b6b5fece15a2d5cc8) | 10211.4 | 90134.112355 | 10192.6 | 103470.752252 |
-| [2025-09-12 22:38:06](perftest--without-liburing-4k-2-1/2d23e267214f916314cffd02a7e57c8fed842619.md) | refs/heads/feat/evqueue | [2d23e26](https://github.com/rawstor/librawstor/commit/2d23e267214f916314cffd02a7e57c8fed842619) | 9745.4 | 95229.476143 | 9724.0 | 107629.706571 |
 
 ## perftest-4k-1-1
 
