@@ -28,7 +28,7 @@ class BenchmarkCharts {
         const svg = container.append('svg')
             .attr('width', width)
             .attr('height', height)
-            .attr('class', 'zoomable-svg');
+            .attr('cursor', 'default');
 
         const g = svg.append('g')
             .attr('transform', `translate(${this.margin.left},${this.margin.top})`);
@@ -51,12 +51,9 @@ class BenchmarkCharts {
         // Создаем линии
         this.drawLines(g, lineData, xScale, yScale, 'iops');
 
-        // Добавляем масштабирование
-        this.addZoomBehavior(svg, g, xScale, yScale, innerWidth, innerHeight);
-
-        return { 
-            svg, g, xScale, yScale, width, height, 
-            innerWidth, innerHeight, lineData 
+        return {
+            svg, g, xScale, yScale, width, height,
+            innerWidth, innerHeight, lineData
         };
     }
 
@@ -71,7 +68,7 @@ class BenchmarkCharts {
         const svg = container.append('svg')
             .attr('width', width)
             .attr('height', height)
-            .attr('class', 'zoomable-svg');
+            .attr('cursor', 'default');
 
         const g = svg.append('g')
             .attr('transform', `translate(${this.margin.left},${this.margin.top})`);
@@ -93,9 +90,6 @@ class BenchmarkCharts {
 
         // Создаем линии
         this.drawLines(g, lineData, xScale, yScale, 'latency');
-
-        // Добавляем масштабирование
-        this.addZoomBehavior(svg, g, xScale, yScale, innerWidth, innerHeight);
 
         return { 
             svg, g, xScale, yScale, width, height, 
@@ -217,109 +211,6 @@ class BenchmarkCharts {
                     });
             });
         });
-    }
-
-    addZoomBehavior(svg, g, xScale, yScale, width, height) {
-        const zoom = d3.zoom()
-            .scaleExtent([0.5, 10])
-            .translateExtent([[0, 0], [width, height]])
-            .on('zoom', (event) => {
-                this.handleZoom(event, g, xScale, yScale, width, height);
-            });
-
-        svg.call(zoom);
-
-        // Добавляем кнопки управления zoom
-        this.addZoomControls(svg, zoom, width);
-    }
-
-    handleZoom(event, g, xScale, yScale, width, height) {
-        const newXScale = event.transform.rescaleX(xScale);
-        const newYScale = event.transform.rescaleY(yScale);
-
-        // Обновляем оси
-        g.select('.x-axis').call(d3.axisBottom(newXScale).ticks(5).tickFormat(d3.timeFormat('%d.%m.%Y')));
-        g.select('.y-axis').call(d3.axisLeft(newYScale).ticks(8));
-
-        // Обновляем линии
-        const line = d3.line()
-            .x(d => newXScale(d.date))
-            .y(d => newYScale(d.value))
-            .curve(d3.curveMonotoneX);
-
-        g.selectAll('.line')
-            .attr('d', d => line(d.points));
-
-        // Обновляем точки
-        g.selectAll('.point')
-            .attr('cx', d => newXScale(d.date))
-            .attr('cy', d => newYScale(d.value));
-    }
-
-    addZoomControls(svg, zoom, width) {
-        const controls = svg.append('g')
-            .attr('class', 'zoom-controls')
-            .attr('transform', `translate(${width - 100}, 10)`);
-
-        // Кнопка Zoom In
-        controls.append('rect')
-            .attr('x', 0)
-            .attr('y', 0)
-            .attr('width', 30)
-            .attr('height', 30)
-            .attr('fill', '#3498db')
-            .attr('rx', 4)
-            .style('cursor', 'pointer')
-            .on('click', () => {
-                svg.transition().duration(300).call(zoom.scaleBy, 1.5);
-            });
-
-        controls.append('text')
-            .attr('x', 15)
-            .attr('y', 18)
-            .attr('text-anchor', 'middle')
-            .attr('fill', 'white')
-            .text('+');
-
-        // Кнопка Zoom Out
-        controls.append('rect')
-            .attr('x', 40)
-            .attr('y', 0)
-            .attr('width', 30)
-            .attr('height', 30)
-            .attr('fill', '#3498db')
-            .attr('rx', 4)
-            .style('cursor', 'pointer')
-            .on('click', () => {
-                svg.transition().duration(300).call(zoom.scaleBy, 0.5);
-            });
-
-        controls.append('text')
-            .attr('x', 55)
-            .attr('y', 18)
-            .attr('text-anchor', 'middle')
-            .attr('fill', 'white')
-            .text('-');
-
-        // Кнопка Reset
-        controls.append('rect')
-            .attr('x', 80)
-            .attr('y', 0)
-            .attr('width', 30)
-            .attr('height', 30)
-            .attr('fill', '#e74c3c')
-            .attr('rx', 4)
-            .style('cursor', 'pointer')
-            .on('click', () => {
-                svg.transition().duration(300).call(zoom.transform, d3.zoomIdentity);
-            });
-
-        controls.append('text')
-            .attr('x', 95)
-            .attr('y', 18)
-            .attr('text-anchor', 'middle')
-            .attr('fill', 'white')
-            .text('↺');
     }
 
     addAxes(g, xScale, yScale, width, height, yLabel) {
