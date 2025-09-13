@@ -10,13 +10,15 @@ class BenchmarkDashboard {
         this.latencyBranchChart = null;
 
         this.filters = {
+            // Для конфигураций: каждая линия управляется отдельно
             config: {
-                iops: { configs: new Set(), metrics: new Set(['read_iops', 'write_iops']) },
-                latency: { configs: new Set(), metrics: new Set(['read_latency', 'write_latency']) }
+                iops: new Set(),    // Будет хранить ID линий: 'config-[configName]-read', 'config-[configName]-write'
+                latency: new Set()   // Аналогично для latency
             },
+            // Для веток: каждая линия управляется отдельно
             branch: {
-                iops: { branches: new Set(), metrics: new Set(['read_iops', 'write_iops']) },
-                latency: { branches: new Set(), metrics: new Set(['read_latency', 'write_latency']) }
+                iops: new Set(),    // 'branch-[branchName]-read', 'branch-[branchName]-write'
+                latency: new Set()   // Аналогично для latency
             }
         };
 
@@ -99,30 +101,49 @@ class BenchmarkDashboard {
         const latencyConfigContainer = d3.select('#latency-config-filters');
 
         configs.forEach(config => {
-            const color = this.getConfigColor(config);
+            const colorRead = this.charts.getLineColor(config, 'read', 'iops', 'config');
+            const colorWrite = this.charts.getLineColor(config, 'write', 'iops', 'config');
 
+            // Read IOPS
             this.createFilterCheckboxWithColor(
                 iopsConfigContainer,
-                config,
-                'configs',
+                `config-${config}-read`, // Уникальный ID линии
                 'config',
                 'iops',
-                DataUtils.getConfigDisplayName(config),
-                color
+                `${DataUtils.getConfigDisplayName(config)} - Read`,
+                colorRead
             );
 
+            // Write IOPS
+            this.createFilterCheckboxWithColor(
+                iopsConfigContainer,
+                `config-${config}-write`, // Уникальный ID линии
+                'config',
+                'iops',
+                `${DataUtils.getConfigDisplayName(config)} - Write`,
+                colorWrite
+            );
+
+            // Read Latency
             this.createFilterCheckboxWithColor(
                 latencyConfigContainer,
-                config,
-                'configs',
+                `config-${config}-read`, // Уникальный ID линии
                 'config',
                 'latency',
-                DataUtils.getConfigDisplayName(config),
-                color
+                `${DataUtils.getConfigDisplayName(config)} - Read`,
+                colorRead
+            );
+
+            // Write Latency
+            this.createFilterCheckboxWithColor(
+                latencyConfigContainer,
+                `config-${config}-write`, // Уникальный ID линии
+                'config',
+                'latency',
+                `${DataUtils.getConfigDisplayName(config)} - Write`,
+                colorWrite
             );
         });
-
-        this.createMetricFilters('config');
     }
 
     createBranchFilters() {
@@ -132,72 +153,55 @@ class BenchmarkDashboard {
         const latencyBranchContainer = d3.select('#latency-branch-filters');
 
         branches.forEach(branch => {
-            this.createFilterCheckbox(
+            const colorRead = this.charts.getLineColor(branch, 'read', 'iops', 'branch');
+            const colorWrite = this.charts.getLineColor(branch, 'write', 'iops', 'branch');
+
+            // Read IOPS
+            this.createFilterCheckboxWithColor(
                 iopsBranchContainer,
-                branch,
-                'branches',
+                `branch-${branch}-read`, // Уникальный ID линии
                 'branch',
                 'iops',
-                branch
+                `${branch} - Read`,
+                colorRead
             );
 
-            this.createFilterCheckbox(
+            // Write IOPS
+            this.createFilterCheckboxWithColor(
+                iopsBranchContainer,
+                `branch-${branch}-write`, // Уникальный ID линии
+                'branch',
+                'iops',
+                `${branch} - Write`,
+                colorWrite
+            );
+
+            // Read Latency
+            this.createFilterCheckboxWithColor(
                 latencyBranchContainer,
-                branch,
-                'branches',
+                `branch-${branch}-read`, // Уникальный ID линии
                 'branch',
                 'latency',
-                branch
+                `${branch} - Read`,
+                colorRead
             );
-        });
 
-        this.createMetricFilters('branch');
-    }
-
-    createMetricFilters(groupType) {
-        const iopsMetrics = [
-            { id: 'read_iops', label: 'Read IOPS', color: '#1f77b4' },
-            { id: 'write_iops', label: 'Write IOPS', color: '#d62728' }
-        ];
-
-        const latencyMetrics = [
-            { id: 'read_latency', label: 'Read Latency', color: '#2ca02c' },
-            { id: 'write_latency', label: 'Write Latency', color: '#ff7f0e' }
-        ];
-
-        const iopsMetricContainer = d3.select(groupType === 'config' ? '#iops-metric-filters' : '#iops-branch-metric-filters');
-        const latencyMetricContainer = d3.select(groupType === 'config' ? '#latency-metric-filters' : '#latency-branch-metric-filters');
-
-        iopsMetrics.forEach(metric => {
+            // Write Latency
             this.createFilterCheckboxWithColor(
-                iopsMetricContainer,
-                metric.id,
-                'metrics',
-                groupType,
-                'iops',
-                metric.label,
-                metric.color
-            );
-        });
-
-        latencyMetrics.forEach(metric => {
-            this.createFilterCheckboxWithColor(
-                latencyMetricContainer,
-                metric.id,
-                'metrics',
-                groupType,
+                latencyBranchContainer,
+                `branch-${branch}-write`, // Уникальный ID линии
+                'branch',
                 'latency',
-                metric.label,
-                metric.color
+                `${branch} - Write`,
+                colorWrite
             );
         });
     }
 
-    createFilterCheckboxWithColor(container, value, filterType, groupType, chartType, label, color) {
+    createFilterCheckboxWithColor(container, lineId, groupType, chartType, label, color) {
         const filterItem = container.append('div')
             .attr('class', 'filter-item')
-            .attr('data-value', value)
-            .attr('data-type', filterType)
+            .attr('data-line', lineId)
             .attr('data-group', groupType)
             .attr('data-chart', chartType);
 
@@ -209,43 +213,24 @@ class BenchmarkDashboard {
 
         labelElement.append('input')
             .attr('type', 'checkbox')
-            .attr('name', `${groupType}-${chartType}-${filterType}`)
-            .attr('value', value)
+            .attr('name', `${groupType}-${chartType}`)
+            .attr('value', lineId)
             .attr('checked', true)
             .on('change', (event) => {
-                this.handleFilterChange(filterType, value, event.target.checked, groupType, chartType);
+                this.handleLineVisibility(lineId, event.target.checked, groupType, chartType);
             });
 
         labelElement.append('span').text(label);
+
+        // Добавляем линию в фильтры по умолчанию
+        this.filters[groupType][chartType].add(lineId);
     }
 
-    createFilterCheckbox(container, value, filterType, groupType, chartType, label) {
-        const filterItem = container.append('div')
-            .attr('class', 'filter-item')
-            .attr('data-value', value)
-            .attr('data-type', filterType)
-            .attr('data-group', groupType)
-            .attr('data-chart', chartType);
-
-        const labelElement = filterItem.append('label');
-
-        labelElement.append('input')
-            .attr('type', 'checkbox')
-            .attr('name', `${groupType}-${chartType}-${filterType}`)
-            .attr('value', value)
-            .attr('checked', true)
-            .on('change', (event) => {
-                this.handleFilterChange(filterType, value, event.target.checked, groupType, chartType);
-            });
-
-        labelElement.append('span').text(label);
-    }
-
-    handleFilterChange(filterType, value, isChecked, groupType, chartType) {
-        if (isChecked) {
-            this.filters[groupType][chartType][filterType].add(value);
+    handleLineVisibility(lineId, isVisible, groupType, chartType) {
+        if (isVisible) {
+            this.filters[groupType][chartType].add(lineId);
         } else {
-            this.filters[groupType][chartType][filterType].delete(value);
+            this.filters[groupType][chartType].delete(lineId);
         }
 
         this.updateChartVisibility(groupType, chartType);
@@ -253,24 +238,14 @@ class BenchmarkDashboard {
 
     updateChartVisibility(groupType, chartType) {
         const chart = this.getChart(groupType, chartType);
-        const filters = this.filters[groupType][chartType];
+        const visibleLines = this.filters[groupType][chartType];
 
         if (!chart || !chart.lineData) return;
 
         chart.lineData.forEach(line => {
-            let isVisible = true;
-
-            if (groupType === 'config') {
-                const isConfigVisible = filters.configs.has(line.group);
-                const isMetricVisible = filters.metrics.has(`${line.type}_${chartType}`);
-                isVisible = isConfigVisible && isMetricVisible;
-            } else {
-                const isBranchVisible = filters.branches.has(line.group);
-                const isMetricVisible = filters.metrics.has(`${line.type}_${chartType}`);
-                isVisible = isBranchVisible && isMetricVisible;
-            }
-
+            const isVisible = visibleLines.has(line.id);
             this.charts.updateLineVisibility(chart, line.id, isVisible);
+            line.visible = isVisible;
         });
     }
 
@@ -282,22 +257,6 @@ class BenchmarkDashboard {
             'branch_latency': this.latencyBranchChart
         };
         return chartsMap[`${groupType}_${chartType}`];
-    }
-
-    getConfigColor(config) {
-        const colors = [
-            '#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd',
-            '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf',
-            '#aec7e8', '#ffbb78', '#98df8a', '#ff9896', '#c5b0d5',
-            '#c49c94', '#f7b6d2', '#c7c7c7', '#dbdb8d', '#9edae5'
-        ];
-
-        let hash = 0;
-        for (let i = 0; i < config.length; i++) {
-            hash = config.charCodeAt(i) + ((hash << 5) - hash);
-        }
-
-        return colors[Math.abs(hash) % colors.length];
     }
 
     async refreshData() {

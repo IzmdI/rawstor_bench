@@ -12,6 +12,11 @@ class BenchmarkCharts {
         };
     }
 
+    getLineId(group, metricType, groupType) {
+        // Уникальный ID для каждой линии: [groupType]-[group]-[metricType]
+        return `${groupType}-${group}-${metricType}`;
+    }
+
     createIOPSChart(container, data, groupType) {
         // Фильтруем данные перед созданием scales
         const validData = data.filter(item =>
@@ -120,10 +125,10 @@ class BenchmarkCharts {
             const groupKey = groupType === 'config' ? item.config : item.branch;
 
             // Read metrics
-            const readKey = `${groupKey}-read`;
-            if (!groups[readKey]) {
-                groups[readKey] = {
-                    id: readKey,
+            const readId = this.getLineId(groupKey, 'read', groupType);
+            if (!groups[readId]) {
+                groups[readId] = {
+                    id: readId,
                     type: 'read',
                     group: groupKey,
                     groupType: groupType,
@@ -132,7 +137,7 @@ class BenchmarkCharts {
                     visible: true
                 };
             }
-            groups[readKey].points.push({
+            groups[readId].points.push({
                 date: item.date,
                 value: metricType === 'iops' ? item.read_iops : item.read_latency,
                 commit: item.commit,
@@ -141,10 +146,10 @@ class BenchmarkCharts {
             });
 
             // Write metrics
-            const writeKey = `${groupKey}-write`;
-            if (!groups[writeKey]) {
-                groups[writeKey] = {
-                    id: writeKey,
+            const writeId = this.getLineId(groupKey, 'write', groupType);
+            if (!groups[writeId]) {
+                groups[writeId] = {
+                    id: writeId,
                     type: 'write',
                     group: groupKey,
                     groupType: groupType,
@@ -153,7 +158,7 @@ class BenchmarkCharts {
                     visible: true
                 };
             }
-            groups[writeKey].points.push({
+            groups[writeId].points.push({
                 date: item.date,
                 value: metricType === 'iops' ? item.write_iops : item.write_latency,
                 commit: item.commit,
@@ -286,13 +291,12 @@ class BenchmarkCharts {
     updateLineVisibility(chart, lineId, isVisible) {
         if (!chart || !chart.g) return;
 
-        // Прячем/показываем линию
+        // Полностью скрываем/показываем линию
         chart.g.selectAll(`.line.${lineId}`)
             .transition().duration(300)
             .attr('opacity', isVisible ? 1 : 0)
             .style('display', isVisible ? null : 'none');
 
-        // Прячем/показываем точки
         chart.g.selectAll(`.point.${lineId}`)
             .transition().duration(300)
             .attr('opacity', isVisible ? 1 : 0)
