@@ -1,114 +1,213 @@
 class BenchmarkDataLoader {
     constructor() {
-        // Путь к данным относительно dashboard
-        this.baseUrl = 'https://raw.githubusercontent.com/rawstor/rawstor_bench/frontend/data/fio/librawstor';
-        
-        // Все конфигурации из структуры репозитория
+        this.baseUrl = 'https://raw.githubusercontent.com/rawstor/rawstor_bench/main/data/fio/librawstor';
         this.configs = [
+            'perftest-4k-1-1',
+            'perftest-4k-2-1',
             'perftest--disable-ost-4k-1-1',
             'perftest--disable-ost-4k-2-1',
-            'perftest--without-liburing--disable-ost-4k-1-1',
-            'perftest--without-liburing--disable-ost-4k-2-1',
             'perftest--without-liburing-4k-1-1',
             'perftest--without-liburing-4k-2-1',
-            'perftest-4k-1-1',
-            'perftest-4k-2-1'
+            'perftest--without-liburing--disable-ost-4k-1-1',
+            'perftest--without-liburing--disable-ost-4k-2-1'
         ];
+        this.cache = new Map();
     }
 
     async loadAllData() {
-        console.log('🚀 Загрузка данных benchmark...');
+        console.log('🚀 Загрузка тестов за последний месяц...');
+        const startTime = Date.now();
 
         try {
-            const allData = [];
+            const oneMonthAgo = Date.now() - (30 * 24 * 60 * 60 * 1000);
+            const recentTests = await this.getTestsSince(oneMonthAgo);
 
-            for (const config of this.configs) {
-                try {
-                    const configData = await this.loadConfigData(config);
-                    const validData = configData.filter(item => item !== null);
-                    console.log(`📦 ${config}: ${validData.length}/${configData.length} valid тестов`);
-                    allData.push(...validData);
-                } catch (error) {
-                    console.warn(`⚠️ ${config}:`, error.message);
-                }
+            if (recentTests.length === 0) {
+                console.warn('⚠️ Не найдено тестов за последний месяц, загружаем все тесты');
+                const allTests = await this.getAllTests();
+                const result = await this.processAllTests(allTests);
+                console.log(`⏱️ Загрузка заняла: ${((Date.now() - startTime) / 1000).toFixed(1)}s`);
+                return result;
             }
 
-            if (allData.length === 0) {
-                throw new Error('Не удалось загрузить ни одного теста');
-            }
-            
-            console.log(`✅ Итого загружено: ${allData.length} тестов`);
-            
-            // Сортируем по дате
-            const sortedData = allData.sort((a, b) => new Date(a.date) - new Date(b.date));
-            
-            return {
-                allData: sortedData,
-                groupedData: this.groupDataByConfigAndBranch(sortedData)
-            };
-            
+            console.log(`✅ Найдено ${recentTests.length} тестов за последний месяц`);
+            const result = await this.processAllTests(recentTests);
+            console.log(`⏱️ Загрузка заняла: ${((Date.now() - startTime) / 1000).toFixed(1)}s`);
+            return result;
+
         } catch (error) {
             console.error('❌ Ошибка загрузки данных:', error);
             throw error;
         }
     }
 
-    async loadConfigData(config) {
+    async getTestsSince(timestamp) {
+        const allTests = [];
+        const monthAgo = new Date(timestamp);
+
+        console.log(`📅 Ищем тесты с ${monthAgo.toLocaleDateString('ru-RU')}`);
+
+        for (const config of this.configs) {
+            try {
+                const configTests = await this.getTestsForConfigSince(config, timestamp);
+                allTests.push(...configTests);
+            } catch (error) {
+                console.warn(`⚠️ Ошибка получения тестов для ${config}:`, error.message);
+            }
+        }
+
+        return allTests;
+    }
+
+    async getTestsForConfigSince(config, timestamp) {
         try {
-            const files = await this.getConfigFiles(config);
-            const configData = [];
+            const metaFiles = await this.getMetaFiles(config);
+            const recentTests = [];
 
-            console.log(`🔍 Загрузка ${config}, файлов: ${files.length}`);
+            const jsonFiles = await this.getJsonFiles(config);
+            const jsonFileSet = new Set(jsonFiles);
 
-            for (const file of files.slice(0, 10)) {
+            const validMetaFiles = metaFiles.filter(metaFile => {
+                const jsonFile = metaFile.replace('.meta', '.json');
+                return jsonFileSet.has(jsonFile);
+            });
+
+            console.log(`📁 ${config}: ${validMetaFiles.length} valid meta files`);
+
+            for (const metaFile of validMetaFiles) {
                 try {
-                    const jsonFile = file;
-                    const metaFile = file.replace('.json', '.meta');
+                    const metaData = await this.loadJsonFile(`${config}/${metaFile}`);
+                    const testTimestamp = metaData.timestamp || metaData.time;
 
-                    // Загружаем оба файла параллельно
-                    const [jsonData, metaData] = await Promise.all([
-                        this.loadJsonFile(`${config}/${jsonFile}`),
-                        this.loadJsonFile(`${config}/${metaFile}`).catch(error => {
-                            console.warn(`⚠️ Meta файл не найден: ${config}/${metaFile}`);
-                            return null; // Продолжаем без meta файла
-                        })
-                    ]);
-
-                    console.log(`📄 ${file}:`, {
-                        hasJson: !!jsonData,
-                        hasMeta: !!metaData,
-                        branchFromMeta: metaData?.branch
-                    });
-
-                    const processed = this.processData(jsonData, metaData, `${config}/${jsonFile}`);
-                    if (processed) {
-                        configData.push(processed);
+                    if (testTimestamp && testTimestamp * 1000 >= timestamp) {
+                        recentTests.push({
+                            config,
+                            metaFile,
+                            jsonFile: metaFile.replace('.meta', '.json'),
+                            timestamp: testTimestamp
+                        });
                     }
                 } catch (error) {
-                    console.warn(`❌ Ошибка ${config}/${file}:`, error.message);
+                    console.warn(`❌ Ошибка meta файла ${config}/${metaFile}:`, error.message);
                 }
             }
 
-            console.log(`✅ ${config}: обработано ${configData.length} файлов`);
-            return configData;
+            return recentTests;
+
         } catch (error) {
             console.warn(`❌ Ошибка конфигурации ${config}:`, error.message);
             return [];
         }
     }
 
-    async getConfigFiles(config) {
+    async getAllTests() {
+        const allTests = [];
+
+        for (const config of this.configs) {
+            try {
+                const metaFiles = await this.getMetaFiles(config);
+                const configTests = metaFiles.map(metaFile => ({
+                    config,
+                    metaFile,
+                    jsonFile: metaFile.replace('.meta', '.json')
+                }));
+
+                allTests.push(...configTests);
+            } catch (error) {
+                console.warn(`⚠️ Ошибка получения всех тестов для ${config}:`, error.message);
+            }
+        }
+
+        return allTests;
+    }
+
+    async processAllTests(tests) {
+        tests.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+
+        console.log(`📊 Обрабатываем ${tests.length} тестов...`);
+
+        const testData = [];
+        const loadedTests = new Set();
+
+        for (const test of tests) {
+            try {
+                const testKey = `${test.config}/${test.jsonFile}`;
+                if (loadedTests.has(testKey)) continue;
+
+                let jsonData, metaData;
+
+                try {
+                    jsonData = await this.loadJsonFile(`${test.config}/${test.jsonFile}`);
+                } catch (error) {
+                    console.warn(`❌ JSON файл не найден: ${test.config}/${test.jsonFile}`);
+                    continue;
+                }
+
+                try {
+                    metaData = await this.loadJsonFile(`${test.config}/${test.metaFile}`);
+                } catch (error) {
+                    console.warn(`⚠️ Meta файл не найден: ${test.config}/${test.metaFile}`);
+                    metaData = {};
+                }
+
+                const processed = this.processData(jsonData, metaData, test.config, test.jsonFile);
+                if (processed) {
+                    testData.push(processed);
+                    loadedTests.add(testKey);
+                }
+
+                await new Promise(resolve => setTimeout(resolve, 30));
+
+            } catch (error) {
+                console.warn(`❌ Ошибка обработки теста ${test.config}/${test.jsonFile}:`, error.message);
+            }
+        }
+
+        console.log(`✅ Успешно обработано ${testData.length} тестов`);
+
+        return {
+            allData: testData.sort((a, b) => b.date - a.date),
+            groupedData: this.groupDataByConfigAndBranch(testData)
+        };
+    }
+
+    async getMetaFiles(config) {
         try {
-            const apiUrl = `https://api.github.com/repos/rawstor/rawstor_bench/contents/data/fio/librawstor/${config}?ref=frontend`;
+            const apiUrl = `https://api.github.com/repos/rawstor/rawstor_bench/contents/data/fio/librawstor/${config}`;
             const response = await fetch(apiUrl);
 
-            if (!response.ok) throw new Error(`API: ${response.status}`);
+            if (!response.ok) {
+                if (response.status === 404) {
+                    return [];
+                }
+                throw new Error(`GitHub API: ${response.status}`);
+            }
 
             const contents = await response.json();
 
-            // Фильтруем только JSON файлы (исключаем .meta)
             return contents
-                .filter(item => item.type === 'file' && item.name.endsWith('.json') && !item.name.endsWith('.meta'))
+                .filter(item => item.type === 'file' && item.name.endsWith('.meta'))
+                .map(item => item.name);
+
+        } catch (error) {
+            console.warn(`GitHub API недоступно для ${config}:`, error.message);
+            return [];
+        }
+    }
+
+    async getJsonFiles(config) {
+        try {
+            const apiUrl = `https://api.github.com/repos/rawstor/rawstor_bench/contents/data/fio/librawstor/${config}`;
+            const response = await fetch(apiUrl);
+
+            if (!response.ok) {
+                return [];
+            }
+
+            const contents = await response.json();
+
+            return contents
+                .filter(item => item.type === 'file' && item.name.endsWith('.json'))
                 .map(item => item.name);
 
         } catch (error) {
@@ -119,80 +218,55 @@ class BenchmarkDataLoader {
 
     async loadJsonFile(filePath) {
         const response = await fetch(`${this.baseUrl}/${filePath}`);
-        
+
         if (!response.ok) {
             throw new Error(`HTTP ${response.status}`);
         }
-        
+
         return await response.json();
     }
 
-    processData(jsonData, metaData, filePath) {
+    processData(jsonData, metaData, config, fileName) {
         try {
-            const config = filePath.split('/')[0];
-            const fileName = filePath.split('/')[1];
             const commit = fileName.replace('.json', '');
-            
-            // Извлекаем данные из JSON
+
             if (!jsonData.jobs || !Array.isArray(jsonData.jobs) || jsonData.jobs.length === 0) {
-                console.warn('No jobs data in:', jsonData);
                 return null;
             }
 
-            let read_iops, write_iops, read_latency, write_latency, date;
+            const job = jsonData.jobs[0];
+            const read_iops = Math.round(Number(job.read?.iops_mean) || 0);
+            const write_iops = Math.round(Number(job.write?.iops_mean) || 0);
+            const read_latency = Math.round(Number(job.read?.lat_ns?.mean) || 0);
+            const write_latency = Math.round(Number(job.write?.lat_ns?.mean) || 0);
 
-            // Способ 1: Новая структура (jobs array)
-            if (jsonData.jobs && Array.isArray(jsonData.jobs) && jsonData.jobs.length > 0) {
-                const job = jsonData.jobs[0];
-                read_iops = Math.round(Number(job.read?.iops_mean) || 0);
-                write_iops = Math.round(Number(job.write?.iops_mean) || 0);
-                read_latency = Math.round(Number(job.read?.lat_ns?.mean) || 0);
-                write_latency = Math.round(Number(job.write?.lat_ns?.mean) || 0);
-            }
-            // Способ 2: Старая структура (прямые поля)
-            else {
-                read_iops = Math.round(Number(jsonData.read_iops) || 0);
-                write_iops = Math.round(Number(jsonData.write_iops) || 0);
-                read_latency = Math.round(Number(jsonData.read_latency_ns) || 0);
-                write_latency = Math.round(Number(jsonData.write_latency_ns) || 0);
-            }
-
-            // Дата из timestamp или time
-            if (jsonData.timestamp) {
+            let date;
+            if (metaData && metaData.timestamp) {
+                date = new Date(metaData.timestamp * 1000);
+            } else if (jsonData.timestamp) {
                 date = new Date(jsonData.timestamp * 1000);
-            } else if (jsonData.time) {
-                date = new Date(jsonData.time);
+            } else if (metaData && metaData.time) {
+                date = new Date(metaData.time);
             } else {
                 date = new Date();
             }
 
-            // ВЕТКА: сначала пробуем из meta файла, потом из JSON как fallback
             let branch = 'main';
             if (metaData && metaData.branch) {
                 branch = String(metaData.branch).replace(/refs\/heads\/|heads\//g, '');
             } else if (jsonData.branch) {
                 branch = String(jsonData.branch).replace(/refs\/heads\/|heads\//g, '');
-            } else if (jsonData.global_options?.branch) {
-                branch = String(jsonData.global_options.branch).replace(/refs\/heads\/|heads\//g, '');
             }
 
-            // Валидация
             if (isNaN(date.getTime()) || isNaN(read_iops) || isNaN(write_iops) ||
                 isNaN(read_latency) || isNaN(write_latency)) {
-                console.warn('Invalid data values:', { date, read_iops, write_iops, read_latency, write_latency });
                 return null;
             }
 
             return {
                 id: `${config}-${commit}-${Date.now()}`,
                 date: date,
-                dateLabel: date.toLocaleDateString('ru-RU', {
-                    year: 'numeric',
-                    month: '2-digit',
-                    day: '2-digit',
-                    hour: '2-digit',
-                    minute: '2-digit'
-                }),
+                dateLabel: date.toLocaleDateString('ru-RU'),
                 branch: branch,
                 commit: commit,
                 config: config,
@@ -200,8 +274,7 @@ class BenchmarkDataLoader {
                 write_iops: write_iops,
                 read_latency: read_latency,
                 write_latency: write_latency,
-                testUrl: `../${config}/${commit}.html`,
-                hasMeta: !!metaData // Флаг что meta файл был найден
+                testUrl: `../${config}/${commit}.html`
             };
         } catch (error) {
             console.warn('Error processing data:', error);
@@ -225,5 +298,10 @@ class BenchmarkDataLoader {
 
     getUniqueConfigs(data) {
         return [...new Set(data.map(item => item.config))].sort();
+    }
+
+    clearCache() {
+        this.cache.clear();
+        console.log('🧹 Кэш данных очищен');
     }
 }
