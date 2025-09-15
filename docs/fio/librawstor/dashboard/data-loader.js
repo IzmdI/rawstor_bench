@@ -1,6 +1,6 @@
 class BenchmarkDataLoader {
     constructor() {
-        this.baseUrl = 'https://raw.githubusercontent.com/rawstor/rawstor_bench/main/data/fio/librawstor';
+        this.baseUrl = 'https://raw.githubusercontent.com/izmdi/rawstor_bench/main/data/fio/librawstor';
         this.configs = [
             'perftest-4k-1-1',
             'perftest-4k-2-1',
@@ -173,7 +173,7 @@ class BenchmarkDataLoader {
 
     async getMetaFiles(config) {
         try {
-            const apiUrl = `https://api.github.com/repos/rawstor/rawstor_bench/contents/data/fio/librawstor/${config}`;
+            const apiUrl = `https://api.github.com/repos/izmdi/rawstor_bench/contents/data/fio/librawstor/${config}`;
             const response = await fetch(apiUrl);
 
             if (!response.ok) {
@@ -197,7 +197,7 @@ class BenchmarkDataLoader {
 
     async getJsonFiles(config) {
         try {
-            const apiUrl = `https://api.github.com/repos/rawstor/rawstor_bench/contents/data/fio/librawstor/${config}`;
+            const apiUrl = `https://api.github.com/repos/izmdi/rawstor_bench/contents/data/fio/librawstor/${config}`;
             const response = await fetch(apiUrl);
 
             if (!response.ok) {
