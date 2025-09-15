@@ -19,7 +19,7 @@ class BenchmarkDashboard {
             branch: {
                 iops: new Set(),    // 'branch-[branchName]-read', 'branch-[branchName]-write'
                 latency: new Set()   // Аналогично для latency
-            }
+            } // test
         };
 
         this.init();
