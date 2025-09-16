@@ -1,51 +1,55 @@
-class DataUtils {
-    static formatNumber(num) {
-        if (typeof num !== 'number' || isNaN(num)) return '0';
-        return new Intl.NumberFormat('ru-RU').format(num);
-    }
+// Цветовая палитра для конфигураций
+const colorPalette = [
+    '#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd',
+    '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf'
+];
 
-    static formatDate(date) {
-        if (!(date instanceof Date)) return 'Нет даты';
-        return date.toLocaleDateString('ru-RU', {
-            year: 'numeric',
-            month: '2-digit',
-            day: '2-digit',
-            hour: '2-digit',
-            minute: '2-digit'
-        });
-    }
-
-    static getMetricDisplayName(metric) {
-        const names = {
-            'read_iops': 'Read IOPS',
-            'write_iops': 'Write IOPS',
-            'read_latency': 'Read Latency',
-            'write_latency': 'Write Latency'
-        };
-        return names[metric] || metric;
-    }
-
-    static getConfigDisplayName(config) {
-        if (typeof config !== 'string') return 'Unknown';
-        
-        return config
-            .replace('perftest--', '')
-            .replace('without-liburing', 'no liburing')
-            .replace('disable-ost', 'no OST')
-            .replace(/-/g, ' ')
-            .replace(/\b\w/g, l => l.toUpperCase());
-    }
-
-    static getShortCommit(commit) {
-        if (typeof commit !== 'string') return 'unknown';
-        return commit.substring(0, 8);
-    }
-
-    static getBranchDisplayName(branch) {
-        if (typeof branch !== 'string') return 'main';
-        return branch.replace('refs/heads/', '').replace('heads/', '');
-    }
+function getColor(index) {
+    return colorPalette[index % colorPalette.length];
 }
 
-// Глобальная доступность для отладки
-window.DataUtils = DataUtils;
+function formatDate(date) {
+    if (!(date instanceof Date)) {
+        date = new Date(date);
+    }
+    return date.toLocaleDateString() + ' ' + date.toLocaleTimeString();
+}
+
+function formatNumber(value) {
+    if (value >= 1000) {
+        return d3.format('.3s')(value);
+    }
+    return d3.format(',.0f')(value);
+}
+
+function showTooltip(event, data, chartTitle, accessor) {
+    const tooltip = d3.select('#tooltip');
+    
+    const value = accessor(data);
+    const valueText = chartTitle.includes('IOPS') ? 
+        formatNumber(value) + ' IOPS' : 
+        formatNumber(value) + ' ms';
+    
+    tooltip
+        .style('opacity', 1)
+        .style('left', (event.pageX + 10) + 'px')
+        .style('top', (event.pageY - 28) + 'px')
+        .html(`
+            <strong>${data.config}</strong><br/>
+            ${chartTitle}: ${valueText}<br/>
+            Date: ${formatDate(data.timestamp)}<br/>
+            ${data.branch ? `Branch: ${data.branch}<br/>` : ''}
+            ${data.commit_sha ? `Commit: ${data.commit_sha.substring(0, 8)}<br/>` : ''}
+            <em>Click to view test details</em>
+        `);
+}
+
+function hideTooltip() {
+    d3.select('#tooltip')
+        .style('opacity', 0);
+}
+
+// Экспортируем функции для использования в других модулях
+if (typeof module !== 'undefined' && module.exports) {
+    module.exports = { getColor, formatDate, formatNumber, showTooltip, hideTooltip };
+}
