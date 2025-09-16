@@ -1,0 +1,141 @@
+#!/usr/bin/env python3
+import json
+from datetime import datetime
+from pathlib import Path
+from typing import Dict, List, Any
+
+
+def main():
+    # Пути относительно расположения скрипта
+    script_dir = Path(__file__).parent
+    data_path = script_dir / '../../data/fio/librawstor'
+    output_path = script_dir / '../../docs/fio/librawstor/dashboard/data.json'
+
+    print(f"Processing data from: {data_path}")
+    print(f"Output will be saved to: {output_path}")
+
+    # Создаем директорию для выходных данных
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    # Обрабатываем данные
+    processed_data = process_raw_data(data_path)
+
+    # Формируем итоговый JSON
+    output = {
+        "generated_at": datetime.utcnow().isoformat() + "Z",
+        "charts": processed_data,
+        "summary": get_summary(processed_data)
+    }
+
+    # Сохраняем результат
+    with output_path.open('w', encoding='utf-8') as f:
+        json.dump(output, f, indent=2, ensure_ascii=False)
+
+    config_count = len(
+        set(
+            point['config']
+            for chart_data in processed_data.values()
+            for point in chart_data
+        )
+    )
+    print(f"Successfully processed data from {config_count} configurations")
+
+
+def process_raw_data(data_path: Path) -> Dict[str, List[Dict]]:
+    charts_data = {
+        "iops_read": [],
+        "iops_write": [],
+        "latency_read": [],
+        "latency_write": []
+    }
+
+    # Ищем все конфигурации (директории)
+    for config_dir in data_path.iterdir():
+        if config_dir.is_dir():
+            config_name = config_dir.name
+            process_config(config_dir, config_name, charts_data)
+
+    return charts_data
+
+
+def process_config(config_dir: Path, config_name: str, charts_data: Dict[str, List[Dict]]):
+    """Обрабатываем все JSON файлы в директории конфигурации"""
+    for json_file in config_dir.glob('*.json'):
+        try:
+            # Читаем JSON данные
+            test_data = json.loads(json_file.read_text(encoding='utf-8'))
+
+            # Добавляем метаданные из .meta файла
+            meta_file = json_file.with_suffix('.meta')
+            if meta_file.exists():
+                meta_data = json.loads(meta_file.read_text(encoding='utf-8'))
+                test_data.update(meta_data)
+
+            # Добавляем данные в графики
+            add_to_charts(test_data, config_name, charts_data, json_file)
+
+        except Exception as e:
+            print(f"Error processing {json_file}: {e}")
+
+
+def add_to_charts(test_data: Dict, config_name: str, charts_data: Dict[str, List[Dict]], json_file: Path):
+    """Добавляем данные теста в соответствующие графики"""
+    timestamp = test_data.get('timestamp')
+    if not timestamp:
+        return
+
+    # Добавляем точку для каждого графика
+    for chart_name in charts_data.keys():
+        metric, operation = chart_name.split('_')
+
+        value = test_data.get(f'{metric}_{operation}')
+        if value is not None:
+            point_data = {
+                "config": config_name,
+                "timestamp": timestamp,
+                "value": value,
+                "commit_sha": test_data.get('commit_sha', ''),
+                "branch": test_data.get('branch', ''),
+                "test_url": f"../{config_name}/{json_file.stem}"
+            }
+            charts_data[chart_name].append(point_data)
+
+
+def get_summary(charts_data: Dict[str, List[Dict]]) -> Dict[str, Any]:
+    # Получаем уникальные конфигурации
+    unique_configs = set(
+        point['config']
+        for chart_data in charts_data.values()
+        for point in chart_data
+    )
+
+    # Получаем временной диапазон
+    all_timestamps = [
+        point['timestamp']
+        for chart_data in charts_data.values()
+        for point in chart_data
+    ]
+
+    if all_timestamps:
+        sorted_timestamps = sorted(all_timestamps)
+        time_range = {
+            "start": sorted_timestamps[0],
+            "end": sorted_timestamps[-1]
+        }
+    else:
+        time_range = {"start": None, "end": None}
+
+    # Считаем общее количество тестов
+    total_tests = sum(len(chart_data) for chart_data in charts_data.values()) // 4  # делим на 4 метрики
+
+    return {
+        "total_configurations": len(unique_configs),
+        "total_tests": total_tests,
+        "configurations": sorted(list(unique_configs)),
+        "time_range": time_range,
+        "generated_at": datetime.utcnow().isoformat() + "Z"
+    }
+
+
+if __name__ == "__main__":
+    main()
