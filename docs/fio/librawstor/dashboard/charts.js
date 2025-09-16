@@ -1,256 +1,113 @@
-class BenchmarkCharts {
-    constructor() {
-        this.margin = { top: 60, right: 80, bottom: 100, left: 80 };
-        this.colors = d3.scaleOrdinal(d3.schemeCategory10);
+function createChart(config) {
+    const { container, title, yLabel, data, accessor, id } = config;
+
+    if (!data || data.length === 0) {
+        console.warn(`No data available for chart: ${title}`);
+        return;
     }
 
-    createIOPSChart(container, data, groupType) {
-        return this.createChart(container, data, groupType, 'iops');
-    }
+    // Создаем контейнер для графика
+    const chartContainer = container.append('div')
+        .attr('class', 'chart')
+        .attr('id', id);
 
-    createLatencyChart(container, data, groupType) {
-        return this.createChart(container, data, groupType, 'latency');
-    }
+    // Добавляем заголовок
+    chartContainer.append('h3')
+        .text(title);
 
-    createChart(container, data, groupType, metricType) {
-        const width = container.node().offsetWidth;
-        const height = 400;
-        const innerWidth = width - this.margin.left - this.margin.right;
-        const innerHeight = height - this.margin.top - this.margin.bottom;
+    // Создаем SVG элемент
+    const margin = { top: 20, right: 30, bottom: 40, left: 60 };
+    const width = 800 - margin.left - margin.right;
+    const height = 400 - margin.top - margin.bottom;
 
-        container.html('');
+    const svg = chartContainer.append('svg')
+        .attr('width', width + margin.left + margin.right)
+        .attr('height', height + margin.top + margin.bottom)
+        .append('g')
+        .attr('transform', `translate(${margin.left},${margin.top})`);
 
-        const svg = container.append('svg')
-            .attr('width', width)
-            .attr('height', height);
+    // Преобразуем timestamp в Date объекты
+    const processedData = data.map(d => ({
+        ...d,
+        timestamp: new Date(d.timestamp)
+    }));
 
-        const g = svg.append('g')
-            .attr('transform', `translate(${this.margin.left},${this.margin.top})`);
+    // Создаем шкалы
+    const xScale = d3.scaleTime()
+        .domain(d3.extent(processedData, d => d.timestamp))
+        .range([0, width]);
 
-        // Группируем данные
-        const lineData = this.prepareLineData(data, metricType, groupType);
+    const yScale = d3.scaleLinear()
+        .domain([0, d3.max(processedData, d => accessor(d)) * 1.1])
+        .range([height, 0]);
 
-        if (lineData.length === 0) {
-            g.append('text')
-                .attr('x', innerWidth / 2)
-                .attr('y', innerHeight / 2)
-                .attr('text-anchor', 'middle')
-                .text('Нет данных для отображения');
-            return { svg, g, width, height, lineData };
-        }
+    // Создаем оси
+    const xAxis = d3.axisBottom(xScale);
+    const yAxis = d3.axisLeft(yScale);
 
-        // Scales
-        const xScale = d3.scaleTime()
-            .domain(d3.extent(data, d => d.date))
-            .range([0, innerWidth]);
+    svg.append('g')
+        .attr('transform', `translate(0,${height})`)
+        .call(xAxis);
 
-        const maxValue = metricType === 'iops' ?
-            d3.max(data, d => Math.max(d.read_iops, d.write_iops)) :
-            d3.max(data, d => Math.max(d.read_latency, d.write_latency));
+    svg.append('g')
+        .call(yAxis)
+        .append('text')
+        .attr('transform', 'rotate(-90)')
+        .attr('y', -50)
+        .attr('x', -height / 2)
+        .attr('dy', '0.71em')
+        .attr('fill', '#000')
+        .text(yLabel);
 
-        const yScale = d3.scaleLinear()
-            .domain([0, maxValue * 1.1])
-            .range([innerHeight, 0]);
+    // Группируем данные по конфигурациям
+    const dataByConfig = d3.group(processedData, d => d.config);
 
-        // Оси
-        this.addAxes(g, xScale, yScale, innerWidth, innerHeight, metricType);
+    // Создаем line generator
+    const line = d3.line()
+        .x(d => xScale(d.timestamp))
+        .y(d => yScale(accessor(d)))
+        .curve(d3.curveMonotoneX);
 
-        // Рисуем линии
-        this.drawLines(g, lineData, xScale, yScale, metricType);
+    // Рисуем линии для каждой конфигурации
+    dataByConfig.forEach((configData, configName) => {
+        const sortedData = configData.sort((a, b) => a.timestamp - b.timestamp);
 
-        return {
-            svg, g, xScale, yScale, width, height,
-            innerWidth, innerHeight, lineData
-        };
-    }
+        svg.append('path')
+            .datum(sortedData)
+            .attr('class', `line line-${configName.replace(/\s+/g, '-')}`)
+            .attr('d', line)
+            .style('stroke', (d, i) => getColor(Array.from(dataByConfig.keys()).indexOf(configName)))
+            .style('stroke-width', 2)
+            .style('fill', 'none');
 
-    prepareLineData(data, metricType, groupType) {
-        const lines = [];
-        const groups = {};
-
-        const validData = data.filter(item =>
-            item.date instanceof Date &&
-            !isNaN(item.date.getTime()) &&
-            !isNaN(item.read_iops) &&
-            !isNaN(item.write_iops) &&
-            !isNaN(item.read_latency) &&
-            !isNaN(item.write_latency)
-        );
-
-        validData.forEach(item => {
-            const groupKey = groupType === 'config' ? item.config : item.branch;
-
-            // Read metrics
-            const readId = this.getLineId(groupKey, 'read', groupType);
-            if (!groups[readId]) {
-                groups[readId] = {
-                    id: readId,
-                    type: 'read',
-                    group: groupKey,
-                    groupType: groupType,
-                    points: [],
-                    color: this.getLineColor(groupKey, 'read', metricType, groupType), // Правильный вызов
-                    visible: true
-                };
-            }
-            groups[readId].points.push({
-                date: item.date,
-                value: metricType === 'iops' ? item.read_iops : item.read_latency,
-                commit: item.commit,
-                testUrl: item.testUrl,
-                rawData: item
+        // Добавляем точки
+        svg.selectAll(`.dot-${configName.replace(/\s+/g, '-')}`)
+            .data(sortedData)
+            .enter()
+            .append('circle')
+            .attr('class', `dot dot-${configName.replace(/\s+/g, '-')}`)
+            .attr('cx', d => xScale(d.timestamp))
+            .attr('cy', d => yScale(accessor(d)))
+            .attr('r', 4)
+            .style('fill', (d, i) => getColor(Array.from(dataByConfig.keys()).indexOf(configName)))
+            .on('mouseover', function(event, d) {
+                showTooltip(event, d, title, accessor);
+            })
+            .on('mouseout', hideTooltip)
+            .on('click', function(event, d) {
+                if (d.test_url) {
+                    window.open(d.test_url, '_blank');
+                }
             });
+    });
 
-            // Write metrics
-            const writeId = this.getLineId(groupKey, 'write', groupType);
-            if (!groups[writeId]) {
-                groups[writeId] = {
-                    id: writeId,
-                    type: 'write',
-                    group: groupKey,
-                    groupType: groupType,
-                    points: [],
-                    color: this.getLineColor(groupKey, 'write', metricType, groupType), // Правильный вызов
-                    visible: true
-                };
-            }
-            groups[writeId].points.push({
-                date: item.date,
-                value: metricType === 'iops' ? item.write_iops : item.write_latency,
-                commit: item.commit,
-                testUrl: item.testUrl,
-                rawData: item
-            });
-        });
+    // Добавляем сетку
+    svg.append('g')
+        .attr('class', 'grid')
+        .attr('transform', `translate(0,${height})`)
+        .call(d3.axisBottom(xScale).tickSize(-height).tickFormat(''));
 
-        for (const key in groups) {
-            groups[key].points.sort((a, b) => a.date - b.date);
-            lines.push(groups[key]);
-        }
-
-        return lines;
-    }
-
-    getLineId(group, metricType, groupType) {
-        return `${groupType}-${group}-${metricType}`;
-    }
-
-    getLineColor(group, lineType, metricType, groupType) {
-        if (groupType === 'config') {
-            // Для конфигураций: один цвет на всю конфигурацию
-            return this.colors(group); // Используем this.colors вместо this.configColors
-        } else {
-            // Для веток: цвет зависит от типа линии (read/write)
-            return lineType === 'read' ?
-                (metricType === 'iops' ? '#1f77b4' : '#2ca02c') :
-                (metricType === 'iops' ? '#d62728' : '#ff7f0e');
-        }
-    }
-
-    addAxes(g, xScale, yScale, width, height, metricType) {
-        // X Axis
-        g.append('g')
-            .attr('transform', `translate(0,${height})`)
-            .call(d3.axisBottom(xScale).ticks(5).tickFormat(d3.timeFormat('%d.%m.%Y')));
-
-        // Y Axis
-        g.append('g')
-            .call(d3.axisLeft(yScale).ticks(8));
-
-        // Y Label
-        const yLabel = metricType === 'iops' ? 'IOPS' : 'Latency (ns)';
-        g.append('text')
-            .attr('transform', 'rotate(-90)')
-            .attr('y', 0 - this.margin.left)
-            .attr('x', 0 - (height / 2))
-            .attr('dy', '1em')
-            .style('text-anchor', 'middle')
-            .style('font-weight', 'bold')
-            .text(yLabel);
-
-        // Grid
-        g.append('g')
-            .attr('class', 'grid')
-            .call(d3.axisLeft(yScale).tickSize(-width).tickFormat(''));
-    }
-
-    drawLines(g, lineData, xScale, yScale, metricType) {
-        // Line generator
-        const line = d3.line()
-            .x(d => xScale(d.date))
-            .y(d => yScale(d.value))
-            .curve(d3.curveMonotoneX);
-
-        // Рисуем линии
-        lineData.forEach(lineInfo => {
-            if (lineInfo.points.length < 2) return;
-
-            const path = g.append('path')
-                .datum(lineInfo.points)
-                .attr('class', `line ${lineInfo.id}`)
-                .attr('d', line)
-                .attr('fill', 'none')
-                .attr('stroke', lineInfo.color)
-                .attr('stroke-width', 2)
-                .attr('opacity', lineInfo.visible ? 1 : 0)
-                .style('pointer-events', 'none');
-
-            // Добавляем точки
-            lineInfo.points.forEach(point => {
-                const circle = g.append('circle')
-                    .datum(point)
-                    .attr('class', `point ${lineInfo.id}`)
-                    .attr('cx', xScale(point.date))
-                    .attr('cy', yScale(point.value))
-                    .attr('r', 4)
-                    .attr('fill', lineInfo.color)
-                    .attr('stroke', '#fff')
-                    .attr('stroke-width', 1)
-                    .attr('opacity', lineInfo.visible ? 1 : 0)
-                    .style('cursor', 'pointer')
-                    .on('mouseover', (event, d) => this.showTooltip(event, d, lineInfo, metricType))
-                    .on('mouseout', () => this.hideTooltip())
-                    .on('click', (event, d) => {
-                        window.open(d.testUrl, '_blank');
-                    });
-            });
-        });
-    }
-
-    updateLineVisibility(chart, lineId, isVisible) {
-        if (!chart || !chart.g) return;
-
-        chart.g.selectAll(`.line.${lineId}`)
-            .transition().duration(300)
-            .attr('opacity', isVisible ? 1 : 0)
-            .style('display', isVisible ? null : 'none');
-
-        chart.g.selectAll(`.point.${lineId}`)
-            .transition().duration(300)
-            .attr('opacity', isVisible ? 1 : 0)
-            .style('display', isVisible ? null : 'none');
-    }
-
-    showTooltip(event, pointData, lineInfo, metricType) {
-        const tooltip = d3.select('#tooltip');
-        const metricName = metricType === 'iops' ? 'IOPS' : 'Latency (ns)';
-        const typeName = lineInfo.type === 'read' ? 'Чтение' : 'Запись';
-        const groupTypeName = lineInfo.groupType === 'config' ? 'Конфигурация' : 'Ветка';
-
-        tooltip.html(`
-            <h3>${pointData.rawData.dateLabel}</h3>
-            <p><strong>${groupTypeName}:</strong> ${lineInfo.group}</p>
-            <p><strong>Тип:</strong> ${typeName}</p>
-            <p><strong>${metricName}:</strong> ${DataUtils.formatNumber(pointData.value)}</p>
-            <p><strong>Коммит:</strong> ${DataUtils.getShortCommit(pointData.commit)}</p>
-            <p><em>Кликните для деталей теста</em></p>
-        `)
-        .style('left', (event.pageX + 15) + 'px')
-        .style('top', (event.pageY - 15) + 'px')
-        .style('display', 'block');
-    }
-
-    hideTooltip() {
-        d3.select('#tooltip').style('display', 'none');
-    }
+    svg.append('g')
+        .attr('class', 'grid')
+        .call(d3.axisLeft(yScale).tickSize(-width).tickFormat(''));
 }
