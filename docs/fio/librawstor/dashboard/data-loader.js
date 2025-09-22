@@ -1,15 +1,17 @@
 class DataLoader {
-    constructor(dataPath = 'data.json') {
+    constructor(dataPath = './data.json') {
         this.dataPath = dataPath;
         this.data = null;
     }
 
     async loadData() {
         try {
+            console.log('Loading data from:', this.dataPath);
             this.data = await d3.json(this.dataPath);
+            console.log('Data loaded successfully:', this.data);
             return this.data;
         } catch (error) {
-            console.error('Failed to load precomputed data:', error);
+            console.error('Failed to load precomputed data from', this.dataPath, ':', error);
             throw error;
         }
     }

@@ -1,4 +1,5 @@
 async function initApp() {
+    console.log('Initializing dashboard...');
     const dataLoader = new DataLoader();
 
     try {
@@ -17,6 +18,8 @@ async function initApp() {
     } catch (error) {
         console.error('Failed to initialize dashboard:', error);
         displayError(error);
+        console.log('Current URL:', window.location.href);
+        console.log('Trying to load from:', window.location.href + 'data.json');
     }
 }
 
