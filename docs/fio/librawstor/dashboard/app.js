@@ -27,44 +27,87 @@ function createChartsFromPrecomputedData(chartsData) {
     // Создаем контейнер для графиков
     const container = d3.select('#charts-container');
 
-    // IOPS Read
     createChart({
         container: container,
-        title: 'IOPS Read',
+        title: 'IOPS Read (by Config)',
         yLabel: 'IOPS',
-        data: chartsData.iops_read,
+        data: chartsData.iops_read_by_config,
         accessor: d => d.value,
-        id: 'chart-iops-read'
+        id: 'chart-iops-read-config',
+        groupBy: 'config'
     });
 
-    // IOPS Write
     createChart({
         container: container,
-        title: 'IOPS Write',
+        title: 'IOPS Write (by Config)',
         yLabel: 'IOPS',
-        data: chartsData.iops_write,
+        data: chartsData.iops_write_by_config,
         accessor: d => d.value,
-        id: 'chart-iops-write'
+        id: 'chart-iops-write-config',
+        groupBy: 'config'
     });
 
-    // Latency Read
     createChart({
         container: container,
-        title: 'Latency Read',
+        title: 'Latency Read (by Config)',
         yLabel: 'ms',
-        data: chartsData.latency_read,
+        data: chartsData.latency_read_by_config,
         accessor: d => d.value,
-        id: 'chart-latency-read'
+        id: 'chart-latency-read-config',
+        groupBy: 'config'
     });
 
-    // Latency Write
     createChart({
         container: container,
-        title: 'Latency Write',
+        title: 'Latency Write (by Config)',
         yLabel: 'ms',
-        data: chartsData.latency_write,
+        data: chartsData.latency_write_by_config,
         accessor: d => d.value,
-        id: 'chart-latency-write'
+        id: 'chart-latency-write-config',
+        groupBy: 'config'
+    });
+
+    // Графики с группировкой по веткам
+    createChart({
+        container: container,
+        title: 'IOPS Read (by Branch)',
+        yLabel: 'IOPS',
+        data: chartsData.iops_read_by_branch,
+        accessor: d => d.value,
+        id: 'chart-iops-read-branch',
+        groupBy: 'branch'
+    });
+
+        // Графики с группировкой по веткам
+    createChart({
+        container: container,
+        title: 'IOPS Write (by Branch)',
+        yLabel: 'IOPS',
+        data: chartsData.iops_write_by_branch,
+        accessor: d => d.value,
+        id: 'chart-iops-write-branch',
+        groupBy: 'branch'
+    });
+
+    createChart({
+        container: container,
+        title: 'Latency Read (by Branch)',
+        yLabel: 'ms',
+        data: chartsData.latency_read_by_branch,
+        accessor: d => d.value,
+        id: 'chart-latency-read-branch',
+        groupBy: 'branch'
+    });
+
+        // Графики с группировкой по веткам
+    createChart({
+        container: container,
+        title: 'Latency Write (by Branch)',
+        yLabel: 'ms',
+        data: chartsData.latency_write_by_branch,
+        accessor: d => d.value,
+        id: 'chart-latency-write-branch',
+        groupBy: 'branch'
     });
 }
 
