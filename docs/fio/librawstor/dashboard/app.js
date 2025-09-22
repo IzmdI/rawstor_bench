@@ -189,6 +189,7 @@ class DashboardApp {
         });
         this.updateChartVisibility();
         this.updateLegendAppearance();
+        // test
     }
 
     updateDataInfo() {
