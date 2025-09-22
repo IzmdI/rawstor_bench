@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+
 import json
 from datetime import datetime
 from pathlib import Path
@@ -6,134 +7,251 @@ from typing import Dict, List, Any
 
 
 def main():
-    # Пути относительно расположения скрипта
-    base_dir = Path(__file__).parent.parent
-    data_path = base_dir / 'data/fio/librawstor'
-    output_path = base_dir / 'docs/fio/librawstor/dashboard/data.json'
-
-    print(f"Processing data from: {data_path}")
-    print(f"Output will be saved to: {output_path}")
+    print("=== Starting data processor ===")
+    
+    # Пути
+    script_dir = Path(__file__).parent
+    repo_root = script_dir.parent
+    data_path = repo_root / 'data/fio/librawstor'
+    output_path = repo_root / 'docs/fio/librawstor/dashboard/data.json'
+    
+    print(f"Data path: {data_path}")
+    print(f"Output path: {output_path}")
+    
+    if not data_path.exists():
+        print("❌ Data path does not exist!")
+        return
+    
     # Создаем директорию для выходных данных
     output_path.parent.mkdir(parents=True, exist_ok=True)
+    
+    try:
+        # Обрабатываем сырые данные
+        all_test_results = collect_raw_data(data_path)
+        print(f"✅ Collected {len(all_test_results)} test results")
+        
+        # Группируем данные для графиков
+        charts_data = prepare_charts_data(all_test_results)
+        
+        # Формируем итоговый JSON
+        output = {
+            "generated_at": datetime.utcnow().isoformat() + "Z",
+            "charts": charts_data,
+            "summary": get_summary(all_test_results, charts_data)
+        }
+        
+        # Сохраняем результат
+        with output_path.open('w', encoding='utf-8') as f:
+            json.dump(output, f, indent=2, ensure_ascii=False)
+        
+        print(f"✅ data.json successfully created")
+        print_summary(output['summary'])
+        
+    except Exception as e:
+        print(f"❌ Error: {e}")
+        import traceback
+        traceback.print_exc()
 
-    # Обрабатываем данные
-    processed_data = process_raw_data(data_path)
 
-    # Формируем итоговый JSON
-    output = {
-        "generated_at": datetime.utcnow().isoformat() + "Z",
-        "charts": processed_data,
-        "summary": get_summary(processed_data)
-    }
-
-    # Сохраняем результат
-    with output_path.open('w', encoding='utf-8') as f:
-        json.dump(output, f, indent=2, ensure_ascii=False)
-
-    config_count = len(
-        set(
-            point['config']
-            for chart_data in processed_data.values()
-            for point in chart_data
-        )
-    )
-    print(f"Successfully processed data from {config_count} configurations")
-
-
-def process_raw_data(data_path: Path) -> Dict[str, List[Dict]]:
-    charts_data = {
-        "iops_read": [],
-        "iops_write": [],
-        "latency_read": [],
-        "latency_write": []
-    }
-
-    # Ищем все конфигурации (директории)
+def collect_raw_data(data_path: Path) -> List[Dict[str, Any]]:
+    """Собирает все сырые данные из JSON и META файлов"""
+    all_results = []
+    
     for config_dir in data_path.iterdir():
-        if config_dir.is_dir():
-            config_name = config_dir.name
-            process_config(config_dir, config_name, charts_data)
+        if not config_dir.is_dir():
+            continue
+            
+        config_name = config_dir.name
+        print(f"Processing configuration: {config_name}")
+        
+        # Обрабатываем все JSON файлы в директории конфигурации
+        for json_file in config_dir.glob('*.json'):
+            try:
+                # Базовое имя файла (номер коммита) без расширения
+                commit_sha = json_file.stem
+                meta_file = json_file.with_suffix('.meta')
+                
+                # Читаем JSON с результатами теста
+                test_data = json.loads(json_file.read_text(encoding='utf-8'))
+                
+                # Читаем META файл с дополнительной информацией
+                meta_data = {}
+                if meta_file.exists():
+                    meta_data = json.loads(meta_file.read_text(encoding='utf-8'))
+                
+                # Извлекаем нужные метрики из результатов FIO
+                metrics = extract_fio_metrics(test_data)
+                
+                if metrics:
+                    test_result = {
+                        'config': config_name,
+                        'commit_sha': commit_sha,
+                        'timestamp': meta_data.get('date', ''),
+                        'branch': meta_data.get('branch', 'unknown'),
+                        'test_url': f"../{config_name}/{commit_sha}",
+                        **metrics
+                    }
+                    all_results.append(test_result)
+                    
+            except Exception as e:
+                print(f"  ❌ Error processing {json_file.name}: {e}")
+    
+    return all_results
 
+
+def extract_fio_metrics(test_data: Dict) -> Dict[str, float]:
+    """Извлекает метрики IOPS и Latency из результатов FIO"""
+    metrics = {}
+    
+    try:
+        # FIO JSON структура обычно имеет разделы для read/write
+        if 'jobs' in test_data and len(test_data['jobs']) > 0:
+            job = test_data['jobs'][0]
+            
+            # IOPS metrics
+            if 'read' in job and 'iops' in job['read']:
+                metrics['iops_read'] = float(job['read']['iops'])
+            if 'write' in job and 'iops' in job['write']:
+                metrics['iops_write'] = float(job['write']['iops'])
+            
+            # Latency metrics (берем среднее значение)
+            if 'read' in job and 'lat_ns' in job['read'] and 'mean' in job['read']['lat_ns']:
+                metrics['latency_read'] = float(job['read']['lat_ns']['mean']) / 1_000_000  # ns to ms
+            if 'write' in job and 'lat_ns' in job['write'] and 'mean' in job['write']['lat_ns']:
+                metrics['latency_write'] = float(job['write']['lat_ns']['mean']) / 1_000_000  # ns to ms
+            
+            # Альтернативные пути к latency данным
+            if 'latency_read' not in metrics and 'read' in job and 'lat' in job['read'] and 'mean' in job['read']['lat']:
+                metrics['latency_read'] = float(job['read']['lat']['mean']) / 1000  # us to ms
+            if 'latency_write' not in metrics and 'write' in job and 'lat' in job['write'] and 'mean' in job['write']['lat']:
+                metrics['latency_write'] = float(job['write']['lat']['mean']) / 1000  # us to ms
+                
+    except Exception as e:
+        print(f"    ⚠️ Could not extract metrics: {e}")
+    
+    return metrics
+
+
+def prepare_charts_data(all_results: List[Dict]) -> Dict[str, List[Dict]]:
+    """Подготавливает данные для 8 графиков"""
+    charts_data = {}
+    
+    # Метрики для графиков
+    metrics = ['iops_read', 'iops_write', 'latency_read', 'latency_write']
+    
+    for metric in metrics:
+        # Группировка по конфигурациям
+        charts_data[f"{metric}_by_config"] = group_by_config(all_results, metric)
+        # Группировка по веткам
+        charts_data[f"{metric}_by_branch"] = group_by_branch(all_results, metric)
+    
     return charts_data
 
 
-def process_config(config_dir: Path, config_name: str, charts_data: Dict[str, List[Dict]]):
-    """Обрабатываем все JSON файлы в директории конфигурации"""
-    for json_file in config_dir.glob('*.json'):
-        try:
-            # Читаем JSON данные
-            test_data = json.loads(json_file.read_text(encoding='utf-8'))
-
-            # Добавляем метаданные из .meta файла
-            meta_file = json_file.with_suffix('.meta')
-            if meta_file.exists():
-                meta_data = json.loads(meta_file.read_text(encoding='utf-8'))
-                test_data.update(meta_data)
-
-            # Добавляем данные в графики
-            add_to_charts(test_data, config_name, charts_data, json_file)
-
-        except Exception as e:
-            print(f"Error processing {json_file}: {e}")
-
-
-def add_to_charts(test_data: Dict, config_name: str, charts_data: Dict[str, List[Dict]], json_file: Path):
-    """Добавляем данные теста в соответствующие графики"""
-    timestamp = test_data.get('timestamp')
-    if not timestamp:
-        return
-
-    # Добавляем точку для каждого графика
-    for chart_name in charts_data.keys():
-        metric, operation = chart_name.split('_')
-
-        value = test_data.get(f'{metric}_{operation}')
-        if value is not None:
-            point_data = {
-                "config": config_name,
-                "timestamp": timestamp,
-                "value": value,
-                "commit_sha": test_data.get('commit_sha', ''),
-                "branch": test_data.get('branch', ''),
-                "test_url": f"../{config_name}/{json_file.stem}"
-            }
-            charts_data[chart_name].append(point_data)
+def group_by_config(all_results: List[Dict], metric: str) -> List[Dict]:
+    """Группирует данные по конфигурациям тестов"""
+    # Фильтруем результаты где есть нужная метрика
+    valid_results = [r for r in all_results if metric in r and r[metric] is not None]
+    
+    # Группируем по конфигурациям
+    config_groups = {}
+    for result in valid_results:
+        config = result['config']
+        if config not in config_groups:
+            config_groups[config] = []
+        
+        config_groups[config].append({
+            'group': config,
+            'timestamp': result['timestamp'],
+            'value': result[metric],
+            'commit_sha': result['commit_sha'],
+            'branch': result['branch'],
+            'test_url': result['test_url'],
+            'config': config  # сохраняем для обратной совместимости
+        })
+    
+    # Преобразуем в плоский список для D3.js
+    chart_data = []
+    for config, points in config_groups.items():
+        # Сортируем по времени
+        sorted_points = sorted(points, key=lambda x: x['timestamp'])
+        chart_data.extend(sorted_points)
+    
+    return chart_data
 
 
-def get_summary(charts_data: Dict[str, List[Dict]]) -> Dict[str, Any]:
-    # Получаем уникальные конфигурации
-    unique_configs = set(
-        point['config']
-        for chart_data in charts_data.values()
-        for point in chart_data
-    )
+def group_by_branch(all_results: List[Dict], metric: str) -> List[Dict]:
+    """Группирует данные по веткам"""
+    # Фильтруем результаты где есть нужная метрика
+    valid_results = [r for r in all_results if metric in r and r[metric] is not None]
+    
+    # Группируем по веткам
+    branch_groups = {}
+    for result in valid_results:
+        branch = result['branch']
+        if branch not in branch_groups:
+            branch_groups[branch] = []
+        
+        branch_groups[branch].append({
+            'group': branch,
+            'timestamp': result['timestamp'],
+            'value': result[metric],
+            'commit_sha': result['commit_sha'],
+            'config': result['config'],
+            'test_url': result['test_url'],
+            'branch': branch  # сохраняем для обратной совместимости
+        })
+    
+    # Преобразуем в плоский список для D3.js
+    chart_data = []
+    for branch, points in branch_groups.items():
+        # Сортируем по времени
+        sorted_points = sorted(points, key=lambda x: x['timestamp'])
+        chart_data.extend(sorted_points)
+    
+    return chart_data
 
-    # Получаем временной диапазон
-    all_timestamps = [
-        point['timestamp']
-        for chart_data in charts_data.values()
-        for point in chart_data
-    ]
 
-    if all_timestamps:
-        sorted_timestamps = sorted(all_timestamps)
-        time_range = {
-            "start": sorted_timestamps[0],
-            "end": sorted_timestamps[-1]
-        }
-    else:
-        time_range = {"start": None, "end": None}
-
-    # Считаем общее количество тестов
-    total_tests = sum(len(chart_data) for chart_data in charts_data.values()) // 4  # делим на 4 метрики
-
-    return {
-        "total_configurations": len(unique_configs),
-        "total_tests": total_tests,
-        "configurations": sorted(list(unique_configs)),
-        "time_range": time_range,
-        "generated_at": datetime.utcnow().isoformat() + "Z"
+def get_summary(all_results: List[Dict], charts_data: Dict) -> Dict[str, Any]:
+    """Генерирует summary информацию"""
+    configs = set(r['config'] for r in all_results)
+    branches = set(r['branch'] for r in all_results)
+    
+    # Временной диапазон
+    timestamps = [r['timestamp'] for r in all_results if r['timestamp']]
+    time_range = {
+        'start': min(timestamps) if timestamps else None,
+        'end': max(timestamps) if timestamps else None
     }
+    
+    # Количество точек на графиках
+    chart_points = {chart: len(data) for chart, data in charts_data.items()}
+    
+    return {
+        'total_tests': len(all_results),
+        'total_configurations': len(configs),
+        'total_branches': len(branches),
+        'configurations': sorted(list(configs)),
+        'branches': sorted(list(branches)),
+        'time_range': time_range,
+        'chart_points': chart_points
+    }
+
+
+def print_summary(summary: Dict):
+    """Печатает красивый summary"""
+    print("\n=== SUMMARY ===")
+    print(f"Total tests: {summary['total_tests']}")
+    print(f"Configurations: {summary['total_configurations']}")
+    print(f"Branches: {summary['total_branches']}")
+    print(f"Time range: {summary['time_range']['start']} to {summary['time_range']['end']}")
+    
+    print("\nChart data points:")
+    for chart, count in summary['chart_points'].items():
+        print(f"  {chart}: {count} points")
+    
+    print(f"\nConfigurations: {', '.join(summary['configurations'])}")
+    print(f"Branches: {', '.join(summary['branches'])}")
 
 
 if __name__ == "__main__":
