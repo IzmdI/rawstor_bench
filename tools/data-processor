@@ -69,21 +69,37 @@ def parse_timestamp(timestamp_str: str) -> datetime:
     """Парсит timestamp из различных форматов"""
     if not timestamp_str:
         return None
-        
+
+    # Удаляем лишние пробелы
+    timestamp_str = timestamp_str.strip()
+
+    # Преобразуем формат с временной зоной в формат без временной зоны
+    if '+' in timestamp_str:
+        # Формат: 2025-08-18T21:04:40+00:00
+        timestamp_str = timestamp_str.split('+')[0]  # Берем часть до +
+    elif '-' in timestamp_str and 'T' in timestamp_str:
+        # Формат с отрицательной временной зоной: 2025-08-18T21:04:40-05:00
+        parts = timestamp_str.rsplit('-', 1)
+        if len(parts) == 2 and ':' in parts[1]:
+            timestamp_str = parts[0]  # Берем часть до временной зоны
+
+    # Убираем Z если есть
+    timestamp_str = timestamp_str.rstrip('Z')
+
     # Попробуем разные форматы дат
     formats = [
-        '%Y-%m-%dT%H:%M:%S.%fZ',  # ISO с микросекундами
-        '%Y-%m-%dT%H:%M:%SZ',     # ISO без микросекунд
-        '%Y-%m-%d %H:%M:%S',      # Простой формат
-        '%Y-%m-%d',               # Только дата
+        '%Y-%m-%dT%H:%M:%S.%f',  # ISO с микросекундами
+        '%Y-%m-%dT%H:%M:%S',  # ISO без микросекунд
+        '%Y-%m-%d %H:%M:%S',  # Простой формат
+        '%Y-%m-%d',  # Только дата
     ]
-    
+
     for fmt in formats:
         try:
             return datetime.strptime(timestamp_str, fmt)
         except ValueError:
             continue
-    
+
     print(f"⚠️ Could not parse timestamp: {timestamp_str}")
     return None
 
