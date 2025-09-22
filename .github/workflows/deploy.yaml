@@ -20,7 +20,12 @@ jobs:
           python-version: '3.9'
 
       - name: Process data
-        run: chmod +x tools/data-processor && tools/data-processor
+        run: |
+          chmod +x tools/data-processor && tools/data-processor
+          echo "Checking if data.json was created:"
+          ls -la docs/fio/librawstor/dashboard/data.json || echo "File not found"
+          echo "Contents of dashboard directory:"
+          ls -la docs/fio/librawstor/dashboard/
 
       - name: Setup Pages
         uses: actions/configure-pages@v5
