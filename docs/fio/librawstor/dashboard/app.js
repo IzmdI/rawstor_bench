@@ -1,3 +1,8 @@
+function createSafeClassName(name) {
+    return name.replace(/[^a-zA-Z0-9]/g, '-').toLowerCase();
+}
+
+
 class DashboardApp {
     constructor() {
         this.dataLoader = new DataLoader();
@@ -131,7 +136,7 @@ class DashboardApp {
             .data(Array.from(allGroups))
             .enter()
             .append('div')
-            .attr('class', 'legend-item')
+            .attr('class', d => `legend-item legend-${createSafeClassName(d)}`) // Используем безопасное имя
             .style('opacity', 1)
             .on('click', (event, groupName) => {
                 this.toggleGroupVisibility(groupName);

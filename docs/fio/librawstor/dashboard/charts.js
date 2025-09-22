@@ -1,3 +1,8 @@
+function createSafeClassName(name) {
+    // Заменяем все не-буквенно-цифровые символы на дефисы
+    return name.replace(/[^a-zA-Z0-9]/g, '-').toLowerCase();
+}
+
 function createChart(config) {
     const { container, title, yLabel, data, accessor, id, groupBy } = config;
     
@@ -25,7 +30,8 @@ function createChart(config) {
         .map(d => ({
             ...d,
             timestamp: d.timestamp === "Unknown date" ? null : new Date(d.timestamp),
-            value: accessor(d)
+            value: accessor(d),
+            safeGroup: createSafeClassName(d.group) // Добавляем безопасное имя группы
         }))
         .filter(d => d.value !== null && d.value !== undefined && !isNaN(d.value));
 
@@ -100,6 +106,7 @@ function createChart(config) {
     };
 
     groups.forEach((groupName, groupIndex) => {
+        const safeGroupName = createSafeClassName(groupName);
         const groupData = dataByGroup.get(groupName)
             .filter(d => d.timestamp) // Фильтруем данные с валидной датой
             .sort((a, b) => a.timestamp - b.timestamp);
@@ -109,7 +116,7 @@ function createChart(config) {
         // Рисуем линию
         const linePath = svg.append('path')
             .datum(groupData)
-            .attr('class', `line line-${groupName.replace(/\s+/g, '-')}`)
+            .attr('class', `line line-${safeGroupName}`)
             .attr('d', line)
             .style('stroke', getColor(groupIndex))
             .style('stroke-width', 2)
@@ -117,12 +124,12 @@ function createChart(config) {
 
         chartState.lines.set(groupName, linePath);
 
-        // Рисуем точки
-        const dots = svg.selectAll(`.dot-${groupName.replace(/\s+/g, '-')}`)
+        // Рисуем точки - используем безопасное имя класса
+        const dots = svg.selectAll(`.dot-${safeGroupName}`)
             .data(groupData)
             .enter()
             .append('circle')
-            .attr('class', `dot dot-${groupName.replace(/\s+/g, '-')}`)
+            .attr('class', `dot dot-${safeGroupName}`)
             .attr('cx', d => xScale(d.timestamp))
             .attr('cy', d => yScale(d.value))
             .attr('r', 3)
@@ -148,6 +155,7 @@ function createChart(config) {
     chartState.updateVisibility = function(visibleGroups) {
         groups.forEach(groupName => {
             const isVisible = visibleGroups.has(groupName);
+            const safeGroupName = createSafeClassName(groupName);
             const line = chartState.lines.get(groupName);
             const dots = chartState.dots.get(groupName);
             
