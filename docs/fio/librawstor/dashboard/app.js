@@ -1,187 +1,257 @@
-async function initApp() {
-    console.log('Initializing dashboard...');
-    const dataLoader = new DataLoader();
+class DashboardApp {
+    constructor() {
+        this.dataLoader = new DataLoader();
+        this.currentData = null;
+        this.charts = new Map();
+        this.visibleGroups = new Set();
+    }
 
-    try {
-        // Загружаем готовые данные
-        const precomputedData = await dataLoader.loadData();
+    async init() {
+        console.log('Initializing dashboard...');
+        
+        try {
+            await this.loadData();
+            this.createCharts();
+            this.setupEventListeners();
+            this.updateDataInfo();
+            
+        } catch (error) {
+            console.error('Failed to initialize dashboard:', error);
+            this.displayError(error);
+        }
+    }
 
-        // Показываем информацию о данных
-        displayDataInfo(precomputedData.summary, precomputedData.generated_at);
+    async loadData() {
+        this.currentData = await this.dataLoader.loadData();
+        console.log('Data loaded successfully');
+        
+        // Показываем все группы по умолчанию
+        this.updateVisibleGroups();
+    }
 
-        // Создаем графики из готовых данных
-        createChartsFromPrecomputedData(precomputedData.charts);
+    createCharts() {
+        if (!this.currentData?.charts) {
+            throw new Error('No chart data available');
+        }
 
-        // Инициализируем легенду
-        initializeLegend(precomputedData.charts);
+        const chartsConfig = [
+            {
+                id: 'chart-iops-read-config',
+                title: 'IOPS Read',
+                yLabel: 'IOPS',
+                dataKey: 'iops_read_by_config',
+                groupBy: 'config'
+            },
+            {
+                id: 'chart-iops-write-config', 
+                title: 'IOPS Write',
+                yLabel: 'IOPS',
+                dataKey: 'iops_write_by_config',
+                groupBy: 'config'
+            },
+            {
+                id: 'chart-latency-read-config',
+                title: 'Latency Read',
+                yLabel: 'ms',
+                dataKey: 'latency_read_by_config',
+                groupBy: 'config'
+            },
+            {
+                id: 'chart-latency-write-config',
+                title: 'Latency Write', 
+                yLabel: 'ms',
+                dataKey: 'latency_write_by_config',
+                groupBy: 'config'
+            },
+            {
+                id: 'chart-iops-read-branch',
+                title: 'IOPS Read',
+                yLabel: 'IOPS', 
+                dataKey: 'iops_read_by_branch',
+                groupBy: 'branch'
+            },
+            {
+                id: 'chart-iops-write-branch',
+                title: 'IOPS Write',
+                yLabel: 'IOPS',
+                dataKey: 'iops_write_by_branch',
+                groupBy: 'branch'
+            },
+            {
+                id: 'chart-latency-read-branch',
+                title: 'Latency Read',
+                yLabel: 'ms',
+                dataKey: 'latency_read_by_branch',
+                groupBy: 'branch'
+            },
+            {
+                id: 'chart-latency-write-branch',
+                title: 'Latency Write',
+                yLabel: 'ms',
+                dataKey: 'latency_write_by_branch',
+                groupBy: 'branch'
+            }
+        ];
 
-    } catch (error) {
-        console.error('Failed to initialize dashboard:', error);
-        displayError(error);
-        console.log('Current URL:', window.location.href);
-        console.log('Trying to load from:', window.location.href + 'data.json');
+        chartsConfig.forEach(config => {
+            const chartData = this.currentData.charts[config.dataKey];
+            if (chartData && chartData.length > 0) {
+                const chart = createChart({
+                    container: d3.select(`#${config.id}`),
+                    title: config.title,
+                    yLabel: config.yLabel,
+                    data: chartData,
+                    accessor: d => d.value,
+                    id: config.id,
+                    groupBy: config.groupBy
+                });
+                this.charts.set(config.id, chart);
+            } else {
+                console.warn(`No data for chart: ${config.id}`);
+                d3.select(`#${config.id}`).html('<p class="no-data">No data available</p>');
+            }
+        });
+
+        this.createLegend();
+    }
+
+    createLegend() {
+        const legendContainer = d3.select('#legend-container');
+        legendContainer.html('<h4>Legend (Click to toggle)</h4>');
+
+        // Собираем все уникальные группы из всех графиков
+        const allGroups = new Set();
+        this.charts.forEach((chart, chartId) => {
+            if (chart.groups) {
+                chart.groups.forEach(group => allGroups.add(group));
+            }
+        });
+
+        const legend = legendContainer.selectAll('.legend-item')
+            .data(Array.from(allGroups))
+            .enter()
+            .append('div')
+            .attr('class', 'legend-item')
+            .style('opacity', 1)
+            .on('click', (event, groupName) => {
+                this.toggleGroupVisibility(groupName);
+            });
+
+        legend.append('span')
+            .attr('class', 'legend-color')
+            .style('background-color', (d, i) => getColor(i));
+
+        legend.append('span')
+            .attr('class', 'legend-label')
+            .text(d => d);
+
+        // Показываем все группы по умолчанию
+        allGroups.forEach(group => this.visibleGroups.add(group));
+    }
+
+    toggleGroupVisibility(groupName) {
+        if (this.visibleGroups.has(groupName)) {
+            this.visibleGroups.delete(groupName);
+        } else {
+            this.visibleGroups.add(groupName);
+        }
+        
+        this.updateChartVisibility();
+        this.updateLegendAppearance();
+    }
+
+    updateChartVisibility() {
+        this.charts.forEach((chart, chartId) => {
+            if (chart.updateVisibility) {
+                chart.updateVisibility(this.visibleGroups);
+            }
+        });
+    }
+
+    updateLegendAppearance() {
+        d3.selectAll('.legend-item')
+            .classed('hidden', d => !this.visibleGroups.has(d))
+            .style('opacity', d => this.visibleGroups.has(d) ? 1 : 0.6);
+    }
+
+    updateVisibleGroups() {
+        // Автоматически показываем группы которые есть в данных
+        this.visibleGroups.clear();
+        this.charts.forEach((chart, chartId) => {
+            if (chart.groups) {
+                chart.groups.forEach(group => this.visibleGroups.add(group));
+            }
+        });
+        this.updateChartVisibility();
+        this.updateLegendAppearance();
+    }
+
+    updateDataInfo() {
+        if (!this.currentData) return;
+
+        const infoHtml = `
+            <p><strong>Generated:</strong> ${new Date(this.currentData.generated_at).toLocaleString()}</p>
+            <p><strong>Total tests:</strong> ${this.currentData.summary?.total_tests || 0}</p>
+            <p><strong>Configurations:</strong> ${this.currentData.summary?.configurations?.join(', ') || 'N/A'}</p>
+            <p><strong>Branches:</strong> ${this.currentData.summary?.branches?.join(', ') || 'N/A'}</p>
+            ${this.currentData.filter?.applied ? 
+                `<p><strong>Time filter:</strong> Last ${this.currentData.filter.days} days</p>` : 
+                '<p><strong>Time filter:</strong> All data</p>'
+            }
+        `;
+
+        d3.select('#data-info').html(infoHtml);
+    }
+
+    setupEventListeners() {
+        // Refresh button
+        d3.select('#refreshBtn').on('click', () => {
+            this.refreshData();
+        });
+
+        // Time range selector
+        d3.select('#timeRange').on('change', (event) => {
+            this.handleTimeRangeChange(event.target.value);
+        });
+    }
+
+    async refreshData() {
+        try {
+            d3.select('#refreshBtn').text('Refreshing...').attr('disabled', true);
+            await this.loadData();
+            this.charts.clear();
+            this.createCharts();
+            this.updateDataInfo();
+            d3.select('#refreshBtn').text('Refresh Data').attr('disabled', false);
+        } catch (error) {
+            console.error('Failed to refresh data:', error);
+            d3.select('#refreshBtn').text('Refresh Data').attr('disabled', false);
+        }
+    }
+
+    handleTimeRangeChange(days) {
+        // Здесь можно реализовать изменение временного диапазона
+        console.log('Time range changed to:', days);
+        // Пока просто перезагружаем страницу для простоты
+        if (days !== '30') { // 30 дней - это настройка по умолчанию
+            alert('Changing time range requires reprocessing data. This feature will be implemented soon.');
+        }
+    }
+
+    displayError(error) {
+        const errorHtml = `
+            <div class="error">
+                <h3>Error Loading Dashboard</h3>
+                <p>${error.message}</p>
+                <p>Please check the console for details.</p>
+            </div>
+        `;
+        d3.select('body').html(errorHtml);
     }
 }
 
-function createChartsFromPrecomputedData(chartsData) {
-    // Создаем контейнер для графиков
-    const container = d3.select('#charts-container');
-
-    createChart({
-        container: container,
-        title: 'IOPS Read (by Config)',
-        yLabel: 'IOPS',
-        data: chartsData.iops_read_by_config,
-        accessor: d => d.value,
-        id: 'chart-iops-read-config',
-        groupBy: 'config'
-    });
-
-    createChart({
-        container: container,
-        title: 'IOPS Write (by Config)',
-        yLabel: 'IOPS',
-        data: chartsData.iops_write_by_config,
-        accessor: d => d.value,
-        id: 'chart-iops-write-config',
-        groupBy: 'config'
-    });
-
-    createChart({
-        container: container,
-        title: 'Latency Read (by Config)',
-        yLabel: 'ms',
-        data: chartsData.latency_read_by_config,
-        accessor: d => d.value,
-        id: 'chart-latency-read-config',
-        groupBy: 'config'
-    });
-
-    createChart({
-        container: container,
-        title: 'Latency Write (by Config)',
-        yLabel: 'ms',
-        data: chartsData.latency_write_by_config,
-        accessor: d => d.value,
-        id: 'chart-latency-write-config',
-        groupBy: 'config'
-    });
-
-    // Графики с группировкой по веткам
-    createChart({
-        container: container,
-        title: 'IOPS Read (by Branch)',
-        yLabel: 'IOPS',
-        data: chartsData.iops_read_by_branch,
-        accessor: d => d.value,
-        id: 'chart-iops-read-branch',
-        groupBy: 'branch'
-    });
-
-        // Графики с группировкой по веткам
-    createChart({
-        container: container,
-        title: 'IOPS Write (by Branch)',
-        yLabel: 'IOPS',
-        data: chartsData.iops_write_by_branch,
-        accessor: d => d.value,
-        id: 'chart-iops-write-branch',
-        groupBy: 'branch'
-    });
-
-    createChart({
-        container: container,
-        title: 'Latency Read (by Branch)',
-        yLabel: 'ms',
-        data: chartsData.latency_read_by_branch,
-        accessor: d => d.value,
-        id: 'chart-latency-read-branch',
-        groupBy: 'branch'
-    });
-
-        // Графики с группировкой по веткам
-    createChart({
-        container: container,
-        title: 'Latency Write (by Branch)',
-        yLabel: 'ms',
-        data: chartsData.latency_write_by_branch,
-        accessor: d => d.value,
-        id: 'chart-latency-write-branch',
-        groupBy: 'branch'
-    });
-}
-
-function displayDataInfo(summary, generatedTime) {
-    if (!summary) return;
-
-    const infoHtml = `
-        <div class="data-info">
-            <h3>Dashboard Information</h3>
-            <p><strong>Total configurations:</strong> ${summary.total_configurations || 0}</p>
-            <p><strong>Total tests:</strong> ${summary.total_tests || 0}</p>
-            <p><strong>Time range:</strong> ${summary.time_range?.start ? new Date(summary.time_range.start).toLocaleDateString() : 'N/A'} - ${summary.time_range?.end ? new Date(summary.time_range.end).toLocaleDateString() : 'N/A'}</p>
-            <p><strong>Data generated:</strong> ${generatedTime ? new Date(generatedTime).toLocaleString() : 'N/A'}</p>
-            ${summary.configurations ? `<p><strong>Configurations:</strong> ${summary.configurations.join(', ')}</p>` : ''}
-        </div>
-    `;
-
-    // Добавляем информационный блок в начало страницы
-    d3.select('body').insert('div', ':first-child')
-        .html(infoHtml)
-        .attr('class', 'data-info-container');
-}
-
-function initializeLegend(chartsData) {
-    if (!chartsData) return;
-
-    // Получаем все уникальные конфигурации
-    const configs = new Set();
-    Object.values(chartsData).forEach(chartData => {
-        chartData.forEach(point => {
-            if (point.config) {
-                configs.add(point.config);
-            }
-        });
-    });
-
-    // Создаем легенду
-    const legendContainer = d3.select('#legend-container');
-    const legend = legendContainer.selectAll('.legend-item')
-        .data(Array.from(configs))
-        .enter()
-        .append('div')
-        .attr('class', 'legend-item')
-        .style('cursor', 'pointer')
-        .on('click', function(event, configName) {
-            toggleConfigVisibility(configName);
-        });
-
-    legend.append('span')
-        .attr('class', 'legend-color')
-        .style('background-color', (d, i) => getColor(i));
-
-    legend.append('span')
-        .attr('class', 'legend-label')
-        .text(d => d);
-}
-
-function toggleConfigVisibility(configName) {
-    // Реализация переключения видимости конфигураций
-    d3.selectAll(`.line-${configName.replace(/\s+/g, '-')}`)
-        .style('opacity', current => current === 1 ? 0.3 : 1);
-}
-
-function displayError(error) {
-    const errorHtml = `
-        <div class="error-container">
-            <h3>Error Loading Dashboard</h3>
-            <p>${error.message || 'Unknown error occurred'}</p>
-            <p>Please check if data.json exists and has valid format.</p>
-        </div>
-    `;
-
-    d3.select('body').html(errorHtml);
-}
-
-// Запускаем приложение при загрузке страницы
-document.addEventListener('DOMContentLoaded', initApp);
+// Инициализация при загрузке страницы
+document.addEventListener('DOMContentLoaded', () => {
+    const app = new DashboardApp();
+    app.init();
+});
