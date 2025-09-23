@@ -200,13 +200,16 @@ class DashboardApp {
     updateDataInfo() {
         if (!this.currentData) return;
 
+        const defaultDays = 7;
+        const filter = this.currentData.filter || { applied: false, days: defaultDays };
+
         const infoHtml = `
             <p><strong>Generated:</strong> ${new Date(this.currentData.generated_at).toLocaleString()}</p>
             <p><strong>Total tests:</strong> ${this.currentData.summary?.total_tests || 0}</p>
             <p><strong>Configurations:</strong> ${this.currentData.summary?.configurations?.join(', ') || 'N/A'}</p>
             <p><strong>Branches:</strong> ${this.currentData.summary?.branches?.join(', ') || 'N/A'}</p>
-            ${this.currentData.filter?.applied ? 
-                `<p><strong>Time filter:</strong> Last ${this.currentData.filter.days} days</p>` : 
+            ${filter.applied ? 
+                `<p><strong>Time filter:</strong> Last ${filter.days} days</p>` : 
                 '<p><strong>Time filter:</strong> All data</p>'
             }
         `;
