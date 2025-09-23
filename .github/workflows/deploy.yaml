@@ -7,6 +7,21 @@ on:
       - 'data/**'
       - 'docs/**'
       - 'tools/**'
+  workflow_dispatch:
+    inputs:
+      days:
+        description: 'Time range in days'
+        required: false
+        default: '7'
+        type: choice
+        options:
+          - '2'
+          - '7'
+          - '15'
+          - '30'
+          - '90'
+          - '365'
+          - 'all'
 
 permissions:
   contents: read
@@ -33,9 +48,26 @@ jobs:
         with:
           python-version: '3.9'
 
+      - name: Determine time range
+        id: time-range
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            DAYS="${{ github.event.inputs.days }}"
+          else
+            DAYS="7"
+          fi
+          
+          if [ "$DAYS" == "all" ]; then
+            DAYS="0"
+          fi
+          
+          echo "days=$DAYS" >> $GITHUB_OUTPUT
+          echo "Using time range: $DAYS days"
+
       - name: Process data
         run: |
-          chmod +x tools/data-processor && tools/data-processor
+          echo "Processing data for ${{ steps.time-range.outputs.days }} days"
+          chmod +x tools/data-processor && tools/data-processor ${{ steps.time-range.outputs.days }}
           echo "Checking if data.json was created:"
           ls -la docs/fio/librawstor/dashboard/data.json || echo "File not found"
           echo "Contents of dashboard directory:"
