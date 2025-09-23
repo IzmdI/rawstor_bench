@@ -14,12 +14,17 @@ class DashboardApp {
     async init() {
         console.log('Initializing dashboard...');
         
+        const params = this.getUrlParams();
+        if (params.days !== '7') {
+            d3.select('#timeRange').property('value', params.days);
+        }
+
         try {
             await this.loadData();
             this.createCharts();
             this.setupEventListeners();
             this.updateDataInfo();
-            
+
         } catch (error) {
             console.error('Failed to initialize dashboard:', error);
             this.displayError(error);
@@ -235,13 +240,83 @@ class DashboardApp {
         }
     }
 
-    handleTimeRangeChange(days) {
-        // Здесь можно реализовать изменение временного диапазона
-        console.log('Time range changed to:', days);
-        // Пока просто перезагружаем страницу для простоты
-        if (days !== '30') { // 30 дней - это настройка по умолчанию
-            alert('Changing time range requires reprocessing data. This feature will be implemented soon.');
+    async handleTimeRangeChange(days) {
+        const currentDays = this.currentData?.filter?.days || 7;
+
+        if (days === 'all') {
+            days = 0;
         }
+
+        if (parseInt(days) === currentDays) {
+            console.log('Time range unchanged');
+            return;
+        }
+
+        if (confirm(`Change time range to ${days === '0' ? 'all time' : `last ${days} days`}? This will reload the dashboard.`)) {
+            await this.reprocessData(days);
+        } else {
+            // Восстанавливаем предыдущее значение
+            d3.select('#timeRange').property('value', currentDays === 0 ? 'all' : currentDays.toString());
+        }
+    }
+
+    async reprocessData(days) {
+        try {
+            this.showLoading(true);
+
+            // Здесь будет вызов API для переобработки данных
+            // Пока просто перезагружаем страницу с параметром
+            const url = new URL(window.location.href);
+            if (days === '0') {
+                url.searchParams.delete('days');
+            } else {
+                url.searchParams.set('days', days);
+            }
+
+            window.location.href = url.toString();
+
+        } catch (error) {
+            console.error('Failed to reprocess data:', error);
+            this.showNotification('Error changing time range', 'error');
+            this.showLoading(false);
+        }
+    }
+
+    showLoading(show) {
+        const loading = d3.select('#loading');
+        const button = d3.select('#refreshBtn');
+
+        if (show) {
+            loading.style('display', 'flex');
+            button.attr('disabled', true);
+            button.text('Processing...');
+        } else {
+            loading.style('display', 'none');
+            button.attr('disabled', null);
+            button.text('Refresh Data');
+        }
+    }
+
+    showNotification(message, type = 'success') {
+        const notification = d3.select('body')
+            .append('div')
+            .attr('class', `notification ${type}`)
+            .text(message);
+
+        setTimeout(() => {
+            notification.transition()
+                .duration(300)
+                .style('opacity', 0)
+                .remove();
+        }, 3000);
+    }
+
+    // Добавляем метод для чтения параметров URL
+    getUrlParams() {
+        const urlParams = new URLSearchParams(window.location.search);
+        return {
+            days: urlParams.get('days') || '7'
+        };
     }
 
     displayError(error) {

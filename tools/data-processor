@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
+
 import json
+import sys
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Dict, List, Any
@@ -7,59 +9,69 @@ from typing import Dict, List, Any
 
 def main():
     print("=== Starting data processor ===")
-    
+
+    # Получаем параметр дней из аргументов командной строки
+    days = 30  # значение по умолчанию
+    if len(sys.argv) > 1:
+        try:
+            days = int(sys.argv[1])
+            print(f"Using custom time range: last {days} days")
+        except ValueError:
+            print(f"Invalid days parameter: {sys.argv[1]}, using default: 30 days")
+
     # Пути
     script_dir = Path(__file__).parent
     repo_root = script_dir.parent
     data_path = repo_root / 'data/fio/librawstor'
     output_path = repo_root / 'docs/fio/librawstor/dashboard/data.json'
-    
+
     print(f"Data path: {data_path}")
     print(f"Output path: {output_path}")
-    
+    print(f"Time range: last {days} days")
+
     if not data_path.exists():
         print("❌ Data path does not exist!")
         return
-    
-    # Рассчитываем дату 30 дней назад
-    cutoff_date = datetime.now() - timedelta(days=30)
+
+    # Рассчитываем дату N дней назад
+    cutoff_date = datetime.now() - timedelta(days=days)
     print(f"📅 Filtering data since: {cutoff_date.strftime('%Y-%m-%d')}")
-    
+
     # Создаем директорию для выходных данных
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    
+
     try:
         # Обрабатываем сырые данные с фильтрацией по времени
         all_test_results = collect_raw_data(data_path, cutoff_date)
-        print(f"✅ Collected {len(all_test_results)} test results from last 30 days")
-        
+        print(f"✅ Collected {len(all_test_results)} test results from last {days} days")
+
         if not all_test_results:
-            print("⚠️ No data found for the last 30 days. Using all available data.")
+            print("⚠️ No data found for the specified period. Using all available data.")
             all_test_results = collect_raw_data(data_path, None)
-        
+            days = 0  # Помечаем что фильтр не применен
+
         # Группируем данные для графиков
         charts_data = prepare_charts_data(all_test_results)
-        
+
         # Формируем итоговый JSON
         output = {
             "generated_at": datetime.utcnow().isoformat() + "Z",
             "filter": {
-                "days": 30,
+                "days": days,
                 "cutoff_date": cutoff_date.isoformat() + "Z",
-                "applied": len(all_test_results) > 0
+                "applied": days > 0 and len(all_test_results) > 0
             },
             "charts": charts_data,
             "summary": get_summary(all_test_results, charts_data, cutoff_date)
         }
-        
+
         # Сохраняем результат
         with output_path.open('w', encoding='utf-8') as f:
             json.dump(output, f, indent=2, ensure_ascii=False)
 
-
-        print(f"✅ data.json successfully created")
+        print(f"✅ data.json successfully created for {days} days")
         print_summary(output['summary'])
-        
+
     except Exception as e:
         print(f"❌ Error: {e}")
         import traceback
