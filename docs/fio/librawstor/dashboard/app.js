@@ -191,7 +191,9 @@ class DashboardApp {
     updateLegendAppearance() {
         d3.selectAll('.legend-item')
             .classed('hidden', d => !this.visibleGroups.has(d))
-            .style('opacity', d => this.visibleGroups.has(d) ? 1 : 0.6);
+            .style('opacity', d => this.visibleGroups.has(d) ? 1 : 0.7) // Изменили с 0.6 на 0.7
+            .select('.legend-color')
+            .style('opacity', d => this.visibleGroups.has(d) ? 1 : 0.7);
     }
 
     updateVisibleGroups() {

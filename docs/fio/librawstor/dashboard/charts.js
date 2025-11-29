@@ -272,13 +272,15 @@ function createChart(config) {
             const safeGroupName = createSafeClassName(groupName);
             const line = chartState.lines.get(groupName);
             const dots = chartState.dots.get(groupName);
-            
+
             if (line) {
-                line.style('opacity', isVisible ? 1 : 0.3)
-                    .style('stroke-width', isVisible ? 3 : 2);
+                line.style('opacity', isVisible ? 1 : 0.6) // Изменили с 0.3 на 0.6
+                    .style('stroke-width', isVisible ? 3 : 2)
+                    .style('stroke-dasharray', isVisible ? 'none' : '5,3'); // Добавили пунктир для отключенных
             }
             if (dots) {
-                dots.style('opacity', isVisible ? 1 : 0.3);
+                dots.style('opacity', isVisible ? 1 : 0.6) // Изменили с 0.3 на 0.6
+                    .style('fill-opacity', isVisible ? 1 : 0.6);
             }
         });
     };
