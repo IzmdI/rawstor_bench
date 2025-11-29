@@ -282,10 +282,10 @@ function createChart(config) {
                         .style('filter', 'none');
                 } else {
                     // Отключенная линия - тонкая, пунктирная и серая
-                    line.style('opacity', 0.3)
+                    line.style('opacity', 0.1)
                         .style('stroke-width', 2)
                         .style('stroke-dasharray', '5,3')
-                        .style('filter', 'grayscale(0.7)');
+                        .style('filter', 'grayscale(0.2)');
                 }
             }
             if (dots) {
