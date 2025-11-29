@@ -2,7 +2,6 @@ function createSafeClassName(name) {
     return name.replace(/[^a-zA-Z0-9]/g, '-').toLowerCase();
 }
 
-
 class DashboardApp {
     constructor() {
         this.dataLoader = new DataLoader();
@@ -18,13 +17,13 @@ class DashboardApp {
         if (params.days !== '30') {
             d3.select('#timeRange').property('value', params.days);
         }
-
+        
         try {
             await this.loadData();
             this.createCharts();
             this.setupEventListeners();
             this.updateDataInfo();
-
+            
         } catch (error) {
             console.error('Failed to initialize dashboard:', error);
             this.displayError(error);
@@ -49,23 +48,23 @@ class DashboardApp {
         const chartsConfig = [
             {
                 id: 'chart-iops-read-config',
-                title: 'IOPS Read',
-                yLabel: 'IOPS',
+                title: 'IOPS Read (by Config)',
+                yLabel: 'kIOPS',
                 dataKey: 'iops_read_by_config',
                 groupBy: 'config',
                 timeRangeDays: timeRangeDays
             },
             {
-                id: 'chart-iops-write-config',
-                title: 'IOPS Write',
-                yLabel: 'IOPS',
+                id: 'chart-iops-write-config', 
+                title: 'IOPS Write (by Config)',
+                yLabel: 'kIOPS',
                 dataKey: 'iops_write_by_config',
                 groupBy: 'config',
                 timeRangeDays: timeRangeDays
             },
             {
                 id: 'chart-latency-read-config',
-                title: 'Latency Read',
+                title: 'Latency Read (by Config)',
                 yLabel: 'ms',
                 dataKey: 'latency_read_by_config',
                 groupBy: 'config',
@@ -73,7 +72,7 @@ class DashboardApp {
             },
             {
                 id: 'chart-latency-write-config',
-                title: 'Latency Write',
+                title: 'Latency Write (by Config)', 
                 yLabel: 'ms',
                 dataKey: 'latency_write_by_config',
                 groupBy: 'config',
@@ -81,23 +80,23 @@ class DashboardApp {
             },
             {
                 id: 'chart-iops-read-branch',
-                title: 'IOPS Read',
-                yLabel: 'IOPS',
+                title: 'IOPS Read (by Branch)',
+                yLabel: 'kIOPS', 
                 dataKey: 'iops_read_by_branch',
                 groupBy: 'branch',
                 timeRangeDays: timeRangeDays
             },
             {
                 id: 'chart-iops-write-branch',
-                title: 'IOPS Write',
-                yLabel: 'IOPS',
+                title: 'IOPS Write (by Branch)',
+                yLabel: 'kIOPS',
                 dataKey: 'iops_write_by_branch',
                 groupBy: 'branch',
                 timeRangeDays: timeRangeDays
             },
             {
                 id: 'chart-latency-read-branch',
-                title: 'Latency Read',
+                title: 'Latency Read (by Branch)',
                 yLabel: 'ms',
                 dataKey: 'latency_read_by_branch',
                 groupBy: 'branch',
@@ -105,7 +104,7 @@ class DashboardApp {
             },
             {
                 id: 'chart-latency-write-branch',
-                title: 'Latency Write',
+                title: 'Latency Write (by Branch)',
                 yLabel: 'ms',
                 dataKey: 'latency_write_by_branch',
                 groupBy: 'branch',
@@ -124,7 +123,7 @@ class DashboardApp {
                     accessor: d => d.value,
                     id: config.id,
                     groupBy: config.groupBy,
-                    timeRangeDays: timeRangeDays // ← Передаем информацию о временном диапазоне
+                    timeRangeDays: timeRangeDays
                 });
                 this.charts.set(config.id, chart);
             } else {
@@ -152,7 +151,7 @@ class DashboardApp {
             .data(Array.from(allGroups))
             .enter()
             .append('div')
-            .attr('class', d => `legend-item legend-${createSafeClassName(d)}`) // Используем безопасное имя
+            .attr('class', d => `legend-item legend-${createSafeClassName(d)}`)
             .style('opacity', 1)
             .on('click', (event, groupName) => {
                 this.toggleGroupVisibility(groupName);
@@ -205,15 +204,13 @@ class DashboardApp {
         });
         this.updateChartVisibility();
         this.updateLegendAppearance();
-        // test
     }
 
     updateDataInfo() {
         if (!this.currentData) return;
 
-        const defaultDays = 30;
-        const filter = this.currentData.filter || { applied: false, days: defaultDays };
-
+        const filter = this.currentData.filter || { applied: false, days: 30 };
+        
         const infoHtml = `
             <p><strong>Generated:</strong> ${new Date(this.currentData.generated_at).toLocaleString()}</p>
             <p><strong>Total tests:</strong> ${this.currentData.summary?.total_tests || 0}</p>
@@ -242,68 +239,59 @@ class DashboardApp {
 
     async refreshData() {
         try {
-            d3.select('#refreshBtn').text('Refreshing...').attr('disabled', true);
+            this.showLoading(true);
             await this.loadData();
             this.charts.clear();
             this.createCharts();
             this.updateDataInfo();
-            d3.select('#refreshBtn').text('Refresh Data').attr('disabled', false);
+            this.showLoading(false);
         } catch (error) {
             console.error('Failed to refresh data:', error);
-            d3.select('#refreshBtn').text('Refresh Data').attr('disabled', false);
+            this.showNotification('Error refreshing data', 'error');
+            this.showLoading(false);
         }
     }
 
-    async handleTimeRangeChange(days) {
+    handleTimeRangeChange(days) {
         const currentDays = this.currentData?.filter?.days || 30;
-
+        
         if (days === 'all') {
             days = 0;
         }
-
+        
         if (parseInt(days) === currentDays) {
             console.log('Time range unchanged');
             return;
         }
-
+        
         if (confirm(`Change time range to ${days === '0' ? 'all time' : `last ${days} days`}? This will reload the dashboard.`)) {
-            await this.reprocessData(days);
+            this.reprocessData(days);
         } else {
             // Восстанавливаем предыдущее значение
             d3.select('#timeRange').property('value', currentDays === 0 ? 'all' : currentDays.toString());
         }
     }
 
-    async reprocessData(days) {
-        try {
-            this.showLoading(true);
-
-            // Здесь будет вызов API для переобработки данных
-            // Пока просто перезагружаем страницу с параметром
-            const url = new URL(window.location.href);
-            if (days === '0') {
-                url.searchParams.delete('days');
-            } else {
-                url.searchParams.set('days', days);
-            }
-
-            window.location.href = url.toString();
-
-        } catch (error) {
-            console.error('Failed to reprocess data:', error);
-            this.showNotification('Error changing time range', 'error');
-            this.showLoading(false);
+    reprocessData(days) {
+        // Пока просто перезагружаем страницу с параметром
+        const url = new URL(window.location.href);
+        if (days === '0') {
+            url.searchParams.delete('days');
+        } else {
+            url.searchParams.set('days', days);
         }
+        
+        window.location.href = url.toString();
     }
 
     showLoading(show) {
         const loading = d3.select('#loading');
         const button = d3.select('#refreshBtn');
-
+        
         if (show) {
             loading.style('display', 'flex');
             button.attr('disabled', true);
-            button.text('Processing...');
+            button.text('Refreshing...');
         } else {
             loading.style('display', 'none');
             button.attr('disabled', null);
@@ -316,7 +304,7 @@ class DashboardApp {
             .append('div')
             .attr('class', `notification ${type}`)
             .text(message);
-
+        
         setTimeout(() => {
             notification.transition()
                 .duration(300)
@@ -325,7 +313,6 @@ class DashboardApp {
         }, 3000);
     }
 
-    // Добавляем метод для чтения параметров URL
     getUrlParams() {
         const urlParams = new URLSearchParams(window.location.search);
         return {

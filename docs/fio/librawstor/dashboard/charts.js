@@ -4,7 +4,7 @@ function createSafeClassName(name) {
 
 function createChart(config) {
     const { container, title, yLabel, data, accessor, id, groupBy, timeRangeDays } = config;
-
+    
     if (!data || data.length === 0) {
         container.html('<p class="no-data">No data available</p>');
         return null;
@@ -15,9 +15,9 @@ function createChart(config) {
 
     // Адаптивные размеры
     const containerWidth = container.node().getBoundingClientRect().width || 800;
-    const margin = { top: 40, right: 80, bottom: 60, left: 90 }; // Увеличили отступы для текста
+    const margin = { top: 50, right: 80, bottom: 70, left: 90 };
     const width = Math.max(400, containerWidth - margin.left - margin.right);
-    const height = 450 - margin.top - margin.bottom; // Увеличили высоту
+    const height = 450 - margin.top - margin.bottom;
 
     const svg = container.append('svg')
         .attr('width', '100%')
@@ -27,7 +27,7 @@ function createChart(config) {
         .append('g')
         .attr('transform', `translate(${margin.left},${margin.top})`);
 
-    // Обрабатываем данные (существующий код)
+    // Обрабатываем данные
     let processedData = data
         .map(d => ({
             ...d,
@@ -38,6 +38,7 @@ function createChart(config) {
         }))
         .filter(d => d.value !== null && d.value !== undefined && !isNaN(d.value) && d.timestamp);
 
+    // Фильтруем данные для больших временных диапазонов (15+ дней)
     if (timeRangeDays >= 15 && processedData.length > 0) {
         processedData = filterDataForLargeTimeRange(processedData);
     }
@@ -75,7 +76,7 @@ function createChart(config) {
     const axisLineColor = '#ddd';
 
     // Настраиваем формат оси X
-    const xAxisFormat = timeRangeDays < 15 ?
+    const xAxisFormat = timeRangeDays < 15 ? 
         d3.timeFormat('%H:%M %d.%m') :
         d3.timeFormat('%d.%m');
 
@@ -158,7 +159,7 @@ function createChart(config) {
 
     // Устанавливаем текст в зависимости от типа метрики
     if (title.toLowerCase().includes('iops')) {
-        yAxisLabel.text('IOPS)');
+        yAxisLabel.text('Performance (kIOPS)');
     } else if (title.toLowerCase().includes('latency')) {
         yAxisLabel.text('Latency (ms)');
     } else {
@@ -192,7 +193,7 @@ function createChart(config) {
     // ДОБАВЛЯЕМ ЗАГОЛОВОК ГРАФИКА
     svg.append('text')
         .attr('x', width / 2)
-        .attr('y', -15)
+        .attr('y', -20)
         .attr('text-anchor', 'middle')
         .attr('fill', '#2c3e50')
         .attr('font-family', "'Segoe UI', 'Helvetica Neue', Arial, sans-serif")
@@ -207,7 +208,7 @@ function createChart(config) {
         .y(d => yScale(d.value))
         .curve(d3.curveMonotoneX);
 
-    // Рисуем линии и точки (существующий код)
+    // Рисуем линии и точки
     const chartState = {
         groups: groups,
         lines: new Map(),
@@ -236,7 +237,7 @@ function createChart(config) {
 
         // Рисуем точки только если мало данных или короткий диапазон
         const showDots = processedData.length < 50 || timeRangeDays < 15;
-
+        
         if (showDots) {
             const dots = svg.selectAll(`.dot-${safeGroupName}`)
                 .data(groupData)
@@ -250,7 +251,7 @@ function createChart(config) {
                 .style('stroke', '#fff')
                 .style('stroke-width', 2)
                 .style('cursor', 'pointer')
-                .style('transition', 'all 0.2s ease');
+                .style('transition', 'all 0.3s ease');
 
             chartState.dots.set(groupName, dots);
 
@@ -282,7 +283,7 @@ function createChart(config) {
             const safeGroupName = createSafeClassName(groupName);
             const line = chartState.lines.get(groupName);
             const dots = chartState.dots.get(groupName);
-
+            
             if (line) {
                 line.style('opacity', isVisible ? 1 : 0.3)
                     .style('stroke-width', isVisible ? 3 : 2);
@@ -296,26 +297,29 @@ function createChart(config) {
     return chartState;
 }
 
-// Функция для фильтрации данных остается без изменений
+// Функция для фильтрации данных при больших временных диапазонах
 function filterDataForLargeTimeRange(data) {
     const filteredData = [];
     const groupsData = d3.group(data, d => d.group);
-
+    
     groupsData.forEach((groupData, groupName) => {
-        const dailyGroups = d3.group(groupData, d =>
+        // Группируем по дням
+        const dailyGroups = d3.group(groupData, d => 
             new Date(d.timestamp).toDateString()
         );
-
+        
+        // Для каждого дня берем только последний тест
         dailyGroups.forEach((dayTests, day) => {
             if (dayTests.length > 0) {
-                const lastTest = dayTests.sort((a, b) =>
+                // Сортируем по времени и берем последний
+                const lastTest = dayTests.sort((a, b) => 
                     new Date(b.timestamp) - new Date(a.timestamp)
                 )[0];
                 filteredData.push(lastTest);
             }
         });
     });
-
+    
     console.log(`📊 Filtered data: ${data.length} → ${filteredData.length} points`);
     return filteredData;
 }

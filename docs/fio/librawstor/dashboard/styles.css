@@ -12,12 +12,12 @@
     box-sizing: border-box;
 }
 
-/* Базовые настройки шрифтов для всего дашборда */
 body {
-    font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif;
-    font-size: 14px;
-    line-height: 1.5;
-    color: #2c3e50;
+    font-family: var(--font-family);
+    background-color: var(--bg-color);
+    color: var(--text-color);
+    padding: 20px;
+    line-height: 1.6;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
 }
@@ -28,18 +28,19 @@ body {
     border-bottom: 2px solid var(--grid-color);
 }
 
-/* Заголовок дашборда */
 #header h1 {
-    font-family: 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+    color: var(--accent-color);
+    margin-bottom: 10px;
     font-size: 32px;
     font-weight: 700;
-    color: #1a365d;
-    margin-bottom: 15px;
     letter-spacing: 0.5px;
 }
 
-/* Информационная панель */
 #data-info {
+    background-color: #f8f9fa;
+    padding: 15px;
+    border-radius: 5px;
+    border-left: 4px solid var(--accent-color);
     font-family: 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
 }
 
@@ -54,15 +55,15 @@ body {
     font-weight: 600;
 }
 
-/* Элементы управления */
 #controls {
+    margin-bottom: 30px;
+    padding: 15px;
+    background-color: #f5f5f5;
+    border-radius: 5px;
+    display: flex;
+    gap: 20px;
+    align-items: center;
     font-family: 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
-}
-
-#controls label {
-    font-weight: 600;
-    color: #495057;
-    font-size: 14px;
 }
 
 .control-group {
@@ -71,37 +72,64 @@ body {
     gap: 10px;
 }
 
+#controls label {
+    font-weight: 600;
+    color: #495057;
+    font-size: 14px;
+}
+
 #timeRange, #refreshBtn {
-    font-family: 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+    padding: 8px 12px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
     font-size: 13px;
+    font-family: 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
     font-weight: 500;
+}
+
+#timeRange {
+    background: white;
+    border: 1px solid #ced4da;
+    border-radius: 6px;
+    transition: all 0.2s ease;
+}
+
+#timeRange:focus {
+    outline: none;
+    border-color: #1f77b4;
+    box-shadow: 0 0 0 3px rgba(31, 119, 180, 0.1);
+}
+
+#refreshBtn {
+    background-color: var(--accent-color);
+    color: white;
+    border: none;
+    cursor: pointer;
+    font-weight: 500;
+}
+
+#refreshBtn:hover {
+    background-color: #1668a0;
+}
+
+#refreshBtn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
 }
 
 .chart-section {
     margin-bottom: 40px;
 }
 
-/* Заголовки секций */
 .chart-section h2 {
+    margin-bottom: 25px;
+    color: #2c3e50;
+    border-bottom: 2px solid #e9ecef;
+    padding-bottom: 12px;
     font-family: 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
     font-size: 24px;
     font-weight: 600;
-    color: #2c3e50;
-    margin-bottom: 25px;
-    border-bottom: 2px solid #e9ecef;
-    padding-bottom: 12px;
     letter-spacing: 0.3px;
-}
-
-/* Заголовки графиков */
-.chart-container h3 {
-    font-family: 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
-    font-size: 16px;
-    font-weight: 600;
-    color: #495057;
-    margin-bottom: 20px;
-    text-align: center;
-    letter-spacing: 0.2px;
 }
 
 .charts-grid {
@@ -120,14 +148,59 @@ body {
 }
 
 .chart-container h3 {
-    margin-bottom: 15px;
+    margin-bottom: 20px;
     font-size: 16px;
-    color: #555;
+    color: #495057;
+    text-align: center;
+    font-family: 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+    font-weight: 600;
+    letter-spacing: 0.2px;
 }
 
 .chart {
     width: 100%;
-    height: 400px;
+    height: 450px;
+}
+
+.loading {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    color: #666;
+    font-style: italic;
+}
+
+.loading::before {
+    content: '';
+    width: 16px;
+    height: 16px;
+    border: 2px solid #f3f3f3;
+    border-top: 2px solid var(--accent-color);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+.notification {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    background: #4CAF50;
+    color: white;
+    padding: 15px 20px;
+    border-radius: 5px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+    z-index: 1002;
+    animation: slideIn 0.3s ease-out;
+}
+
+@keyframes slideIn {
+    from { transform: translateX(100%); opacity: 0; }
+    to { transform: translateX(0); opacity: 1; }
 }
 
 /* Legend */
@@ -163,7 +236,7 @@ body {
     cursor: pointer;
     padding: 4px;
     border-radius: 3px;
-    transition: background-color 0.2s;
+    transition: all 0.3s ease;
 }
 
 .legend-item:hover {
@@ -179,8 +252,9 @@ body {
 }
 
 .legend-label {
-    font-family: 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
     font-size: 12px;
+    flex: 1;
+    font-family: 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
     font-weight: 500;
     color: #495057;
 }
@@ -207,8 +281,10 @@ body {
     backdrop-filter: blur(4px);
 }
 
-/* Улучшенный тултип */
 .tooltip-content {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
     font-family: 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
 }
 
@@ -216,6 +292,7 @@ body {
     font-size: 13px;
     font-weight: 700;
     color: #1f77b4;
+    margin-bottom: 2px;
 }
 
 .tooltip-metric {
@@ -232,33 +309,17 @@ body {
 }
 
 .tooltip-hint {
-    font-size: 11px;
-    color: #868e96;
-}
-
-/* Сообщения об отсутствии данных */
-.no-data {
-    font-family: 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
-    font-size: 14px;
-    color: #6c757d;
+    margin-top: 4px;
     font-style: italic;
-    text-align: center;
-    padding: 60px 20px;
-}
-
-/* Адаптивность для мобильных */
-@media (max-width: 768px) {
-    .tooltip {
-        max-width: 200px;
-        font-size: 11px;
-    }
+    color: #868e96;
+    font-size: 11px;
 }
 
 /* Axes and grid */
 .axis path,
 .axis line {
     fill: none;
-    stroke: #ccc;
+    stroke: #ddd;
     shape-rendering: crispEdges;
 }
 
@@ -281,7 +342,7 @@ body {
 .line {
     fill: none;
     stroke-width: 2px;
-    transition: opacity 0.2s;
+    transition: all 0.3s ease;
 }
 
 .dot {
@@ -289,7 +350,7 @@ body {
     stroke: white;
     stroke-width: 1.5;
     cursor: pointer;
-    transition: r 0.2s;
+    transition: all 0.3s ease;
 }
 
 .dot:hover {
@@ -301,63 +362,22 @@ body {
     opacity: 0.2;
 }
 
-.loading {
-    display: flex;
-    align-items: center;
-    gap: 10px;
+.no-data {
+    text-align: center;
     color: #666;
     font-style: italic;
-}
-
-.loading::before {
-    content: '';
-    width: 16px;
-    height: 16px;
-    border: 2px solid #f3f3f3;
-    border-top: 2px solid var(--accent-color);
-    border-radius: 50%;
-    animation: spin 1s linear infinite;
-}
-
-@keyframes spin {
-    0% { transform: rotate(0deg); }
-    100% { transform: rotate(360deg); }
-}
-
-.control-group {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-}
-
-#timeRange, #refreshBtn {
-    padding: 8px 12px;
-    border: 1px solid #ddd;
-    border-radius: 4px;
+    padding: 60px 20px;
+    font-family: 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
     font-size: 14px;
 }
 
-#refreshBtn:disabled {
-    opacity: 0.6;
-    cursor: not-allowed;
-}
-
-.notification {
-    position: fixed;
-    top: 20px;
-    right: 20px;
-    background: #4CAF50;
-    color: white;
-    padding: 15px 20px;
+.error {
+    background-color: #ffeeee;
+    border: 1px solid #ffcccc;
     border-radius: 5px;
-    box-shadow: 0 2px 10px rgba(0,0,0,0.2);
-    z-index: 1002;
-    animation: slideIn 0.3s ease-out;
-}
-
-@keyframes slideIn {
-    from { transform: translateX(100%); opacity: 0; }
-    to { transform: translateX(0); opacity: 1; }
+    padding: 20px;
+    margin: 20px;
+    text-align: center;
 }
 
 /* Responsive */
@@ -373,30 +393,58 @@ body {
     }
 }
 
-/* Адаптивность для мобильных */
 @media (max-width: 768px) {
     body {
+        padding: 10px;
         font-size: 13px;
     }
-
-    .chart-section h2 {
-        font-size: 20px;
-    }
-
-    .chart-container h3 {
-        font-size: 14px;
-    }
-
+    
     #header h1 {
         font-size: 24px;
     }
-
+    
+    .chart-section h2 {
+        font-size: 20px;
+    }
+    
+    .charts-grid {
+        gap: 15px;
+    }
+    
+    .chart-container {
+        padding: 10px;
+    }
+    
+    .chart-container h3 {
+        font-size: 14px;
+    }
+    
+    .chart {
+        height: 350px;
+    }
+    
     #legend-container h4 {
         font-size: 13px;
     }
-
+    
     .legend-label {
         font-size: 11px;
+    }
+    
+    .tooltip {
+        max-width: 200px;
+        font-size: 11px;
+    }
+    
+    #controls {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 10px;
+    }
+    
+    .control-group {
+        width: 100%;
+        justify-content: space-between;
     }
 }
 
@@ -405,20 +453,4 @@ body {
 .dot,
 .line {
     transition: all 0.3s ease;
-}
-
-/* Улучшенный внешний вид select */
-#timeRange {
-    background: white;
-    border: 1px solid #ced4da;
-    border-radius: 6px;
-    padding: 8px 12px;
-    font-size: 13px;
-    transition: all 0.2s ease;
-}
-
-#timeRange:focus {
-    outline: none;
-    border-color: #1f77b4;
-    box-shadow: 0 0 0 3px rgba(31, 119, 180, 0.1);
 }

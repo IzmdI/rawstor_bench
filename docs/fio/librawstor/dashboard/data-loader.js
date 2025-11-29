@@ -59,7 +59,7 @@ class DataLoader {
     // Метод для получения информации о фильтрации
     getFilterInfo() {
         if (!this.data) return null;
-        return this.data.filter || { applied: false };
+        return this.data.filter || { applied: false, days: 30 };
     }
 
     // Метод для получения времени генерации данных
@@ -177,7 +177,7 @@ class DataLoader {
             
             groups.forEach((group, groupIndex) => {
                 for (let i = 0; i < 5; i++) {
-                    const daysAgo = 2 + i * 3; // Данные за последние 2, 5, 8, 11, 14 дней
+                    const daysAgo = 2 + i * 3;
                     const timestamp = new Date(now.getTime() - daysAgo * 24 * 60 * 60 * 1000);
                     
                     let value;
@@ -256,9 +256,4 @@ class DataLoader {
         
         return hoursDiff <= hours;
     }
-}
-
-// Экспорт для использования в других модулях
-if (typeof module !== 'undefined' && module.exports) {
-    module.exports = DataLoader;
 }

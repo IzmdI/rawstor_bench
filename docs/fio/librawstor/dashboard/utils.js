@@ -10,30 +10,33 @@ function getColor(index) {
     return colorPalette[index % colorPalette.length];
 }
 
+function createSafeClassName(name) {
+    return name.replace(/[^a-zA-Z0-9]/g, '-').toLowerCase();
+}
+
 function formatDate(date, timeRangeDays = 30) {
     if (!date) return 'Unknown date';
     if (typeof date === 'string' && date === "Unknown date") return date;
-
+    
     const d = new Date(date);
     if (isNaN(d.getTime())) return 'Invalid date';
-
+    
     // Разные форматы в зависимости от временного диапазона
     if (timeRangeDays < 15) {
         // Для коротких диапазонов: часы:минуты день.месяц
-        return d.toLocaleTimeString('ru-RU', {
-            hour: '2-digit',
+        return d.toLocaleTimeString('ru-RU', { 
+            hour: '2-digit', 
             minute: '2-digit',
-            hour12: false
+            hour12: false 
         }) + ' ' + d.toLocaleDateString('ru-RU', {
             day: '2-digit',
             month: '2-digit'
         });
     } else {
-        // Для длинных диапазонов: день.месяц год
+        // Для длинных диапазонов: день.месяц
         return d.toLocaleDateString('ru-RU', {
             day: '2-digit',
-            month: '2-digit',
-            year: '2-digit'
+            month: '2-digit'
         });
     }
 }
@@ -63,7 +66,7 @@ function formatMetricValue(value, metricType) {
 function showTooltip(event, data, chartTitle, accessor, groupBy, timeRangeDays = 30) {
     const tooltip = d3.select('#tooltip');
     const value = accessor(data);
-
+    
     const tooltipHtml = `
         <div class="tooltip-content">
             <div class="tooltip-header">
@@ -92,7 +95,7 @@ function showTooltip(event, data, chartTitle, accessor, groupBy, timeRangeDays =
             </div>
         </div>
     `;
-
+    
     tooltip
         .style('opacity', 1)
         .style('left', (event.pageX + 15) + 'px')
@@ -113,6 +116,8 @@ style.textContent = `
         color: #666;
         font-style: italic;
         padding: 40px;
+        font-family: 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+        font-size: 14px;
     }
     .error {
         background-color: #ffeeee;
@@ -121,6 +126,7 @@ style.textContent = `
         padding: 20px;
         margin: 20px;
         text-align: center;
+        font-family: 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
     }
 `;
 document.head.appendChild(style);
