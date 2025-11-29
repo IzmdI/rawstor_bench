@@ -1,4 +1,4 @@
-// Цветовая палитра для групп
+// Цветовая палитра для групп и операций
 const colorPalette = [
     '#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd',
     '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf',
@@ -6,8 +6,34 @@ const colorPalette = [
     '#c49c94', '#f7b6d2', '#c7c7c7', '#dbdb8d', '#9edae5'
 ];
 
+// Цвета для операций (read/write)
+const operationColors = {
+    'read': '#1f77b4',  // синий для read
+    'write': '#ff7f0e'  // оранжевый для write
+};
+
+// Стили линий для операций
+const operationStyles = {
+    'read': {
+        strokeDasharray: 'none',
+        strokeWidth: 2.5
+    },
+    'write': {
+        strokeDasharray: '5,3',
+        strokeWidth: 2
+    }
+};
+
 function getColor(index) {
     return colorPalette[index % colorPalette.length];
+}
+
+function getOperationColor(operation) {
+    return operationColors[operation] || '#666666';
+}
+
+function getOperationStyle(operation) {
+    return operationStyles[operation] || {};
 }
 
 function createSafeClassName(name) {
@@ -67,10 +93,12 @@ function showTooltip(event, data, chartTitle, accessor, groupBy, timeRangeDays =
     const tooltip = d3.select('#tooltip');
     const value = accessor(data);
     
+    const operation = data.operation ? ` (${data.operation})` : '';
+    
     const tooltipHtml = `
         <div class="tooltip-content">
             <div class="tooltip-header">
-                <strong>${data.group}</strong>
+                <strong>${data.group}${operation}</strong>
             </div>
             <div class="tooltip-metric">
                 <strong>${chartTitle}:</strong> ${formatMetricValue(value, chartTitle)}

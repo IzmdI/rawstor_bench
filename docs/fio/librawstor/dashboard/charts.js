@@ -3,7 +3,7 @@ function createSafeClassName(name) {
 }
 
 function createChart(config) {
-    const { container, title, yLabel, data, accessor, id, groupBy, timeRangeDays, legendType } = config;
+    const { container, title, yLabel, data, accessor, id, groupBy, timeRangeDays, legendType, metricType } = config;
     
     if (!data || data.length === 0) {
         container.html('<p class="no-data">No data available</p>');
@@ -27,16 +27,59 @@ function createChart(config) {
         .append('g')
         .attr('transform', `translate(${margin.left},${margin.top})`);
 
-    // Обрабатываем данные
-    let processedData = data
-        .map(d => ({
-            ...d,
-            timestamp: d.timestamp === "Unknown date" ? null : new Date(d.timestamp),
-            value: accessor(d),
-            safeGroup: createSafeClassName(d.group),
-            dateKey: d.timestamp ? new Date(d.timestamp).toDateString() : 'unknown'
-        }))
-        .filter(d => d.value !== null && d.value !== undefined && !isNaN(d.value) && d.timestamp);
+    // Обрабатываем данные - объединяем read и write
+    let processedData = [];
+    
+    if (metricType === 'iops') {
+        // Объединяем IOPS read и write
+        const iopsReadData = data.filter(d => d.metric === 'iops_read' || d.dataKey?.includes('iops_read'));
+        const iopsWriteData = data.filter(d => d.metric === 'iops_write' || d.dataKey?.includes('iops_write'));
+        
+        processedData = [
+            ...iopsReadData.map(d => ({
+                ...d,
+                timestamp: d.timestamp === "Unknown date" ? null : new Date(d.timestamp),
+                value: d.value,
+                safeGroup: createSafeClassName(d.group),
+                operation: 'read',
+                fullGroup: `${d.group} - read`
+            })),
+            ...iopsWriteData.map(d => ({
+                ...d,
+                timestamp: d.timestamp === "Unknown date" ? null : new Date(d.timestamp),
+                value: d.value,
+                safeGroup: createSafeClassName(d.group),
+                operation: 'write',
+                fullGroup: `${d.group} - write`
+            }))
+        ];
+    } else if (metricType === 'latency') {
+        // Объединяем Latency read и write
+        const latencyReadData = data.filter(d => d.metric === 'latency_read' || d.dataKey?.includes('latency_read'));
+        const latencyWriteData = data.filter(d => d.metric === 'latency_write' || d.dataKey?.includes('latency_write'));
+        
+        processedData = [
+            ...latencyReadData.map(d => ({
+                ...d,
+                timestamp: d.timestamp === "Unknown date" ? null : new Date(d.timestamp),
+                value: d.value,
+                safeGroup: createSafeClassName(d.group),
+                operation: 'read',
+                fullGroup: `${d.group} - read`
+            })),
+            ...latencyWriteData.map(d => ({
+                ...d,
+                timestamp: d.timestamp === "Unknown date" ? null : new Date(d.timestamp),
+                value: d.value,
+                safeGroup: createSafeClassName(d.group),
+                operation: 'write',
+                fullGroup: `${d.group} - write`
+            }))
+        ];
+    }
+
+    // Фильтруем некорректные данные
+    processedData = processedData.filter(d => d.value !== null && d.value !== undefined && !isNaN(d.value) && d.timestamp);
 
     // Фильтруем данные для больших временных диапазонов (15+ дней)
     if (timeRangeDays >= 15 && processedData.length > 0) {
@@ -48,9 +91,9 @@ function createChart(config) {
         return null;
     }
 
-    // Группируем данные
-    const dataByGroup = d3.group(processedData, d => d.group);
-    const groups = Array.from(dataByGroup.keys());
+    // Группируем данные по полной группе (group + operation)
+    const dataByFullGroup = d3.group(processedData, d => d.fullGroup);
+    const fullGroups = Array.from(dataByFullGroup.keys());
 
     // Создаем шкалы
     const xScale = d3.scaleTime()
@@ -86,7 +129,7 @@ function createChart(config) {
 
     // Настраиваем формат оси Y
     const formatYAxis = (value) => {
-        if (title.toLowerCase().includes('iops')) {
+        if (metricType === 'iops') {
             if (value >= 1000000) return (value / 1000000).toFixed(1) + 'M';
             if (value >= 1000) return (value / 1000).toFixed(1) + 'k';
             return value.toFixed(0);
@@ -116,6 +159,17 @@ function createChart(config) {
             .attr('font-weight', axisFontWeight)
             .attr('text-anchor', 'middle')
             .attr('dy', '1em'));
+
+    // Добавляем заголовок оси X
+    svg.append('text')
+        .attr('transform', `translate(${width / 2},${height + 45})`)
+        .attr('text-anchor', 'middle')
+        .attr('fill', axisColor)
+        .attr('font-family', axisFontFamily)
+        .attr('font-size', '14px')
+        .attr('font-weight', '600')
+        .attr('letter-spacing', '0.5px')
+        .text('Time');
 
     // РИСУЕМ ОСЬ Y С УЛУЧШЕННОЙ ТИПОГРАФИКОЙ
     const yAxisGroup = svg.append('g')
@@ -147,9 +201,9 @@ function createChart(config) {
         .attr('letter-spacing', '0.5px');
 
     // Устанавливаем текст в зависимости от типа метрики
-    if (title.toLowerCase().includes('iops')) {
-        yAxisLabel.text('IOPS');
-    } else if (title.toLowerCase().includes('latency')) {
+    if (metricType === 'iops') {
+        yAxisLabel.text('Performance (kIOPS)');
+    } else if (metricType === 'latency') {
         yAxisLabel.text('Latency (ms)');
     } else {
         yAxisLabel.text(yLabel);
@@ -199,62 +253,67 @@ function createChart(config) {
 
     // Рисуем линии и точки
     const chartState = {
-        groups: groups,
+        groups: Array.from(new Set(processedData.map(d => d.group))), // Только группы без операций
+        fullGroups: fullGroups, // Полные группы с операциями
         lines: new Map(),
         dots: new Map(),
-        visibleGroups: new Set(groups)
+        visibleFullGroups: new Set(fullGroups) // Показываем все по умолчанию
     };
 
-    groups.forEach((groupName, groupIndex) => {
-        const safeGroupName = createSafeClassName(groupName);
-        const groupData = dataByGroup.get(groupName)
+    fullGroups.forEach((fullGroup, groupIndex) => {
+        const groupData = dataByFullGroup.get(fullGroup)
             .sort((a, b) => a.timestamp - b.timestamp);
 
         if (groupData.length === 0) return;
 
-        // Рисуем линию
+        const operation = groupData[0].operation;
+        const baseGroup = groupData[0].group;
+        const baseGroupIndex = Array.from(chartState.groups).indexOf(baseGroup);
+
+        // Рисуем линию с стилем операции
         const linePath = svg.append('path')
             .datum(groupData)
-            .attr('class', `line line-${safeGroupName}`)
+            .attr('class', `line line-${createSafeClassName(fullGroup)}`)
             .attr('d', line)
-            .style('stroke', getColor(groupIndex))
-            .style('stroke-width', 3)
+            .style('stroke', getColor(baseGroupIndex))
+            .style('stroke-width', getOperationStyle(operation).strokeWidth)
+            .style('stroke-dasharray', getOperationStyle(operation).strokeDasharray)
             .style('fill', 'none')
             .style('stroke-linecap', 'round');
 
-        chartState.lines.set(groupName, linePath);
+        chartState.lines.set(fullGroup, linePath);
 
         // Рисуем точки только если мало данных или короткий диапазон
         const showDots = processedData.length < 50 || timeRangeDays < 15;
         
         if (showDots) {
-            const dots = svg.selectAll(`.dot-${safeGroupName}`)
+            const dots = svg.selectAll(`.dot-${createSafeClassName(fullGroup)}`)
                 .data(groupData)
                 .enter()
                 .append('circle')
-                .attr('class', `dot dot-${safeGroupName}`)
+                .attr('class', `dot dot-${createSafeClassName(fullGroup)}`)
                 .attr('cx', d => xScale(d.timestamp))
                 .attr('cy', d => yScale(d.value))
-                .attr('r', 4)
-                .style('fill', getColor(groupIndex))
+                .attr('r', 3)
+                .style('fill', getColor(baseGroupIndex))
                 .style('stroke', '#fff')
-                .style('stroke-width', 2)
+                .style('stroke-width', 1.5)
                 .style('cursor', 'pointer')
                 .style('transition', 'all 0.3s ease');
 
-            chartState.dots.set(groupName, dots);
+            chartState.dots.set(fullGroup, dots);
 
             // Добавляем взаимодействие
             dots.on('mouseover', function(event, d) {
                     d3.select(this)
-                        .attr('r', 6)
-                        .style('stroke-width', 3);
+                        .attr('r', 5)
+                        .style('stroke-width', 2);
                     showTooltip(event, d, title, accessor, groupBy, timeRangeDays);
                 })
                 .on('mouseout', function(event, d) {
                     d3.select(this)
-                        .attr('r', 4)
-                        .style('stroke-width', 2);
+                        .attr('r', 3)
+                        .style('stroke-width', 1.5);
                     hideTooltip();
                 })
                 .on('click', function(event, d) {
@@ -266,32 +325,17 @@ function createChart(config) {
     });
 
     // Функция для обновления видимости
-    chartState.updateVisibility = function(visibleGroups) {
-        groups.forEach(groupName => {
-            const isVisible = visibleGroups.has(groupName);
-            const safeGroupName = createSafeClassName(groupName);
-            const line = chartState.lines.get(groupName);
-            const dots = chartState.dots.get(groupName);
-
+    chartState.updateVisibility = function(visibleFullGroups) {
+        fullGroups.forEach(fullGroup => {
+            const isVisible = visibleFullGroups.has(fullGroup);
+            const line = chartState.lines.get(fullGroup);
+            const dots = chartState.dots.get(fullGroup);
+            
             if (line) {
-                if (isVisible) {
-                    // Активная линия - жирная и сплошная
-                    line.style('opacity', 1)
-                        .style('stroke-width', 3)
-                        .style('stroke-dasharray', 'none')
-                        .style('filter', 'none');
-                } else {
-                    // Отключенная линия - тонкая, пунктирная и серая
-                    line.style('opacity', 0.1)
-                        .style('stroke-width', 2)
-                        .style('stroke-dasharray', '5,3')
-                        .style('filter', 'grayscale(0.2)');
-                }
+                line.style('opacity', isVisible ? 1 : 0.3);
             }
             if (dots) {
-                dots.style('opacity', isVisible ? 1 : 0.7)
-                    .style('fill-opacity', isVisible ? 1 : 0.7)
-                    .style('filter', isVisible ? 'none' : 'grayscale(0.7)');
+                dots.style('opacity', isVisible ? 1 : 0.3);
             }
         });
     };
@@ -302,9 +346,9 @@ function createChart(config) {
 // Функция для фильтрации данных при больших временных диапазонах
 function filterDataForLargeTimeRange(data) {
     const filteredData = [];
-    const groupsData = d3.group(data, d => d.group);
+    const groupsData = d3.group(data, d => d.fullGroup);
     
-    groupsData.forEach((groupData, groupName) => {
+    groupsData.forEach((groupData, fullGroup) => {
         // Группируем по дням
         const dailyGroups = d3.group(groupData, d => 
             new Date(d.timestamp).toDateString()
