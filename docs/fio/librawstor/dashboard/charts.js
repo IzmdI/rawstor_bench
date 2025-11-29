@@ -274,13 +274,24 @@ function createChart(config) {
             const dots = chartState.dots.get(groupName);
 
             if (line) {
-                line.style('opacity', isVisible ? 1 : 0.6) // Изменили с 0.3 на 0.6
-                    .style('stroke-width', isVisible ? 3 : 2)
-                    .style('stroke-dasharray', isVisible ? 'none' : '5,3'); // Добавили пунктир для отключенных
+                if (isVisible) {
+                    // Активная линия - жирная и сплошная
+                    line.style('opacity', 1)
+                        .style('stroke-width', 3)
+                        .style('stroke-dasharray', 'none')
+                        .style('filter', 'none');
+                } else {
+                    // Отключенная линия - тонкая, пунктирная и серая
+                    line.style('opacity', 0.8)
+                        .style('stroke-width', 2)
+                        .style('stroke-dasharray', '5,3')
+                        .style('filter', 'grayscale(0.7)');
+                }
             }
             if (dots) {
-                dots.style('opacity', isVisible ? 1 : 0.6) // Изменили с 0.3 на 0.6
-                    .style('fill-opacity', isVisible ? 1 : 0.6);
+                dots.style('opacity', isVisible ? 1 : 0.7)
+                    .style('fill-opacity', isVisible ? 1 : 0.7)
+                    .style('filter', isVisible ? 'none' : 'grayscale(0.7)');
             }
         });
     };
