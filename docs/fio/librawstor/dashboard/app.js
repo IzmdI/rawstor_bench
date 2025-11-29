@@ -23,8 +23,8 @@ class DashboardApp {
         
         try {
             await this.loadData();
-            this.collectGroups();
             this.createCharts();
+            this.collectGroups();
             this.createLegends();
             this.setupEventListeners();
             this.updateDataInfo();
@@ -38,40 +38,38 @@ class DashboardApp {
     async loadData() {
         this.currentData = await this.dataLoader.loadData();
         console.log('Data loaded successfully');
-        
-        // Показываем все группы по умолчанию
-        this.updateVisibleGroups();
     }
 
+    // Собираем группы отдельно для конфигураций и веток
     collectGroups() {
         this.configGroups.clear();
         this.branchGroups.clear();
-
+        
         // Собираем группы из графиков с конфигурациями
         const configCharts = [
             'chart-iops-read-config', 'chart-iops-write-config',
             'chart-latency-read-config', 'chart-latency-write-config'
         ];
-
+        
         const branchCharts = [
             'chart-iops-read-branch', 'chart-iops-write-branch',
             'chart-latency-read-branch', 'chart-latency-write-branch'
         ];
-
+        
         configCharts.forEach(chartId => {
             const chart = this.charts.get(chartId);
             if (chart && chart.groups) {
                 chart.groups.forEach(group => this.configGroups.add(group));
             }
         });
-
+        
         branchCharts.forEach(chartId => {
             const chart = this.charts.get(chartId);
             if (chart && chart.groups) {
                 chart.groups.forEach(group => this.branchGroups.add(group));
             }
         });
-
+        
         // Показываем все группы по умолчанию
         this.configGroups.forEach(group => this.visibleConfigs.add(group));
         this.branchGroups.forEach(group => this.visibleBranches.add(group));
@@ -91,7 +89,8 @@ class DashboardApp {
                 yLabel: 'kIOPS',
                 dataKey: 'iops_read_by_config',
                 groupBy: 'config',
-                timeRangeDays: timeRangeDays
+                timeRangeDays: timeRangeDays,
+                legendType: 'config'
             },
             {
                 id: 'chart-iops-write-config', 
@@ -99,7 +98,8 @@ class DashboardApp {
                 yLabel: 'kIOPS',
                 dataKey: 'iops_write_by_config',
                 groupBy: 'config',
-                timeRangeDays: timeRangeDays
+                timeRangeDays: timeRangeDays,
+                legendType: 'config'
             },
             {
                 id: 'chart-latency-read-config',
@@ -107,23 +107,26 @@ class DashboardApp {
                 yLabel: 'ms',
                 dataKey: 'latency_read_by_config',
                 groupBy: 'config',
-                timeRangeDays: timeRangeDays
+                timeRangeDays: timeRangeDays,
+                legendType: 'config'
             },
             {
                 id: 'chart-latency-write-config',
-                title: 'Latency Write',
+                title: 'Latency Write', 
                 yLabel: 'ms',
                 dataKey: 'latency_write_by_config',
                 groupBy: 'config',
-                timeRangeDays: timeRangeDays
+                timeRangeDays: timeRangeDays,
+                legendType: 'config'
             },
             {
                 id: 'chart-iops-read-branch',
                 title: 'IOPS Read',
-                yLabel: 'kIOPS',
+                yLabel: 'kIOPS', 
                 dataKey: 'iops_read_by_branch',
                 groupBy: 'branch',
-                timeRangeDays: timeRangeDays
+                timeRangeDays: timeRangeDays,
+                legendType: 'branch'
             },
             {
                 id: 'chart-iops-write-branch',
@@ -131,7 +134,8 @@ class DashboardApp {
                 yLabel: 'kIOPS',
                 dataKey: 'iops_write_by_branch',
                 groupBy: 'branch',
-                timeRangeDays: timeRangeDays
+                timeRangeDays: timeRangeDays,
+                legendType: 'branch'
             },
             {
                 id: 'chart-latency-read-branch',
@@ -139,7 +143,8 @@ class DashboardApp {
                 yLabel: 'ms',
                 dataKey: 'latency_read_by_branch',
                 groupBy: 'branch',
-                timeRangeDays: timeRangeDays
+                timeRangeDays: timeRangeDays,
+                legendType: 'branch'
             },
             {
                 id: 'chart-latency-write-branch',
@@ -147,7 +152,8 @@ class DashboardApp {
                 yLabel: 'ms',
                 dataKey: 'latency_write_by_branch',
                 groupBy: 'branch',
-                timeRangeDays: timeRangeDays
+                timeRangeDays: timeRangeDays,
+                legendType: 'branch'
             }
         ];
 
@@ -181,7 +187,7 @@ class DashboardApp {
     createConfigLegend() {
         const legendContainer = d3.select('#legend-config');
         legendContainer.html('');
-
+        
         if (this.configGroups.size === 0) {
             legendContainer.html('<p style="color: #6c757d; font-style: italic;">No configuration data</p>');
             return;
@@ -208,7 +214,7 @@ class DashboardApp {
     createBranchLegend() {
         const legendContainer = d3.select('#legend-branch');
         legendContainer.html('');
-
+        
         if (this.branchGroups.size === 0) {
             legendContainer.html('<p style="color: #6c757d; font-style: italic;">No branch data</p>');
             return;
@@ -238,7 +244,7 @@ class DashboardApp {
         } else {
             this.visibleConfigs.add(groupName);
         }
-
+        
         this.updateConfigChartsVisibility();
         this.updateConfigLegendAppearance();
     }
@@ -249,17 +255,17 @@ class DashboardApp {
         } else {
             this.visibleBranches.add(groupName);
         }
-
+        
         this.updateBranchChartsVisibility();
         this.updateBranchLegendAppearance();
     }
 
-     updateConfigChartsVisibility() {
+    updateConfigChartsVisibility() {
         const configCharts = [
             'chart-iops-read-config', 'chart-iops-write-config',
             'chart-latency-read-config', 'chart-latency-write-config'
         ];
-
+        
         configCharts.forEach(chartId => {
             const chart = this.charts.get(chartId);
             if (chart && chart.updateVisibility) {
@@ -273,7 +279,7 @@ class DashboardApp {
             'chart-iops-read-branch', 'chart-iops-write-branch',
             'chart-latency-read-branch', 'chart-latency-write-branch'
         ];
-
+        
         branchCharts.forEach(chartId => {
             const chart = this.charts.get(chartId);
             if (chart && chart.updateVisibility) {
@@ -290,34 +296,6 @@ class DashboardApp {
     updateBranchLegendAppearance() {
         d3.selectAll('#legend-branch .legend-item')
             .classed('disabled', d => !this.visibleBranches.has(d));
-    }
-
-    updateChartVisibility() {
-        this.charts.forEach((chart, chartId) => {
-            if (chart.updateVisibility) {
-                chart.updateVisibility(this.visibleGroups);
-            }
-        });
-    }
-
-    updateLegendAppearance() {
-        d3.selectAll('.legend-item')
-            .classed('hidden', d => !this.visibleGroups.has(d))
-            .style('opacity', d => this.visibleGroups.has(d) ? 1 : 0.7) // Изменили с 0.6 на 0.7
-            .select('.legend-color')
-            .style('opacity', d => this.visibleGroups.has(d) ? 1 : 0.7);
-    }
-
-    updateVisibleGroups() {
-        // Автоматически показываем группы которые есть в данных
-        this.visibleGroups.clear();
-        this.charts.forEach((chart, chartId) => {
-            if (chart.groups) {
-                chart.groups.forEach(group => this.visibleGroups.add(group));
-            }
-        });
-        this.updateChartVisibility();
-        this.updateLegendAppearance();
     }
 
     updateDataInfo() {
@@ -356,7 +334,14 @@ class DashboardApp {
             this.showLoading(true);
             await this.loadData();
             this.charts.clear();
+            this.visibleConfigs.clear();
+            this.visibleBranches.clear();
+            this.configGroups.clear();
+            this.branchGroups.clear();
+            
             this.createCharts();
+            this.collectGroups();
+            this.createLegends();
             this.updateDataInfo();
             this.showLoading(false);
         } catch (error) {
