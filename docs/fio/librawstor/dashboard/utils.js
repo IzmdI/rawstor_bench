@@ -10,48 +10,92 @@ function getColor(index) {
     return colorPalette[index % colorPalette.length];
 }
 
-function formatDate(date) {
+function formatDate(date, timeRangeDays = 7) {
     if (!date) return 'Unknown date';
     if (typeof date === 'string' && date === "Unknown date") return date;
-    
-    const d = new Date(date);
-    return isNaN(d.getTime()) ? 'Invalid date' : d.toLocaleDateString() + ' ' + d.toLocaleTimeString();
-}
 
-function formatNumber(value) {
-    if (value >= 1000000) {
-        return (value / 1000000).toFixed(1) + 'M';
-    } else if (value >= 1000) {
-        return (value / 1000).toFixed(1) + 'K';
-    } else if (value >= 1) {
-        return value.toFixed(1);
+    const d = new Date(date);
+    if (isNaN(d.getTime())) return 'Invalid date';
+
+    // Разные форматы в зависимости от временного диапазона
+    if (timeRangeDays < 15) {
+        // Для коротких диапазонов: часы:минуты день.месяц
+        return d.toLocaleTimeString('ru-RU', {
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: false
+        }) + ' ' + d.toLocaleDateString('ru-RU', {
+            day: '2-digit',
+            month: '2-digit'
+        });
     } else {
-        return value.toFixed(3);
+        // Для длинных диапазонов: день.месяц год
+        return d.toLocaleDateString('ru-RU', {
+            day: '2-digit',
+            month: '2-digit',
+            year: '2-digit'
+        });
     }
 }
 
 function formatMetricValue(value, metricType) {
-    const formatted = formatNumber(value);
-    return metricType.includes('iops') ? `${formatted} IOPS` : `${formatted} ms`;
+    if (metricType.toLowerCase().includes('iops')) {
+        // Форматируем IOPS в kIOPS/MIOPS
+        if (value >= 1000000) {
+            return (value / 1000000).toFixed(2) + ' MIOPS';
+        } else if (value >= 1000) {
+            return (value / 1000).toFixed(1) + ' kIOPS';
+        } else {
+            return value.toFixed(0) + ' IOPS';
+        }
+    } else {
+        // Для latency
+        if (value >= 1000) {
+            return (value / 1000).toFixed(2) + ' s';
+        } else if (value >= 1) {
+            return value.toFixed(2) + ' ms';
+        } else {
+            return value.toFixed(3) + ' ms';
+        }
+    }
 }
 
-function showTooltip(event, data, chartTitle, accessor, groupBy) {
+function showTooltip(event, data, chartTitle, accessor, groupBy, timeRangeDays = 7) {
     const tooltip = d3.select('#tooltip');
     const value = accessor(data);
-    
+
     const tooltipHtml = `
-        <strong>${data.group}</strong><br/>
-        <strong>${chartTitle}:</strong> ${formatMetricValue(value, chartTitle.toLowerCase())}<br/>
-        <strong>Date:</strong> ${formatDate(data.timestamp)}<br/>
-        ${groupBy === 'config' && data.branch ? `<strong>Branch:</strong> ${data.branch}<br/>` : ''}
-        ${groupBy === 'branch' && data.config ? `<strong>Config:</strong> ${data.config}<br/>` : ''}
-        ${data.commit_sha ? `<strong>Commit:</strong> ${data.commit_sha.substring(0, 8)}<br/>` : ''}
-        <em>Click to view test details</em>
+        <div class="tooltip-content">
+            <div class="tooltip-header">
+                <strong>${data.group}</strong>
+            </div>
+            <div class="tooltip-metric">
+                <strong>${chartTitle}:</strong> ${formatMetricValue(value, chartTitle)}
+            </div>
+            <div class="tooltip-date">
+                <strong>Date:</strong> ${formatDate(data.timestamp, timeRangeDays)}
+            </div>
+            ${groupBy === 'config' && data.branch ? `
+            <div class="tooltip-branch">
+                <strong>Branch:</strong> ${data.branch}
+            </div>` : ''}
+            ${groupBy === 'branch' && data.config ? `
+            <div class="tooltip-config">
+                <strong>Config:</strong> ${data.config}
+            </div>` : ''}
+            ${data.commit_sha ? `
+            <div class="tooltip-commit">
+                <strong>Commit:</strong> ${data.commit_sha.substring(0, 8)}
+            </div>` : ''}
+            <div class="tooltip-hint">
+                <em>Click to view test details</em>
+            </div>
+        </div>
     `;
-    
+
     tooltip
         .style('opacity', 1)
-        .style('left', (event.pageX + 10) + 'px')
+        .style('left', (event.pageX + 15) + 'px')
         .style('top', (event.pageY - 28) + 'px')
         .html(tooltipHtml);
 }

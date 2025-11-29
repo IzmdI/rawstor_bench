@@ -50,56 +50,64 @@ class DashboardApp {
                 title: 'IOPS Read',
                 yLabel: 'IOPS',
                 dataKey: 'iops_read_by_config',
-                groupBy: 'config'
+                groupBy: 'config',
+                timeRangeDays: timeRangeDays
             },
             {
-                id: 'chart-iops-write-config', 
+                id: 'chart-iops-write-config',
                 title: 'IOPS Write',
                 yLabel: 'IOPS',
                 dataKey: 'iops_write_by_config',
-                groupBy: 'config'
+                groupBy: 'config',
+                timeRangeDays: timeRangeDays
             },
             {
                 id: 'chart-latency-read-config',
                 title: 'Latency Read',
                 yLabel: 'ms',
                 dataKey: 'latency_read_by_config',
-                groupBy: 'config'
+                groupBy: 'config',
+                timeRangeDays: timeRangeDays
             },
             {
                 id: 'chart-latency-write-config',
-                title: 'Latency Write', 
+                title: 'Latency Write',
                 yLabel: 'ms',
                 dataKey: 'latency_write_by_config',
-                groupBy: 'config'
+                groupBy: 'config',
+                timeRangeDays: timeRangeDays
             },
             {
                 id: 'chart-iops-read-branch',
                 title: 'IOPS Read',
-                yLabel: 'IOPS', 
+                yLabel: 'IOPS',
                 dataKey: 'iops_read_by_branch',
-                groupBy: 'branch'
+                groupBy: 'branch',
+                timeRangeDays: timeRangeDays
             },
             {
                 id: 'chart-iops-write-branch',
                 title: 'IOPS Write',
                 yLabel: 'IOPS',
                 dataKey: 'iops_write_by_branch',
-                groupBy: 'branch'
+                groupBy: 'branch',
+                timeRangeDays: timeRangeDays
             },
             {
                 id: 'chart-latency-read-branch',
                 title: 'Latency Read',
                 yLabel: 'ms',
                 dataKey: 'latency_read_by_branch',
-                groupBy: 'branch'
+                groupBy: 'branch',
+                timeRangeDays: timeRangeDays
             },
             {
                 id: 'chart-latency-write-branch',
                 title: 'Latency Write',
                 yLabel: 'ms',
                 dataKey: 'latency_write_by_branch',
-                groupBy: 'branch'
+                groupBy: 'branch',
+                timeRangeDays: timeRangeDays
             }
         ];
 
@@ -113,7 +121,8 @@ class DashboardApp {
                     data: chartData,
                     accessor: d => d.value,
                     id: config.id,
-                    groupBy: config.groupBy
+                    groupBy: config.groupBy,
+                    timeRangeDays: timeRangeDays // ← Передаем информацию о временном диапазоне
                 });
                 this.charts.set(config.id, chart);
             } else {
