@@ -1,4 +1,4 @@
-// Цветовая палитра для групп и операций
+// Цветовая палитра для групп
 const colorPalette = [
     '#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd',
     '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf',
@@ -6,30 +6,22 @@ const colorPalette = [
     '#c49c94', '#f7b6d2', '#c7c7c7', '#dbdb8d', '#9edae5'
 ];
 
-// Цвета для операций (read/write)
-const operationColors = {
-    'read': '#1f77b4',  // синий для read
-    'write': '#ff7f0e'  // оранжевый для write
-};
-
-// Стили линий для операций
+// Стили линий для операций (теперь одного цвета, но разные стили)
 const operationStyles = {
     'read': {
         strokeDasharray: 'none',
-        strokeWidth: 2.5
+        strokeWidth: 2.5,
+        opacity: 1
     },
     'write': {
         strokeDasharray: '5,3',
-        strokeWidth: 2
+        strokeWidth: 2,
+        opacity: 1
     }
 };
 
 function getColor(index) {
     return colorPalette[index % colorPalette.length];
-}
-
-function getOperationColor(operation) {
-    return operationColors[operation] || '#666666';
 }
 
 function getOperationStyle(operation) {
@@ -147,6 +139,7 @@ style.textContent = `
         font-family: 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
         font-size: 14px;
     }
+    
     .error {
         background-color: #ffeeee;
         border: 1px solid #ffcccc;
@@ -155,6 +148,37 @@ style.textContent = `
         margin: 20px;
         text-align: center;
         font-family: 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+    }
+    
+    .operation-toggle {
+        display: flex;
+        gap: 10px;
+        margin-bottom: 15px;
+        padding: 10px;
+        background: #f8f9fa;
+        border-radius: 6px;
+        border: 1px solid #e9ecef;
+    }
+    
+    .operation-toggle-btn {
+        padding: 6px 12px;
+        border: 1px solid #dee2e6;
+        border-radius: 4px;
+        background: white;
+        cursor: pointer;
+        font-size: 12px;
+        font-weight: 500;
+        transition: all 0.2s ease;
+    }
+    
+    .operation-toggle-btn.active {
+        background: #1f77b4;
+        color: white;
+        border-color: #1f77b4;
+    }
+    
+    .operation-toggle-btn:not(.active):hover {
+        background: #e9ecef;
     }
 `;
 document.head.appendChild(style);

@@ -94,6 +94,7 @@ function createChart(config) {
     // Группируем данные по полной группе (group + operation)
     const dataByFullGroup = d3.group(processedData, d => d.fullGroup);
     const fullGroups = Array.from(dataByFullGroup.keys());
+    const baseGroups = Array.from(new Set(processedData.map(d => d.group)));
 
     // Создаем шкалы
     const xScale = d3.scaleTime()
@@ -253,11 +254,11 @@ function createChart(config) {
 
     // Рисуем линии и точки
     const chartState = {
-        groups: Array.from(new Set(processedData.map(d => d.group))), // Только группы без операций
+        groups: baseGroups, // Только базовые группы
         fullGroups: fullGroups, // Полные группы с операциями
         lines: new Map(),
         dots: new Map(),
-        visibleFullGroups: new Set(fullGroups) // Показываем все по умолчанию
+        visibleFullGroups: new Set(fullGroups.filter(fg => fg.includes('read'))) // По умолчанию только read
     };
 
     fullGroups.forEach((fullGroup, groupIndex) => {
@@ -268,18 +269,19 @@ function createChart(config) {
 
         const operation = groupData[0].operation;
         const baseGroup = groupData[0].group;
-        const baseGroupIndex = Array.from(chartState.groups).indexOf(baseGroup);
+        const baseGroupIndex = baseGroups.indexOf(baseGroup);
 
-        // Рисуем линию с стилем операции
+        // Рисуем линию с стилем операции (один цвет для группы)
         const linePath = svg.append('path')
             .datum(groupData)
             .attr('class', `line line-${createSafeClassName(fullGroup)}`)
             .attr('d', line)
-            .style('stroke', getColor(baseGroupIndex))
+            .style('stroke', getColor(baseGroupIndex)) // Один цвет для всей группы
             .style('stroke-width', getOperationStyle(operation).strokeWidth)
             .style('stroke-dasharray', getOperationStyle(operation).strokeDasharray)
             .style('fill', 'none')
-            .style('stroke-linecap', 'round');
+            .style('stroke-linecap', 'round')
+            .style('opacity', chartState.visibleFullGroups.has(fullGroup) ? 1 : 0);
 
         chartState.lines.set(fullGroup, linePath);
 
@@ -295,29 +297,34 @@ function createChart(config) {
                 .attr('cx', d => xScale(d.timestamp))
                 .attr('cy', d => yScale(d.value))
                 .attr('r', 3)
-                .style('fill', getColor(baseGroupIndex))
+                .style('fill', getColor(baseGroupIndex)) // Один цвет для всей группы
                 .style('stroke', '#fff')
                 .style('stroke-width', 1.5)
                 .style('cursor', 'pointer')
-                .style('transition', 'all 0.3s ease');
+                .style('transition', 'all 0.3s ease')
+                .style('opacity', chartState.visibleFullGroups.has(fullGroup) ? 1 : 0);
 
             chartState.dots.set(fullGroup, dots);
 
             // Добавляем взаимодействие
             dots.on('mouseover', function(event, d) {
-                    d3.select(this)
-                        .attr('r', 5)
-                        .style('stroke-width', 2);
-                    showTooltip(event, d, title, accessor, groupBy, timeRangeDays);
+                    if (chartState.visibleFullGroups.has(fullGroup)) {
+                        d3.select(this)
+                            .attr('r', 5)
+                            .style('stroke-width', 2);
+                        showTooltip(event, d, title, accessor, groupBy, timeRangeDays);
+                    }
                 })
                 .on('mouseout', function(event, d) {
-                    d3.select(this)
-                        .attr('r', 3)
-                        .style('stroke-width', 1.5);
-                    hideTooltip();
+                    if (chartState.visibleFullGroups.has(fullGroup)) {
+                        d3.select(this)
+                            .attr('r', 3)
+                            .style('stroke-width', 1.5);
+                        hideTooltip();
+                    }
                 })
                 .on('click', function(event, d) {
-                    if (d.test_url) {
+                    if (chartState.visibleFullGroups.has(fullGroup) && d.test_url) {
                         window.open(d.test_url, '_blank');
                     }
                 });
@@ -332,10 +339,10 @@ function createChart(config) {
             const dots = chartState.dots.get(fullGroup);
             
             if (line) {
-                line.style('opacity', isVisible ? 1 : 0.3);
+                line.style('opacity', isVisible ? 1 : 0);
             }
             if (dots) {
-                dots.style('opacity', isVisible ? 1 : 0.3);
+                dots.style('opacity', isVisible ? 1 : 0);
             }
         });
     };
