@@ -48,7 +48,7 @@ class DashboardApp {
         const chartsConfig = [
             {
                 id: 'chart-iops-read-config',
-                title: 'IOPS Read (by Config)',
+                title: 'IOPS Read',
                 yLabel: 'kIOPS',
                 dataKey: 'iops_read_by_config',
                 groupBy: 'config',
@@ -56,7 +56,7 @@ class DashboardApp {
             },
             {
                 id: 'chart-iops-write-config', 
-                title: 'IOPS Write (by Config)',
+                title: 'IOPS Write',
                 yLabel: 'kIOPS',
                 dataKey: 'iops_write_by_config',
                 groupBy: 'config',
@@ -64,7 +64,7 @@ class DashboardApp {
             },
             {
                 id: 'chart-latency-read-config',
-                title: 'Latency Read (by Config)',
+                title: 'Latency Read',
                 yLabel: 'ms',
                 dataKey: 'latency_read_by_config',
                 groupBy: 'config',
@@ -72,7 +72,7 @@ class DashboardApp {
             },
             {
                 id: 'chart-latency-write-config',
-                title: 'Latency Write (by Config)', 
+                title: 'Latency Write',
                 yLabel: 'ms',
                 dataKey: 'latency_write_by_config',
                 groupBy: 'config',
@@ -80,15 +80,15 @@ class DashboardApp {
             },
             {
                 id: 'chart-iops-read-branch',
-                title: 'IOPS Read (by Branch)',
-                yLabel: 'kIOPS', 
+                title: 'IOPS Read',
+                yLabel: 'kIOPS',
                 dataKey: 'iops_read_by_branch',
                 groupBy: 'branch',
                 timeRangeDays: timeRangeDays
             },
             {
                 id: 'chart-iops-write-branch',
-                title: 'IOPS Write (by Branch)',
+                title: 'IOPS Write',
                 yLabel: 'kIOPS',
                 dataKey: 'iops_write_by_branch',
                 groupBy: 'branch',
@@ -96,7 +96,7 @@ class DashboardApp {
             },
             {
                 id: 'chart-latency-read-branch',
-                title: 'Latency Read (by Branch)',
+                title: 'Latency Read',
                 yLabel: 'ms',
                 dataKey: 'latency_read_by_branch',
                 groupBy: 'branch',
@@ -104,7 +104,7 @@ class DashboardApp {
             },
             {
                 id: 'chart-latency-write-branch',
-                title: 'Latency Write (by Branch)',
+                title: 'Latency Write',
                 yLabel: 'ms',
                 dataKey: 'latency_write_by_branch',
                 groupBy: 'branch',

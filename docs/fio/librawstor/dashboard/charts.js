@@ -117,17 +117,6 @@ function createChart(config) {
             .attr('text-anchor', 'middle')
             .attr('dy', '1em'));
 
-    // Добавляем заголовок оси X
-    // svg.append('text')
-    //     .attr('transform', `translate(${width / 2},${height + 45})`)
-    //     .attr('text-anchor', 'middle')
-    //     .attr('fill', axisColor)
-    //     .attr('font-family', axisFontFamily)
-    //     .attr('font-size', '14px')
-    //     .attr('font-weight', '600')
-    //     .attr('letter-spacing', '0.5px')
-    //     .text('Time');
-
     // РИСУЕМ ОСЬ Y С УЛУЧШЕННОЙ ТИПОГРАФИКОЙ
     const yAxisGroup = svg.append('g')
         .call(yAxis)
@@ -159,7 +148,7 @@ function createChart(config) {
 
     // Устанавливаем текст в зависимости от типа метрики
     if (title.toLowerCase().includes('iops')) {
-        yAxisLabel.text('Performance (kIOPS)');
+        yAxisLabel.text('IOPS');
     } else if (title.toLowerCase().includes('latency')) {
         yAxisLabel.text('Latency (ms)');
     } else {
