@@ -15,9 +15,9 @@ function createChart(config) {
 
     // Адаптивные размеры
     const containerWidth = container.node().getBoundingClientRect().width || 800;
-    const margin = { top: 30, right: 60, bottom: 50, left: 80 };
+    const margin = { top: 40, right: 80, bottom: 60, left: 90 }; // Увеличили отступы для текста
     const width = Math.max(400, containerWidth - margin.left - margin.right);
-    const height = 400 - margin.top - margin.bottom;
+    const height = 450 - margin.top - margin.bottom; // Увеличили высоту
 
     const svg = container.append('svg')
         .attr('width', '100%')
@@ -27,7 +27,7 @@ function createChart(config) {
         .append('g')
         .attr('transform', `translate(${margin.left},${margin.top})`);
 
-    // Обрабатываем данные
+    // Обрабатываем данные (существующий код)
     let processedData = data
         .map(d => ({
             ...d,
@@ -38,7 +38,6 @@ function createChart(config) {
         }))
         .filter(d => d.value !== null && d.value !== undefined && !isNaN(d.value) && d.timestamp);
 
-    // Фильтруем данные для больших временных диапазонов (15+ дней)
     if (timeRangeDays >= 15 && processedData.length > 0) {
         processedData = filterDataForLargeTimeRange(processedData);
     }
@@ -52,39 +51,45 @@ function createChart(config) {
     const dataByGroup = d3.group(processedData, d => d.group);
     const groups = Array.from(dataByGroup.keys());
 
-    // Создаем шкалы с увеличенным масштабом
+    // Создаем шкалы
     const xScale = d3.scaleTime()
         .domain(d3.extent(processedData, d => d.timestamp))
         .range([0, width])
         .nice();
 
-    // Увеличиваем масштаб Y шкалы для лучшей видимости
     const yMin = d3.min(processedData, d => d.value);
     const yMax = d3.max(processedData, d => d.value);
-    const yPadding = (yMax - yMin) * 0.1; // 10% padding
+    const yPadding = (yMax - yMin) * 0.1;
 
     const yScale = d3.scaleLinear()
         .domain([Math.max(0, yMin - yPadding), yMax + yPadding])
         .range([height, 0])
         .nice();
 
-    // Настраиваем формат оси X в зависимости от временного диапазона
+    // НАСТРОЙКИ ТИПОГРАФИКИ ДЛЯ ОСЕЙ
+    const axisFontFamily = "'Segoe UI', 'Helvetica Neue', Arial, sans-serif";
+    const axisFontSize = '13px';
+    const axisFontWeight = '500';
+    const axisColor = '#444';
+    const gridColor = '#f0f0f0';
+    const axisLineColor = '#ddd';
+
+    // Настраиваем формат оси X
     const xAxisFormat = timeRangeDays < 15 ?
-        d3.timeFormat('%H:%M %d.%m') : // Для коротких диапазонов: часы:минуты день.месяц
-        d3.timeFormat('%d.%m');        // Для длинных диапазонов: день.месяц
+        d3.timeFormat('%H:%M %d.%m') :
+        d3.timeFormat('%d.%m');
 
     const xAxis = d3.axisBottom(xScale)
-        .ticks(timeRangeDays < 15 ? 10 : 8) // Больше тиков для коротких диапазонов
+        .ticks(timeRangeDays < 15 ? 10 : 8)
         .tickFormat(xAxisFormat);
 
-    // Настраиваем формат оси Y для IOPS
+    // Настраиваем формат оси Y
     const formatYAxis = (value) => {
         if (title.toLowerCase().includes('iops')) {
             if (value >= 1000000) return (value / 1000000).toFixed(1) + 'M';
             if (value >= 1000) return (value / 1000).toFixed(1) + 'k';
             return value.toFixed(0);
         } else {
-            // Для latency оставляем обычный формат
             return value >= 1 ? value.toFixed(1) : value.toFixed(3);
         }
     };
@@ -93,30 +98,74 @@ function createChart(config) {
         .ticks(8)
         .tickFormat(formatYAxis);
 
-    // Рисуем оси с улучшенным стилем
-    svg.append('g')
+    // РИСУЕМ ОСЬ X С УЛУЧШЕННОЙ ТИПОГРАФИКОЙ
+    const xAxisGroup = svg.append('g')
         .attr('transform', `translate(0,${height})`)
         .call(xAxis)
-        .call(g => g.select('.domain').attr('stroke', '#ccc'))
-        .call(g => g.selectAll('.tick line').attr('stroke', '#e0e0e0'))
-        .call(g => g.selectAll('.tick text').attr('fill', '#666').attr('font-size', '11px'));
+        .call(g => g.select('.domain')
+            .attr('stroke', axisLineColor)
+            .attr('stroke-width', 1.5))
+        .call(g => g.selectAll('.tick line')
+            .attr('stroke', axisLineColor)
+            .attr('stroke-width', 1))
+        .call(g => g.selectAll('.tick text')
+            .attr('fill', axisColor)
+            .attr('font-family', axisFontFamily)
+            .attr('font-size', axisFontSize)
+            .attr('font-weight', axisFontWeight)
+            .attr('text-anchor', 'middle')
+            .attr('dy', '1em'));
 
-    svg.append('g')
+    // Добавляем заголовок оси X
+    svg.append('text')
+        .attr('transform', `translate(${width / 2},${height + 45})`)
+        .attr('text-anchor', 'middle')
+        .attr('fill', axisColor)
+        .attr('font-family', axisFontFamily)
+        .attr('font-size', '14px')
+        .attr('font-weight', '600')
+        .attr('letter-spacing', '0.5px')
+        .text('Time');
+
+    // РИСУЕМ ОСЬ Y С УЛУЧШЕННОЙ ТИПОГРАФИКОЙ
+    const yAxisGroup = svg.append('g')
         .call(yAxis)
-        .call(g => g.select('.domain').attr('stroke', '#ccc'))
-        .call(g => g.selectAll('.tick line').attr('stroke', '#e0e0e0'))
-        .call(g => g.selectAll('.tick text').attr('fill', '#666').attr('font-size', '11px'))
-        .append('text')
-        .attr('transform', 'rotate(-90)')
-        .attr('y', -60)
-        .attr('x', -height / 2)
-        .attr('dy', '0.71em')
-        .attr('fill', '#333')
-        .attr('font-weight', 'bold')
-        .attr('font-size', '12px')
-        .text(title.toLowerCase().includes('iops') ? 'kIOPS' : yLabel);
+        .call(g => g.select('.domain')
+            .attr('stroke', axisLineColor)
+            .attr('stroke-width', 1.5))
+        .call(g => g.selectAll('.tick line')
+            .attr('stroke', axisLineColor)
+            .attr('stroke-width', 1))
+        .call(g => g.selectAll('.tick text')
+            .attr('fill', axisColor)
+            .attr('font-family', axisFontFamily)
+            .attr('font-size', axisFontSize)
+            .attr('font-weight', axisFontWeight)
+            .attr('text-anchor', 'end')
+            .attr('dx', '-0.5em'));
 
-    // Улучшенная сетка
+    // Добавляем заголовок оси Y
+    const yAxisLabel = svg.append('text')
+        .attr('transform', 'rotate(-90)')
+        .attr('y', -70)
+        .attr('x', -height / 2)
+        .attr('text-anchor', 'middle')
+        .attr('fill', axisColor)
+        .attr('font-family', axisFontFamily)
+        .attr('font-size', '15px')
+        .attr('font-weight', '600')
+        .attr('letter-spacing', '0.5px');
+
+    // Устанавливаем текст в зависимости от типа метрики
+    if (title.toLowerCase().includes('iops')) {
+        yAxisLabel.text('Performance (kIOPS)');
+    } else if (title.toLowerCase().includes('latency')) {
+        yAxisLabel.text('Latency (ms)');
+    } else {
+        yAxisLabel.text(yLabel);
+    }
+
+    // УЛУЧШЕННАЯ СЕТКА
     svg.append('g')
         .attr('class', 'grid')
         .attr('transform', `translate(0,${height})`)
@@ -124,7 +173,10 @@ function createChart(config) {
             .tickSize(-height)
             .tickFormat('')
         )
-        .call(g => g.selectAll('.tick line').attr('stroke', '#f0f0f0').attr('stroke-dasharray', '2,2'));
+        .call(g => g.selectAll('.tick line')
+            .attr('stroke', gridColor)
+            .attr('stroke-width', 1)
+            .attr('stroke-dasharray', '3,3'));
 
     svg.append('g')
         .attr('class', 'grid')
@@ -132,15 +184,30 @@ function createChart(config) {
             .tickSize(-width)
             .tickFormat('')
         )
-        .call(g => g.selectAll('.tick line').attr('stroke', '#f0f0f0').attr('stroke-dasharray', '2,2'));
+        .call(g => g.selectAll('.tick line')
+            .attr('stroke', gridColor)
+            .attr('stroke-width', 1)
+            .attr('stroke-dasharray', '3,3'));
 
-    // Создаем line generator с плавными кривыми
+    // ДОБАВЛЯЕМ ЗАГОЛОВОК ГРАФИКА
+    svg.append('text')
+        .attr('x', width / 2)
+        .attr('y', -15)
+        .attr('text-anchor', 'middle')
+        .attr('fill', '#2c3e50')
+        .attr('font-family', "'Segoe UI', 'Helvetica Neue', Arial, sans-serif")
+        .attr('font-size', '16px')
+        .attr('font-weight', '600')
+        .attr('letter-spacing', '0.5px')
+        .text(title);
+
+    // Создаем line generator
     const line = d3.line()
         .x(d => xScale(d.timestamp))
         .y(d => yScale(d.value))
         .curve(d3.curveMonotoneX);
 
-    // Рисуем линии и точки для каждой группы
+    // Рисуем линии и точки (существующий код)
     const chartState = {
         groups: groups,
         lines: new Map(),
@@ -155,13 +222,13 @@ function createChart(config) {
 
         if (groupData.length === 0) return;
 
-        // Рисуем линию с тенью для лучшей видимости
+        // Рисуем линию
         const linePath = svg.append('path')
             .datum(groupData)
             .attr('class', `line line-${safeGroupName}`)
             .attr('d', line)
             .style('stroke', getColor(groupIndex))
-            .style('stroke-width', 3) // Более толстые линии
+            .style('stroke-width', 3)
             .style('fill', 'none')
             .style('stroke-linecap', 'round');
 
@@ -178,22 +245,26 @@ function createChart(config) {
                 .attr('class', `dot dot-${safeGroupName}`)
                 .attr('cx', d => xScale(d.timestamp))
                 .attr('cy', d => yScale(d.value))
-                .attr('r', 4) // Увеличиваем точки
+                .attr('r', 4)
                 .style('fill', getColor(groupIndex))
                 .style('stroke', '#fff')
                 .style('stroke-width', 2)
                 .style('cursor', 'pointer')
-                .style('transition', 'r 0.2s');
+                .style('transition', 'all 0.2s ease');
 
             chartState.dots.set(groupName, dots);
 
             // Добавляем взаимодействие
             dots.on('mouseover', function(event, d) {
-                    d3.select(this).attr('r', 6);
+                    d3.select(this)
+                        .attr('r', 6)
+                        .style('stroke-width', 3);
                     showTooltip(event, d, title, accessor, groupBy, timeRangeDays);
                 })
                 .on('mouseout', function(event, d) {
-                    d3.select(this).attr('r', 4);
+                    d3.select(this)
+                        .attr('r', 4)
+                        .style('stroke-width', 2);
                     hideTooltip();
                 })
                 .on('click', function(event, d) {
@@ -225,21 +296,18 @@ function createChart(config) {
     return chartState;
 }
 
-// Функция для фильтрации данных при больших временных диапазонах
+// Функция для фильтрации данных остается без изменений
 function filterDataForLargeTimeRange(data) {
     const filteredData = [];
     const groupsData = d3.group(data, d => d.group);
 
     groupsData.forEach((groupData, groupName) => {
-        // Группируем по дням
         const dailyGroups = d3.group(groupData, d =>
             new Date(d.timestamp).toDateString()
         );
 
-        // Для каждого дня берем только последний тест
         dailyGroups.forEach((dayTests, day) => {
             if (dayTests.length > 0) {
-                // Сортируем по времени и берем последний
                 const lastTest = dayTests.sort((a, b) =>
                     new Date(b.timestamp) - new Date(a.timestamp)
                 )[0];

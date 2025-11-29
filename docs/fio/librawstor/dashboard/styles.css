@@ -12,12 +12,14 @@
     box-sizing: border-box;
 }
 
+/* Базовые настройки шрифтов для всего дашборда */
 body {
-    font-family: var(--font-family);
-    background-color: var(--bg-color);
-    color: var(--text-color);
-    padding: 20px;
-    line-height: 1.6;
+    font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif;
+    font-size: 14px;
+    line-height: 1.5;
+    color: #2c3e50;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
 }
 
 #header {
@@ -26,26 +28,41 @@ body {
     border-bottom: 2px solid var(--grid-color);
 }
 
+/* Заголовок дашборда */
 #header h1 {
-    color: var(--accent-color);
-    margin-bottom: 10px;
+    font-family: 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+    font-size: 32px;
+    font-weight: 700;
+    color: #1a365d;
+    margin-bottom: 15px;
+    letter-spacing: 0.5px;
 }
 
+/* Информационная панель */
 #data-info {
-    background-color: #f8f9fa;
-    padding: 15px;
-    border-radius: 5px;
-    border-left: 4px solid var(--accent-color);
+    font-family: 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
 }
 
+#data-info p {
+    margin: 6px 0;
+    font-size: 13px;
+    color: #6c757d;
+}
+
+#data-info strong {
+    color: #495057;
+    font-weight: 600;
+}
+
+/* Элементы управления */
 #controls {
-    margin-bottom: 30px;
-    padding: 15px;
-    background-color: #f5f5f5;
-    border-radius: 5px;
-    display: flex;
-    gap: 20px;
-    align-items: center;
+    font-family: 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+}
+
+#controls label {
+    font-weight: 600;
+    color: #495057;
+    font-size: 14px;
 }
 
 .control-group {
@@ -55,32 +72,36 @@ body {
 }
 
 #timeRange, #refreshBtn {
-    padding: 8px 12px;
-    border: 1px solid #ddd;
-    border-radius: 4px;
-    font-size: 14px;
-}
-
-#refreshBtn {
-    background-color: var(--accent-color);
-    color: white;
-    border: none;
-    cursor: pointer;
-}
-
-#refreshBtn:hover {
-    background-color: #1668a0;
+    font-family: 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+    font-size: 13px;
+    font-weight: 500;
 }
 
 .chart-section {
     margin-bottom: 40px;
 }
 
+/* Заголовки секций */
 .chart-section h2 {
+    font-family: 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+    font-size: 24px;
+    font-weight: 600;
+    color: #2c3e50;
+    margin-bottom: 25px;
+    border-bottom: 2px solid #e9ecef;
+    padding-bottom: 12px;
+    letter-spacing: 0.3px;
+}
+
+/* Заголовки графиков */
+.chart-container h3 {
+    font-family: 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+    font-size: 16px;
+    font-weight: 600;
+    color: #495057;
     margin-bottom: 20px;
-    color: var(--accent-color);
-    border-bottom: 1px solid var(--grid-color);
-    padding-bottom: 10px;
+    text-align: center;
+    letter-spacing: 0.2px;
 }
 
 .charts-grid {
@@ -125,6 +146,16 @@ body {
     z-index: 1000;
 }
 
+#legend-container h4 {
+    font-family: 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+    font-size: 14px;
+    font-weight: 600;
+    color: #2c3e50;
+    margin-bottom: 12px;
+    border-bottom: 1px solid #e9ecef;
+    padding-bottom: 8px;
+}
+
 .legend-item {
     display: flex;
     align-items: center;
@@ -148,8 +179,10 @@ body {
 }
 
 .legend-label {
+    font-family: 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
     font-size: 12px;
-    flex: 1;
+    font-weight: 500;
+    color: #495057;
 }
 
 .legend-item.hidden .legend-label {
@@ -174,35 +207,43 @@ body {
     backdrop-filter: blur(4px);
 }
 
+/* Улучшенный тултип */
 .tooltip-content {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
+    font-family: 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
 }
 
 .tooltip-header {
     font-size: 13px;
-    font-weight: 600;
+    font-weight: 700;
     color: #1f77b4;
-    margin-bottom: 2px;
 }
 
 .tooltip-metric {
-    font-weight: 500;
+    font-weight: 600;
+    color: #2c3e50;
 }
 
 .tooltip-date,
 .tooltip-branch,
 .tooltip-config,
 .tooltip-commit {
-    color: #666;
+    font-size: 12px;
+    color: #6c757d;
 }
 
 .tooltip-hint {
-    margin-top: 4px;
-    font-style: italic;
-    color: #888;
     font-size: 11px;
+    color: #868e96;
+}
+
+/* Сообщения об отсутствии данных */
+.no-data {
+    font-family: 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+    font-size: 14px;
+    color: #6c757d;
+    font-style: italic;
+    text-align: center;
+    padding: 60px 20px;
 }
 
 /* Адаптивность для мобильных */
@@ -332,20 +373,52 @@ body {
     }
 }
 
+/* Адаптивность для мобильных */
 @media (max-width: 768px) {
     body {
-        padding: 10px;
+        font-size: 13px;
     }
-    
-    .charts-grid {
-        gap: 15px;
+
+    .chart-section h2 {
+        font-size: 20px;
     }
-    
-    .chart-container {
-        padding: 10px;
+
+    .chart-container h3 {
+        font-size: 14px;
     }
-    
-    .chart {
-        height: 300px;
+
+    #header h1 {
+        font-size: 24px;
     }
+
+    #legend-container h4 {
+        font-size: 13px;
+    }
+
+    .legend-label {
+        font-size: 11px;
+    }
+}
+
+/* Плавные переходы для интерактивных элементов */
+.legend-item,
+.dot,
+.line {
+    transition: all 0.3s ease;
+}
+
+/* Улучшенный внешний вид select */
+#timeRange {
+    background: white;
+    border: 1px solid #ced4da;
+    border-radius: 6px;
+    padding: 8px 12px;
+    font-size: 13px;
+    transition: all 0.2s ease;
+}
+
+#timeRange:focus {
+    outline: none;
+    border-color: #1f77b4;
+    box-shadow: 0 0 0 3px rgba(31, 119, 180, 0.1);
 }
