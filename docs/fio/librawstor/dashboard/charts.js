@@ -282,7 +282,7 @@ function createChart(config) {
                         .style('filter', 'none');
                 } else {
                     // Отключенная линия - тонкая, пунктирная и серая
-                    line.style('opacity', 0.8)
+                    line.style('opacity', 0.3)
                         .style('stroke-width', 2)
                         .style('stroke-dasharray', '5,3')
                         .style('filter', 'grayscale(0.7)');
