@@ -142,7 +142,7 @@ class DataLoader {
         const sampleData = {
             generated_at: now.toISOString(),
             filter: {
-                days: 7,
+                days: 30,
                 cutoff_date: new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString(),
                 applied: true
             },

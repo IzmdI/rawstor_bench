@@ -10,7 +10,7 @@ function getColor(index) {
     return colorPalette[index % colorPalette.length];
 }
 
-function formatDate(date, timeRangeDays = 7) {
+function formatDate(date, timeRangeDays = 30) {
     if (!date) return 'Unknown date';
     if (typeof date === 'string' && date === "Unknown date") return date;
 
@@ -60,7 +60,7 @@ function formatMetricValue(value, metricType) {
     }
 }
 
-function showTooltip(event, data, chartTitle, accessor, groupBy, timeRangeDays = 7) {
+function showTooltip(event, data, chartTitle, accessor, groupBy, timeRangeDays = 30) {
     const tooltip = d3.select('#tooltip');
     const value = accessor(data);
 

@@ -15,7 +15,7 @@ class DashboardApp {
         console.log('Initializing dashboard...');
         
         const params = this.getUrlParams();
-        if (params.days !== '7') {
+        if (params.days !== '30') {
             d3.select('#timeRange').property('value', params.days);
         }
 
@@ -43,6 +43,8 @@ class DashboardApp {
         if (!this.currentData?.charts) {
             throw new Error('No chart data available');
         }
+
+        const timeRangeDays = this.currentData.filter?.days || 30;
 
         const chartsConfig = [
             {
@@ -209,7 +211,7 @@ class DashboardApp {
     updateDataInfo() {
         if (!this.currentData) return;
 
-        const defaultDays = 7;
+        const defaultDays = 30;
         const filter = this.currentData.filter || { applied: false, days: defaultDays };
 
         const infoHtml = `
@@ -253,7 +255,7 @@ class DashboardApp {
     }
 
     async handleTimeRangeChange(days) {
-        const currentDays = this.currentData?.filter?.days || 7;
+        const currentDays = this.currentData?.filter?.days || 30;
 
         if (days === 'all') {
             days = 0;
@@ -327,7 +329,7 @@ class DashboardApp {
     getUrlParams() {
         const urlParams = new URLSearchParams(window.location.search);
         return {
-            days: urlParams.get('days') || '7'
+            days: urlParams.get('days') || '30'
         };
     }
 
