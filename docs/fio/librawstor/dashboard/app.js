@@ -11,19 +11,23 @@ class DashboardApp {
         // Управление видимостью операций
         this.visibleConfigOperations = new Set(['read']); // По умолчанию только read
         this.visibleBranchOperations = new Set(['read']); // По умолчанию только read
-
+        
+        // Управление видимостью групп
+        this.visibleConfigGroups = new Set();
+        this.visibleBranchGroups = new Set();
+        
         this.configGroups = new Set();
         this.branchGroups = new Set();
     }
 
     async init() {
         console.log('Initializing dashboard...');
-
+        
         const params = this.getUrlParams();
         if (params.days !== '30') {
             d3.select('#timeRange').property('value', params.days);
         }
-
+        
         try {
             await this.loadData();
             this.createCharts();
@@ -31,7 +35,7 @@ class DashboardApp {
             this.createLegends();
             this.setupEventListeners();
             this.updateDataInfo();
-
+            
         } catch (error) {
             console.error('Failed to initialize dashboard:', error);
             this.displayError(error);
@@ -47,24 +51,28 @@ class DashboardApp {
     collectGroups() {
         this.configGroups.clear();
         this.branchGroups.clear();
-
+        
         // Собираем группы из графиков с конфигурациями
         const configCharts = ['chart-iops-config', 'chart-latency-config'];
         const branchCharts = ['chart-iops-branch', 'chart-latency-branch'];
-
+        
         configCharts.forEach(chartId => {
             const chart = this.charts.get(chartId);
             if (chart && chart.groups) {
                 chart.groups.forEach(group => this.configGroups.add(group));
             }
         });
-
+        
         branchCharts.forEach(chartId => {
             const chart = this.charts.get(chartId);
             if (chart && chart.groups) {
                 chart.groups.forEach(group => this.branchGroups.add(group));
             }
         });
+        
+        // Показываем все группы по умолчанию
+        this.configGroups.forEach(group => this.visibleConfigGroups.add(group));
+        this.branchGroups.forEach(group => this.visibleBranchGroups.add(group));
     }
 
     createCharts() {
@@ -119,12 +127,12 @@ class DashboardApp {
 
         chartsConfig.forEach(config => {
             let chartData = [];
-
+            
             if (config.metricType === 'iops') {
                 // Комбинируем IOPS read и write данные
                 const iopsReadData = this.currentData.charts[`iops_read_by_${config.groupBy}`] || [];
                 const iopsWriteData = this.currentData.charts[`iops_write_by_${config.groupBy}`] || [];
-
+                
                 chartData = [
                     ...iopsReadData.map(d => ({ ...d, metric: 'iops_read', dataKey: `iops_read_by_${config.groupBy}` })),
                     ...iopsWriteData.map(d => ({ ...d, metric: 'iops_write', dataKey: `iops_write_by_${config.groupBy}` }))
@@ -133,7 +141,7 @@ class DashboardApp {
                 // Комбинируем Latency read и write данные
                 const latencyReadData = this.currentData.charts[`latency_read_by_${config.groupBy}`] || [];
                 const latencyWriteData = this.currentData.charts[`latency_write_by_${config.groupBy}`] || [];
-
+                
                 chartData = [
                     ...latencyReadData.map(d => ({ ...d, metric: 'latency_read', dataKey: `latency_read_by_${config.groupBy}` })),
                     ...latencyWriteData.map(d => ({ ...d, metric: 'latency_write', dataKey: `latency_write_by_${config.groupBy}` }))
@@ -172,7 +180,7 @@ class DashboardApp {
     createConfigLegend() {
         const legendContainer = d3.select('#legend-config');
         legendContainer.html('');
-
+        
         if (this.configGroups.size === 0) {
             legendContainer.html('<p style="color: #6c757d; font-style: italic;">No configuration data</p>');
             return;
@@ -181,21 +189,21 @@ class DashboardApp {
         // Добавляем переключатель операций
         const operationToggle = legendContainer.append('div')
             .attr('class', 'operation-toggle');
-
+            
         operationToggle.append('button')
-            .attr('class', `operation-toggle-btn ${this.visibleConfigOperations.has('read') ? 'active' : ''}`)
+            .attr('class', `operation-toggle-btn ${this.visibleConfigOperations.has('read') && !this.visibleConfigOperations.has('write') ? 'active' : ''}`)
             .text('Read Only')
             .on('click', () => {
                 this.setConfigOperations(['read']);
             });
-
+            
         operationToggle.append('button')
-            .attr('class', `operation-toggle-btn ${this.visibleConfigOperations.has('write') ? 'active' : ''}`)
+            .attr('class', `operation-toggle-btn ${this.visibleConfigOperations.has('write') && !this.visibleConfigOperations.has('read') ? 'active' : ''}`)
             .text('Write Only')
             .on('click', () => {
                 this.setConfigOperations(['write']);
             });
-
+            
         operationToggle.append('button')
             .attr('class', `operation-toggle-btn ${this.visibleConfigOperations.has('read') && this.visibleConfigOperations.has('write') ? 'active' : ''}`)
             .text('Both')
@@ -205,17 +213,26 @@ class DashboardApp {
 
         // Создаем группы для каждой конфигурации
         const configsArray = Array.from(this.configGroups);
-
+        
         configsArray.forEach((config, configIndex) => {
             const groupContainer = legendContainer.append('div').attr('class', 'legend-group');
-
+            
+            // Заголовок группы (кликабельный)
             groupContainer.append('div')
                 .attr('class', 'legend-group-title')
-                .text(config);
+                .style('cursor', 'pointer')
+                .text(config)
+                .on('click', () => {
+                    this.toggleConfigGroup(config);
+                });
 
             // Легенда для группы (один цвет)
             const legendItem = groupContainer.append('div')
-                .attr('class', 'legend-item');
+                .attr('class', `legend-item ${this.visibleConfigGroups.has(config) ? '' : 'disabled'}`)
+                .on('click', (event) => {
+                    event.stopPropagation(); // Предотвращаем всплытие
+                    this.toggleConfigGroup(config);
+                });
 
             legendItem.append('span')
                 .attr('class', 'legend-color')
@@ -230,7 +247,7 @@ class DashboardApp {
     createBranchLegend() {
         const legendContainer = d3.select('#legend-branch');
         legendContainer.html('');
-
+        
         if (this.branchGroups.size === 0) {
             legendContainer.html('<p style="color: #6c757d; font-style: italic;">No branch data</p>');
             return;
@@ -239,21 +256,21 @@ class DashboardApp {
         // Добавляем переключатель операций
         const operationToggle = legendContainer.append('div')
             .attr('class', 'operation-toggle');
-
+            
         operationToggle.append('button')
-            .attr('class', `operation-toggle-btn ${this.visibleBranchOperations.has('read') ? 'active' : ''}`)
+            .attr('class', `operation-toggle-btn ${this.visibleBranchOperations.has('read') && !this.visibleBranchOperations.has('write') ? 'active' : ''}`)
             .text('Read Only')
             .on('click', () => {
                 this.setBranchOperations(['read']);
             });
-
+            
         operationToggle.append('button')
-            .attr('class', `operation-toggle-btn ${this.visibleBranchOperations.has('write') ? 'active' : ''}`)
+            .attr('class', `operation-toggle-btn ${this.visibleBranchOperations.has('write') && !this.visibleBranchOperations.has('read') ? 'active' : ''}`)
             .text('Write Only')
             .on('click', () => {
                 this.setBranchOperations(['write']);
             });
-
+            
         operationToggle.append('button')
             .attr('class', `operation-toggle-btn ${this.visibleBranchOperations.has('read') && this.visibleBranchOperations.has('write') ? 'active' : ''}`)
             .text('Both')
@@ -263,17 +280,26 @@ class DashboardApp {
 
         // Создаем группы для каждой ветки
         const branchesArray = Array.from(this.branchGroups);
-
+        
         branchesArray.forEach((branch, branchIndex) => {
             const groupContainer = legendContainer.append('div').attr('class', 'legend-group');
-
+            
+            // Заголовок группы (кликабельный)
             groupContainer.append('div')
                 .attr('class', 'legend-group-title')
-                .text(branch);
+                .style('cursor', 'pointer')
+                .text(branch)
+                .on('click', () => {
+                    this.toggleBranchGroup(branch);
+                });
 
             // Легенда для группы (один цвет)
             const legendItem = groupContainer.append('div')
-                .attr('class', 'legend-item');
+                .attr('class', `legend-item ${this.visibleBranchGroups.has(branch) ? '' : 'disabled'}`)
+                .on('click', (event) => {
+                    event.stopPropagation(); // Предотвращаем всплытие
+                    this.toggleBranchGroup(branch);
+                });
 
             legendItem.append('span')
                 .attr('class', 'legend-color')
@@ -297,6 +323,26 @@ class DashboardApp {
         this.updateBranchLegendAppearance();
     }
 
+    toggleConfigGroup(group) {
+        if (this.visibleConfigGroups.has(group)) {
+            this.visibleConfigGroups.delete(group);
+        } else {
+            this.visibleConfigGroups.add(group);
+        }
+        this.updateConfigChartsVisibility();
+        this.updateConfigLegendAppearance();
+    }
+
+    toggleBranchGroup(group) {
+        if (this.visibleBranchGroups.has(group)) {
+            this.visibleBranchGroups.delete(group);
+        } else {
+            this.visibleBranchGroups.add(group);
+        }
+        this.updateBranchChartsVisibility();
+        this.updateBranchLegendAppearance();
+    }
+
     updateAllChartsVisibility() {
         this.updateConfigChartsVisibility();
         this.updateBranchChartsVisibility();
@@ -304,15 +350,15 @@ class DashboardApp {
 
     updateConfigChartsVisibility() {
         const configCharts = ['chart-iops-config', 'chart-latency-config'];
-
+        
         configCharts.forEach(chartId => {
             const chart = this.charts.get(chartId);
             if (chart && chart.updateVisibility) {
-                // Создаем Set видимых fullGroups на основе выбранных операций
+                // Создаем Set видимых fullGroups на основе выбранных операций И групп
                 const visibleFullGroups = new Set();
                 chart.fullGroups.forEach(fullGroup => {
-                    const operation = fullGroup.split(' - ')[1];
-                    if (this.visibleConfigOperations.has(operation)) {
+                    const [group, operation] = fullGroup.split(' - ');
+                    if (this.visibleConfigGroups.has(group) && this.visibleConfigOperations.has(operation)) {
                         visibleFullGroups.add(fullGroup);
                     }
                 });
@@ -323,15 +369,15 @@ class DashboardApp {
 
     updateBranchChartsVisibility() {
         const branchCharts = ['chart-iops-branch', 'chart-latency-branch'];
-
+        
         branchCharts.forEach(chartId => {
             const chart = this.charts.get(chartId);
             if (chart && chart.updateVisibility) {
-                // Создаем Set видимых fullGroups на основе выбранных операций
+                // Создаем Set видимых fullGroups на основе выбранных операций И групп
                 const visibleFullGroups = new Set();
                 chart.fullGroups.forEach(fullGroup => {
-                    const operation = fullGroup.split(' - ')[1];
-                    if (this.visibleBranchOperations.has(operation)) {
+                    const [group, operation] = fullGroup.split(' - ');
+                    if (this.visibleBranchGroups.has(group) && this.visibleBranchOperations.has(operation)) {
                         visibleFullGroups.add(fullGroup);
                     }
                 });
@@ -351,6 +397,15 @@ class DashboardApp {
                 if (text === 'Both') return this.visibleConfigOperations.has('read') && this.visibleConfigOperations.has('write');
                 return false;
             });
+
+        // Обновляем видимость групп
+        this.configGroups.forEach(group => {
+            d3.selectAll('#legend-config .legend-group-title')
+                .filter(d => d === group)
+                .parent()
+                .select('.legend-item')
+                .classed('disabled', !this.visibleConfigGroups.has(group));
+        });
     }
 
     updateBranchLegendAppearance() {
@@ -364,6 +419,15 @@ class DashboardApp {
                 if (text === 'Both') return this.visibleBranchOperations.has('read') && this.visibleBranchOperations.has('write');
                 return false;
             });
+
+        // Обновляем видимость групп
+        this.branchGroups.forEach(group => {
+            d3.selectAll('#legend-branch .legend-group-title')
+                .filter(d => d === group)
+                .parent()
+                .select('.legend-item')
+                .classed('disabled', !this.visibleBranchGroups.has(group));
+        });
     }
 
     updateDataInfo() {
@@ -404,10 +468,10 @@ class DashboardApp {
             this.charts.clear();
             this.visibleConfigGroups.clear();
             this.visibleBranchGroups.clear();
+            this.visibleConfigOperations.clear().add('read');
+            this.visibleBranchOperations.clear().add('read');
             this.configGroups.clear();
-            this.configFullGroups.clear();
             this.branchGroups.clear();
-            this.branchFullGroups.clear();
             
             this.createCharts();
             this.collectGroups();
