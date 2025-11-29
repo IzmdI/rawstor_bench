@@ -7,7 +7,10 @@ class DashboardApp {
         this.dataLoader = new DataLoader();
         this.currentData = null;
         this.charts = new Map();
-        this.visibleGroups = new Set();
+        this.visibleConfigs = new Set();
+        this.visibleBranches = new Set();
+        this.configGroups = new Set();
+        this.branchGroups = new Set();
     }
 
     async init() {
@@ -20,7 +23,9 @@ class DashboardApp {
         
         try {
             await this.loadData();
+            this.collectGroups();
             this.createCharts();
+            this.createLegends();
             this.setupEventListeners();
             this.updateDataInfo();
             
@@ -36,6 +41,40 @@ class DashboardApp {
         
         // Показываем все группы по умолчанию
         this.updateVisibleGroups();
+    }
+
+    collectGroups() {
+        this.configGroups.clear();
+        this.branchGroups.clear();
+
+        // Собираем группы из графиков с конфигурациями
+        const configCharts = [
+            'chart-iops-read-config', 'chart-iops-write-config',
+            'chart-latency-read-config', 'chart-latency-write-config'
+        ];
+
+        const branchCharts = [
+            'chart-iops-read-branch', 'chart-iops-write-branch',
+            'chart-latency-read-branch', 'chart-latency-write-branch'
+        ];
+
+        configCharts.forEach(chartId => {
+            const chart = this.charts.get(chartId);
+            if (chart && chart.groups) {
+                chart.groups.forEach(group => this.configGroups.add(group));
+            }
+        });
+
+        branchCharts.forEach(chartId => {
+            const chart = this.charts.get(chartId);
+            if (chart && chart.groups) {
+                chart.groups.forEach(group => this.branchGroups.add(group));
+            }
+        });
+
+        // Показываем все группы по умолчанию
+        this.configGroups.forEach(group => this.visibleConfigs.add(group));
+        this.branchGroups.forEach(group => this.visibleBranches.add(group));
     }
 
     createCharts() {
@@ -123,7 +162,8 @@ class DashboardApp {
                     accessor: d => d.value,
                     id: config.id,
                     groupBy: config.groupBy,
-                    timeRangeDays: timeRangeDays
+                    timeRangeDays: timeRangeDays,
+                    legendType: config.legendType
                 });
                 this.charts.set(config.id, chart);
             } else {
@@ -131,30 +171,29 @@ class DashboardApp {
                 d3.select(`#${config.id}`).html('<p class="no-data">No data available</p>');
             }
         });
-
-        this.createLegend();
     }
 
-    createLegend() {
-        const legendContainer = d3.select('#legend-container');
-        legendContainer.html('<h4>Legend (Click to toggle)</h4>');
+    createLegends() {
+        this.createConfigLegend();
+        this.createBranchLegend();
+    }
 
-        // Собираем все уникальные группы из всех графиков
-        const allGroups = new Set();
-        this.charts.forEach((chart, chartId) => {
-            if (chart.groups) {
-                chart.groups.forEach(group => allGroups.add(group));
-            }
-        });
+    createConfigLegend() {
+        const legendContainer = d3.select('#legend-config');
+        legendContainer.html('');
+
+        if (this.configGroups.size === 0) {
+            legendContainer.html('<p style="color: #6c757d; font-style: italic;">No configuration data</p>');
+            return;
+        }
 
         const legend = legendContainer.selectAll('.legend-item')
-            .data(Array.from(allGroups))
+            .data(Array.from(this.configGroups))
             .enter()
             .append('div')
-            .attr('class', d => `legend-item legend-${createSafeClassName(d)}`)
-            .style('opacity', 1)
+            .attr('class', d => `legend-item ${this.visibleConfigs.has(d) ? '' : 'disabled'}`)
             .on('click', (event, groupName) => {
-                this.toggleGroupVisibility(groupName);
+                this.toggleConfigVisibility(groupName);
             });
 
         legend.append('span')
@@ -164,20 +203,93 @@ class DashboardApp {
         legend.append('span')
             .attr('class', 'legend-label')
             .text(d => d);
-
-        // Показываем все группы по умолчанию
-        allGroups.forEach(group => this.visibleGroups.add(group));
     }
 
-    toggleGroupVisibility(groupName) {
-        if (this.visibleGroups.has(groupName)) {
-            this.visibleGroups.delete(groupName);
-        } else {
-            this.visibleGroups.add(groupName);
+    createBranchLegend() {
+        const legendContainer = d3.select('#legend-branch');
+        legendContainer.html('');
+
+        if (this.branchGroups.size === 0) {
+            legendContainer.html('<p style="color: #6c757d; font-style: italic;">No branch data</p>');
+            return;
         }
-        
-        this.updateChartVisibility();
-        this.updateLegendAppearance();
+
+        const legend = legendContainer.selectAll('.legend-item')
+            .data(Array.from(this.branchGroups))
+            .enter()
+            .append('div')
+            .attr('class', d => `legend-item ${this.visibleBranches.has(d) ? '' : 'disabled'}`)
+            .on('click', (event, groupName) => {
+                this.toggleBranchVisibility(groupName);
+            });
+
+        legend.append('span')
+            .attr('class', 'legend-color')
+            .style('background-color', (d, i) => getColor(i));
+
+        legend.append('span')
+            .attr('class', 'legend-label')
+            .text(d => d);
+    }
+
+    toggleConfigVisibility(groupName) {
+        if (this.visibleConfigs.has(groupName)) {
+            this.visibleConfigs.delete(groupName);
+        } else {
+            this.visibleConfigs.add(groupName);
+        }
+
+        this.updateConfigChartsVisibility();
+        this.updateConfigLegendAppearance();
+    }
+
+    toggleBranchVisibility(groupName) {
+        if (this.visibleBranches.has(groupName)) {
+            this.visibleBranches.delete(groupName);
+        } else {
+            this.visibleBranches.add(groupName);
+        }
+
+        this.updateBranchChartsVisibility();
+        this.updateBranchLegendAppearance();
+    }
+
+     updateConfigChartsVisibility() {
+        const configCharts = [
+            'chart-iops-read-config', 'chart-iops-write-config',
+            'chart-latency-read-config', 'chart-latency-write-config'
+        ];
+
+        configCharts.forEach(chartId => {
+            const chart = this.charts.get(chartId);
+            if (chart && chart.updateVisibility) {
+                chart.updateVisibility(this.visibleConfigs);
+            }
+        });
+    }
+
+    updateBranchChartsVisibility() {
+        const branchCharts = [
+            'chart-iops-read-branch', 'chart-iops-write-branch',
+            'chart-latency-read-branch', 'chart-latency-write-branch'
+        ];
+
+        branchCharts.forEach(chartId => {
+            const chart = this.charts.get(chartId);
+            if (chart && chart.updateVisibility) {
+                chart.updateVisibility(this.visibleBranches);
+            }
+        });
+    }
+
+    updateConfigLegendAppearance() {
+        d3.selectAll('#legend-config .legend-item')
+            .classed('disabled', d => !this.visibleConfigs.has(d));
+    }
+
+    updateBranchLegendAppearance() {
+        d3.selectAll('#legend-branch .legend-item')
+            .classed('disabled', d => !this.visibleBranches.has(d));
     }
 
     updateChartVisibility() {

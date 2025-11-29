@@ -3,7 +3,7 @@ function createSafeClassName(name) {
 }
 
 function createChart(config) {
-    const { container, title, yLabel, data, accessor, id, groupBy, timeRangeDays } = config;
+    const { container, title, yLabel, data, accessor, id, groupBy, timeRangeDays, legendType } = config;
     
     if (!data || data.length === 0) {
         container.html('<p class="no-data">No data available</p>');
