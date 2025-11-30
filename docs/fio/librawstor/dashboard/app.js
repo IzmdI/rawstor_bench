@@ -9,8 +9,8 @@ class DashboardApp {
         this.charts = new Map();
         
         // Управление видимостью операций
-        this.visibleConfigOperations = new Set(['read']); // По умолчанию только read
-        this.visibleBranchOperations = new Set(['read']); // По умолчанию только read
+        this.visibleConfigOperations = new Set(['read']);
+        this.visibleBranchOperations = new Set(['read']);
         
         // Управление видимостью групп
         this.visibleConfigGroups = new Set();
@@ -18,21 +18,23 @@ class DashboardApp {
         
         this.configGroups = new Set();
         this.branchGroups = new Set();
+        
+        // Текущий масштаб времени
+        this.currentTimeRange = 30; // по умолчанию 30 дней
     }
 
     async init() {
         console.log('Initializing dashboard...');
         
         const params = this.getUrlParams();
-        if (params.days !== '30') {
-            d3.select('#timeRange').property('value', params.days);
-        }
+        this.currentTimeRange = params.days ? parseInt(params.days) : 30;
+        d3.select('#timeRange').property('value', this.currentTimeRange.toString());
         
         try {
             await this.loadData();
-            this.collectGroups(); // Сначала собираем группы
-            this.createLegends(); // Потом создаем легенды
-            this.createCharts(); // Затем создаем графики с правильной видимостью
+            this.collectGroups();
+            this.createLegends();
+            this.createCharts();
             this.setupEventListeners();
             this.updateDataInfo();
             
@@ -93,10 +95,10 @@ class DashboardApp {
         console.log('Filtered Branch groups:', Array.from(this.branchGroups));
     }
 
-    // Добавляем новый метод для фильтрации групп
+    // Метод для фильтрации групп
     filterGroupsWithEnoughData(groups, groupType) {
         const filteredGroups = new Set();
-        const timeRangeDays = this.currentData.filter?.days || 30;
+        const timeRangeDays = 365; // Всегда используем полный набор данных
         
         groups.forEach(group => {
             // Проверяем, есть ли у группы данные минимум в 2 разных днях
@@ -144,8 +146,6 @@ class DashboardApp {
             throw new Error('No chart data available');
         }
 
-        const timeRangeDays = this.currentData.filter?.days || 30;
-
         const chartsConfig = [
             {
                 id: 'chart-iops-config',
@@ -153,11 +153,11 @@ class DashboardApp {
                 yLabel: 'kIOPS',
                 dataKey: 'iops',
                 groupBy: 'config',
-                timeRangeDays: timeRangeDays,
+                timeRangeDays: this.currentTimeRange,
                 legendType: 'config',
                 metricType: 'iops',
                 visibleOperations: Array.from(this.visibleConfigOperations),
-                availableGroups: Array.from(this.configGroups) // Передаем доступные группы
+                availableGroups: Array.from(this.configGroups)
             },
             {
                 id: 'chart-latency-config',
@@ -165,7 +165,7 @@ class DashboardApp {
                 yLabel: 'ms',
                 dataKey: 'latency',
                 groupBy: 'config',
-                timeRangeDays: timeRangeDays,
+                timeRangeDays: this.currentTimeRange,
                 legendType: 'config',
                 metricType: 'latency',
                 visibleOperations: Array.from(this.visibleConfigOperations),
@@ -177,7 +177,7 @@ class DashboardApp {
                 yLabel: 'kIOPS',
                 dataKey: 'iops',
                 groupBy: 'branch',
-                timeRangeDays: timeRangeDays,
+                timeRangeDays: this.currentTimeRange,
                 legendType: 'branch',
                 metricType: 'iops',
                 visibleOperations: Array.from(this.visibleBranchOperations),
@@ -189,7 +189,7 @@ class DashboardApp {
                 yLabel: 'ms',
                 dataKey: 'latency',
                 groupBy: 'branch',
-                timeRangeDays: timeRangeDays,
+                timeRangeDays: this.currentTimeRange,
                 legendType: 'branch',
                 metricType: 'latency',
                 visibleOperations: Array.from(this.visibleBranchOperations),
@@ -229,11 +229,11 @@ class DashboardApp {
                     accessor: d => d.value,
                     id: config.id,
                     groupBy: config.groupBy,
-                    timeRangeDays: timeRangeDays,
+                    timeRangeDays: this.currentTimeRange,
                     legendType: config.legendType,
                     metricType: config.metricType,
                     visibleOperations: config.visibleOperations,
-                    availableGroups: config.availableGroups // Передаем в createChart
+                    availableGroups: config.availableGroups
                 });
                 this.charts.set(config.id, chart);
             } else {
@@ -499,17 +499,13 @@ class DashboardApp {
     updateDataInfo() {
         if (!this.currentData) return;
 
-        const filter = this.currentData.filter || { applied: false, days: 30 };
-        
         const infoHtml = `
             <p><strong>Generated:</strong> ${new Date(this.currentData.generated_at).toLocaleString()}</p>
             <p><strong>Total tests:</strong> ${this.currentData.summary?.total_tests || 0}</p>
             <p><strong>Configurations:</strong> ${this.currentData.summary?.configurations?.join(', ') || 'N/A'}</p>
             <p><strong>Branches:</strong> ${this.currentData.summary?.branches?.join(', ') || 'N/A'}</p>
-            ${filter.applied ? 
-                `<p><strong>Time filter:</strong> Last ${filter.days} days</p>` : 
-                '<p><strong>Time filter:</strong> All data</p>'
-            }
+            <p><strong>Time range:</strong> ${this.currentTimeRange === 0 ? 'All data' : `Last ${this.currentTimeRange} days`}</p>
+            <p><strong>Data coverage:</strong> Last 365 days (full dataset)</p>
         `;
 
         d3.select('#data-info').html(infoHtml);
@@ -521,7 +517,7 @@ class DashboardApp {
             this.refreshData();
         });
 
-        // Time range selector - ИЗМЕНЯЕМ ЛОГИКУ
+        // Time range selector
         d3.select('#timeRange').on('change', (event) => {
             this.handleTimeRangeChange(event.target.value);
         });
@@ -531,20 +527,9 @@ class DashboardApp {
         try {
             this.showLoading(true);
             await this.loadData();
-            this.charts.clear();
-            this.visibleConfigGroups.clear();
-            this.visibleBranchGroups.clear();
-            // ИСПРАВЛЯЕМ: clear() возвращает undefined, нужно заново создавать Set
-            this.visibleConfigOperations = new Set(['read']);
-            this.visibleBranchOperations = new Set(['read']);
-            this.configGroups.clear();
-            this.branchGroups.clear();
-            
-            this.collectGroups();
-            this.createLegends();
-            this.createCharts();
-            this.updateDataInfo();
+            this.recreateCharts();
             this.showLoading(false);
+            this.showNotification('Data refreshed successfully', 'success');
         } catch (error) {
             console.error('Failed to refresh data:', error);
             this.showNotification('Error refreshing data', 'error');
@@ -553,50 +538,40 @@ class DashboardApp {
     }
 
     handleTimeRangeChange(days) {
-        const currentDays = this.currentData?.filter?.days || 30;
+        const newTimeRange = days === 'all' ? 0 : parseInt(days);
         
-        if (days === 'all') {
-            days = 0;
-        }
-        
-        if (parseInt(days) === currentDays) {
+        if (newTimeRange === this.currentTimeRange) {
             console.log('Time range unchanged');
             return;
         }
         
-        // ВМЕСТО ПЕРЕЗАГРУЗКИ СТРАНИЦЫ - ПЕРЕЗАГРУЖАЕМ ДАННЫЕ
-        this.reloadWithNewTimeRange(days);
+        this.currentTimeRange = newTimeRange;
+        this.updateTimeRange();
     }
 
-    async reloadWithNewTimeRange(days) {
-        try {
-            this.showLoading(true);
-
-            // Используем новый метод DataLoader для применения фильтра
-            this.currentData = await this.dataLoader.reloadWithFilter(days);
-
-            // Пересоздаем все компоненты
-            this.charts.clear();
-            this.visibleConfigGroups.clear();
-            this.visibleBranchGroups.clear();
-            this.visibleConfigOperations = new Set(['read']);
-            this.visibleBranchOperations = new Set(['read']);
-            this.configGroups.clear();
-            this.branchGroups.clear();
-
-            this.collectGroups();
-            this.createLegends();
-            this.createCharts();
-            this.updateDataInfo();
-
-            this.showLoading(false);
-            this.showNotification(`Time range updated to ${days === 0 ? 'all time' : `last ${days} days`}`, 'success');
-
-        } catch (error) {
-            console.error('Failed to reload data with new time range:', error);
-            this.showNotification('Error updating time range', 'error');
-            this.showLoading(false);
+    updateTimeRange() {
+        // Обновляем URL без перезагрузки страницы
+        const url = new URL(window.location.href);
+        if (this.currentTimeRange === 0) {
+            url.searchParams.delete('days');
+        } else {
+            url.searchParams.set('days', this.currentTimeRange.toString());
         }
+        window.history.pushState({}, '', url.toString());
+        
+        // Пересоздаем графики с новым масштабом
+        this.recreateCharts();
+        this.updateDataInfo();
+        
+        this.showNotification(`Time range updated to ${this.currentTimeRange === 0 ? 'all time' : `last ${this.currentTimeRange} days`}`, 'success');
+    }
+
+    recreateCharts() {
+        // Очищаем старые графики
+        this.charts.clear();
+        
+        // Пересоздаем графики
+        this.createCharts();
     }
 
     showLoading(show) {

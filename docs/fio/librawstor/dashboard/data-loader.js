@@ -2,27 +2,22 @@ class DataLoader {
     constructor(dataPath = './data.json') {
         this.dataPath = dataPath;
         this.data = null;
-        this.rawData = null; // Сохраняем сырые данные
     }
 
     async loadData() {
         try {
             console.log('Loading data from:', this.dataPath);
             
-            // Загружаем данные
             const response = await fetch(this.dataPath);
             if (!response.ok) {
                 throw new Error(`HTTP error! status: ${response.status}`);
             }
             
-            this.rawData = await response.json();
+            this.data = await response.json();
             
-            if (!this.rawData) {
+            if (!this.data) {
                 throw new Error('No data received from server');
             }
-            
-            // Применяем фильтр по времени из URL параметров
-            this.data = this.applyTimeFilter(this.rawData);
             
             console.log('Data loaded successfully');
             console.log('Summary:', this.data.summary);
@@ -33,7 +28,6 @@ class DataLoader {
         } catch (error) {
             console.error('Failed to load precomputed data:', error);
             
-            // Создаем fallback данные для отладки
             if (error.message.includes('404') || error.message.includes('Failed to fetch')) {
                 console.warn('data.json not found. Creating sample data for debugging.');
                 return this.createSampleData();
@@ -43,108 +37,7 @@ class DataLoader {
         }
     }
 
-    // Метод для применения фильтра по времени
-    applyTimeFilter(rawData) {
-        const urlParams = new URLSearchParams(window.location.search);
-        const daysParam = urlParams.get('days');
-        const days = daysParam ? parseInt(daysParam) : 30;
-        
-        if (days === 0) {
-            // Если days=0 (all), возвращаем все данные без фильтрации
-            return rawData;
-        }
-        
-        console.log(`Applying time filter: last ${days} days`);
-        
-        const cutoffDate = new Date();
-        cutoffDate.setDate(cutoffDate.getDate() - days);
-        
-        // Фильтруем данные графиков
-        const filteredCharts = {};
-        
-        Object.entries(rawData.charts || {}).forEach(([chartKey, chartData]) => {
-            filteredCharts[chartKey] = chartData.filter(point => {
-                if (!point.timestamp || point.timestamp === "Unknown date") {
-                    return false; // Исключаем точки без даты
-                }
-                
-                const pointDate = new Date(point.timestamp);
-                return pointDate >= cutoffDate;
-            });
-        });
-        
-        // Обновляем summary
-        const filteredData = {
-            ...rawData,
-            charts: filteredCharts,
-            filter: {
-                days: days,
-                cutoff_date: cutoffDate.toISOString(),
-                applied: true
-            }
-        };
-        
-        // Пересчитываем summary
-        filteredData.summary = this.calculateSummary(filteredData);
-        
-        console.log(`Time filter applied: ${Object.values(filteredCharts).flat().length} data points after filtering`);
-        
-        return filteredData;
-    }
-
-    // Метод для пересчета summary после фильтрации
-    calculateSummary(data) {
-        const allResults = Object.values(data.charts).flat();
-        const configs = new Set();
-        const branches = new Set();
-        const timestamps = [];
-        
-        allResults.forEach(result => {
-            if (result.config) configs.add(result.config);
-            if (result.branch) branches.add(result.branch);
-            if (result.timestamp && result.timestamp !== "Unknown date") {
-                timestamps.push(new Date(result.timestamp));
-            }
-        });
-        
-        const timeRange = {
-            start: timestamps.length > 0 ? new Date(Math.min(...timestamps)).toISOString() : null,
-            end: timestamps.length > 0 ? new Date(Math.max(...timestamps)).toISOString() : null
-        };
-        
-        return {
-            total_tests: allResults.length,
-            tests_without_date: allResults.filter(r => !r.timestamp || r.timestamp === "Unknown date").length,
-            total_configurations: configs.size,
-            total_branches: branches.size,
-            configurations: Array.from(configs).sort(),
-            branches: Array.from(branches).sort(),
-            time_range: timeRange
-        };
-    }
-
-    // Метод для принудительного обновления данных с новым фильтром
-    async reloadWithFilter(days) {
-        // Обновляем URL
-        const url = new URL(window.location.href);
-        if (days === 0) {
-            url.searchParams.delete('days');
-        } else {
-            url.searchParams.set('days', days);
-        }
-        window.history.pushState({}, '', url.toString());
-        
-        // Применяем фильтр к уже загруженным данным
-        if (this.rawData) {
-            this.data = this.applyTimeFilter(this.rawData);
-            return this.data;
-        } else {
-            // Если сырых данных нет, перезагружаем
-            return await this.loadData();
-        }
-    }
-
-    // ... остальные методы остаются без изменений ...
+    // Метод для получения данных конкретного графика
     getChartData(chartType) {
         if (!this.data || !this.data.charts) {
             console.warn('No chart data available');
@@ -160,26 +53,31 @@ class DataLoader {
         return chartData;
     }
 
+    // Метод для получения summary информации
     getSummary() {
         if (!this.data) return null;
         return this.data.summary || {};
     }
 
+    // Метод для получения информации о фильтрации
     getFilterInfo() {
         if (!this.data) return null;
         return this.data.filter || { applied: false, days: 30 };
     }
 
+    // Метод для получения времени генерации данных
     getGeneratedTime() {
         if (!this.data) return null;
         return this.data.generated_at;
     }
 
+    // Метод для получения всех доступных типов графиков
     getAvailableChartTypes() {
         if (!this.data || !this.data.charts) return [];
         return Object.keys(this.data.charts);
     }
 
+    // Метод для получения всех уникальных групп (конфигураций и веток)
     getAllGroups() {
         if (!this.data || !this.data.charts) return new Set();
         
@@ -195,10 +93,12 @@ class DataLoader {
         return groups;
     }
 
+    // Метод для проверки наличия данных
     hasData() {
         return this.data && this.data.charts && Object.keys(this.data.charts).length > 0;
     }
 
+    // Метод для получения статистики по данным
     getDataStats() {
         if (!this.data || !this.data.charts) return null;
         
@@ -237,6 +137,7 @@ class DataLoader {
         return stats;
     }
 
+    // Fallback метод для создания sample данных при отладке
     createSampleData() {
         console.log('Creating sample data for debugging...');
         
@@ -244,8 +145,8 @@ class DataLoader {
         const sampleData = {
             generated_at: now.toISOString(),
             filter: {
-                days: 30,
-                cutoff_date: new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString(),
+                days: 365,
+                cutoff_date: new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000).toISOString(),
                 applied: true
             },
             summary: {
@@ -302,11 +203,11 @@ class DataLoader {
             });
         });
 
-        this.rawData = sampleData;
         this.data = sampleData;
         return sampleData;
     }
 
+    // Метод для валидации структуры данных
     validateDataStructure() {
         if (!this.data) {
             return { isValid: false, errors: ['No data loaded'] };
@@ -337,6 +238,7 @@ class DataLoader {
         };
     }
 
+    // Метод для получения временного диапазона данных
     getTimeRange() {
         if (!this.data || !this.data.summary || !this.data.summary.time_range) {
             return null;
@@ -345,6 +247,7 @@ class DataLoader {
         return this.data.summary.time_range;
     }
 
+    // Метод для проверки свежести данных
     isDataFresh(hours = 24) {
         if (!this.data || !this.data.generated_at) {
             return false;
