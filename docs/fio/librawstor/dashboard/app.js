@@ -534,8 +534,9 @@ class DashboardApp {
             this.charts.clear();
             this.visibleConfigGroups.clear();
             this.visibleBranchGroups.clear();
-            this.visibleConfigOperations.clear().add('read');
-            this.visibleBranchOperations.clear().add('read');
+            // ИСПРАВЛЯЕМ: clear() возвращает undefined, нужно заново создавать Set
+            this.visibleConfigOperations = new Set(['read']);
+            this.visibleBranchOperations = new Set(['read']);
             this.configGroups.clear();
             this.branchGroups.clear();
             
@@ -587,8 +588,9 @@ class DashboardApp {
             this.charts.clear();
             this.visibleConfigGroups.clear();
             this.visibleBranchGroups.clear();
-            this.visibleConfigOperations.clear().add('read');
-            this.visibleBranchOperations.clear().add('read');
+            // ИСПРАВЛЯЕМ: clear() возвращает undefined, нужно заново создавать Set
+            this.visibleConfigOperations = new Set(['read']);
+            this.visibleBranchOperations = new Set(['read']);
             this.configGroups.clear();
             this.branchGroups.clear();
             
