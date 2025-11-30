@@ -571,37 +571,27 @@ class DashboardApp {
     async reloadWithNewTimeRange(days) {
         try {
             this.showLoading(true);
-            
-            // Обновляем URL без перезагрузки страницы
-            const url = new URL(window.location.href);
-            if (days === '0') {
-                url.searchParams.delete('days');
-            } else {
-                url.searchParams.set('days', days);
-            }
-            window.history.pushState({}, '', url.toString());
-            
-            // Перезагружаем данные с новым time range
-            await this.loadData();
-            
+
+            // Используем новый метод DataLoader для применения фильтра
+            this.currentData = await this.dataLoader.reloadWithFilter(days);
+
             // Пересоздаем все компоненты
             this.charts.clear();
             this.visibleConfigGroups.clear();
             this.visibleBranchGroups.clear();
-            // ИСПРАВЛЯЕМ: clear() возвращает undefined, нужно заново создавать Set
             this.visibleConfigOperations = new Set(['read']);
             this.visibleBranchOperations = new Set(['read']);
             this.configGroups.clear();
             this.branchGroups.clear();
-            
+
             this.collectGroups();
             this.createLegends();
             this.createCharts();
             this.updateDataInfo();
-            
+
             this.showLoading(false);
-            this.showNotification(`Time range updated to ${days === '0' ? 'all time' : `last ${days} days`}`, 'success');
-            
+            this.showNotification(`Time range updated to ${days === 0 ? 'all time' : `last ${days} days`}`, 'success');
+
         } catch (error) {
             console.error('Failed to reload data with new time range:', error);
             this.showNotification('Error updating time range', 'error');
