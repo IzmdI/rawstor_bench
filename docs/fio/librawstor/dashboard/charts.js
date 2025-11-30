@@ -271,6 +271,10 @@ function createChart(config) {
         const baseGroup = groupData[0].group;
         const baseGroupIndex = baseGroups.indexOf(baseGroup);
 
+        const isVisibleByDefault = config.visibleOperations ?
+        config.visibleOperations.includes(operation) :
+        operation === 'read';
+
         // Рисуем линию с стилем операции (один цвет для группы)
         const linePath = svg.append('path')
             .datum(groupData)
@@ -281,7 +285,7 @@ function createChart(config) {
             .style('stroke-dasharray', getOperationStyle(operation).strokeDasharray)
             .style('fill', 'none')
             .style('stroke-linecap', 'round')
-            .style('opacity', chartState.visibleFullGroups.has(fullGroup) ? 1 : 0);
+            .style('opacity', isVisibleByDefault ? 1 : 0); // НАЧАЛЬНАЯ ВИДИМОСТЬ
 
         chartState.lines.set(fullGroup, linePath);
 
@@ -302,7 +306,7 @@ function createChart(config) {
                 .style('stroke-width', 1.5)
                 .style('cursor', 'pointer')
                 .style('transition', 'all 0.3s ease')
-                .style('opacity', chartState.visibleFullGroups.has(fullGroup) ? 1 : 0);
+                .style('opacity', isVisibleByDefault ? 1 : 0); // НАЧАЛЬНАЯ ВИДИМОСТЬ
 
             chartState.dots.set(fullGroup, dots);
 
@@ -330,6 +334,16 @@ function createChart(config) {
                 });
         }
     });
+
+    // Обновляем chartState для начальной видимости
+    chartState.visibleFullGroups = new Set(
+        fullGroups.filter(fullGroup => {
+            const operation = fullGroup.split(' - ')[1];
+            return config.visibleOperations ?
+                config.visibleOperations.includes(operation) :
+                operation === 'read';
+        })
+    );
 
     // Функция для обновления видимости
     chartState.updateVisibility = function(visibleFullGroups) {

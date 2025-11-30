@@ -91,7 +91,8 @@ class DashboardApp {
                 groupBy: 'config',
                 timeRangeDays: timeRangeDays,
                 legendType: 'config',
-                metricType: 'iops'
+                metricType: 'iops',
+                visibleOperations: Array.from(this.visibleConfigOperations)
             },
             {
                 id: 'chart-latency-config',
@@ -101,7 +102,8 @@ class DashboardApp {
                 groupBy: 'config',
                 timeRangeDays: timeRangeDays,
                 legendType: 'config',
-                metricType: 'latency'
+                metricType: 'latency',
+                visibleOperations: Array.from(this.visibleConfigOperations)
             },
             {
                 id: 'chart-iops-branch',
@@ -111,7 +113,8 @@ class DashboardApp {
                 groupBy: 'branch',
                 timeRangeDays: timeRangeDays,
                 legendType: 'branch',
-                metricType: 'iops'
+                metricType: 'iops',
+                visibleOperations: Array.from(this.visibleConfigOperations)
             },
             {
                 id: 'chart-latency-branch',
@@ -121,7 +124,8 @@ class DashboardApp {
                 groupBy: 'branch',
                 timeRangeDays: timeRangeDays,
                 legendType: 'branch',
-                metricType: 'latency'
+                metricType: 'latency',
+                visibleOperations: Array.from(this.visibleConfigOperations)
             }
         ];
 
