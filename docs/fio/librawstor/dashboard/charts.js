@@ -290,54 +290,54 @@ function createChart(config) {
             .style('stroke-dasharray', getOperationStyle(operation).strokeDasharray)
             .style('fill', 'none')
             .style('stroke-linecap', 'round')
-            .style('opacity', isInitiallyVisible ? 1 : 0); // НАЧАЛЬНАЯ ВИДИМОСТЬ
+            .style('opacity', isInitiallyVisible ? 1 : 0);
 
         chartState.lines.set(fullGroup, linePath);
 
-        // Рисуем точки только если мало данных или короткий диапазон
-        const showDots = processedData.length < 50 || timeRangeDays < 15;
-        
-        if (showDots) {
-            const dots = svg.selectAll(`.dot-${createSafeClassName(fullGroup)}`)
-                .data(groupData)
-                .enter()
-                .append('circle')
-                .attr('class', `dot dot-${createSafeClassName(fullGroup)}`)
-                .attr('cx', d => xScale(d.timestamp))
-                .attr('cy', d => yScale(d.value))
-                .attr('r', 3)
-                .style('fill', getColor(baseGroupIndex))
-                .style('stroke', '#fff')
-                .style('stroke-width', 1.5)
-                .style('cursor', 'pointer')
-                .style('transition', 'all 0.3s ease')
-                .style('opacity', isInitiallyVisible ? 1 : 0); // НАЧАЛЬНАЯ ВИДИМОСТЬ
+        // ВСЕГДА РИСУЕМ ТОЧКИ - убираем условие showDots
+        const dots = svg.selectAll(`.dot-${createSafeClassName(fullGroup)}`)
+            .data(groupData)
+            .enter()
+            .append('circle')
+            .attr('class', `dot dot-${createSafeClassName(fullGroup)}`)
+            .attr('cx', d => xScale(d.timestamp))
+            .attr('cy', d => yScale(d.value))
+            .attr('r', 4) // Немного увеличим размер точек
+            .style('fill', getColor(baseGroupIndex))
+            .style('stroke', '#fff')
+            .style('stroke-width', 2)
+            .style('cursor', 'pointer')
+            .style('transition', 'all 0.3s ease')
+            .style('opacity', isInitiallyVisible ? 1 : 0)
+            .style('pointer-events', 'all'); // Убедимся что точки кликабельны
 
-            chartState.dots.set(fullGroup, dots);
+        chartState.dots.set(fullGroup, dots);
 
-            // Добавляем взаимодействие
-            dots.on('mouseover', function(event, d) {
-                    if (chartState.visibleFullGroups.has(fullGroup)) {
-                        d3.select(this)
-                            .attr('r', 5)
-                            .style('stroke-width', 2);
-                        showTooltip(event, d, title, accessor, groupBy, timeRangeDays);
-                    }
-                })
-                .on('mouseout', function(event, d) {
-                    if (chartState.visibleFullGroups.has(fullGroup)) {
-                        d3.select(this)
-                            .attr('r', 3)
-                            .style('stroke-width', 1.5);
-                        hideTooltip();
-                    }
-                })
-                .on('click', function(event, d) {
-                    if (chartState.visibleFullGroups.has(fullGroup) && d.test_url) {
-                        window.open(d.test_url, '_blank');
-                    }
-                });
-        }
+        // Добавляем взаимодействие для точек
+        dots.on('mouseover', function(event, d) {
+                if (chartState.visibleFullGroups.has(fullGroup)) {
+                    d3.select(this)
+                        .attr('r', 6)
+                        .style('stroke-width', 3);
+                    showTooltip(event, d, title, accessor, groupBy, timeRangeDays);
+                }
+            })
+            .on('mouseout', function(event, d) {
+                if (chartState.visibleFullGroups.has(fullGroup)) {
+                    d3.select(this)
+                        .attr('r', 4)
+                        .style('stroke-width', 2);
+                    hideTooltip();
+                }
+            })
+            .on('click', function(event, d) {
+                if (chartState.visibleFullGroups.has(fullGroup) && d.commit_sha) {
+                    // Формируем URL для перехода к результатам теста
+                    const testUrl = buildTestUrl(d.config, d.commit_sha);
+                    console.log('Opening test URL:', testUrl);
+                    window.open(testUrl, '_blank');
+                }
+            });
     });
 
     // Функция для обновления видимости
@@ -358,6 +358,25 @@ function createChart(config) {
     };
 
     return chartState;
+}
+
+// Функция для построения URL теста
+function buildTestUrl(config, commitSha) {
+    // Базовый URL дашборда: https://izmdi.github.io/rawstor_bench/fio/librawstor/dashboard/
+    // URL теста: https://izmdi.github.io/rawstor_bench/fio/librawstor/perftest--without-liburing-file-4k-1-1/2ab396e2ce718be5c9f52d5d3d8b987e232c01d2.html
+    
+    // Получаем текущий базовый URL
+    const baseUrl = window.location.origin + window.location.pathname;
+    const dashboardPath = '/fio/librawstor/dashboard/';
+    
+    // Если мы на дашборде, строим относительный путь
+    if (baseUrl.includes(dashboardPath)) {
+        const testPath = baseUrl.replace(dashboardPath, `/fio/librawstor/${config}/${commitSha}.html`);
+        return testPath;
+    }
+    
+    // Иначе строим абсолютный путь
+    return `https://izmdi.github.io/rawstor_bench/fio/librawstor/${config}/${commitSha}.html`;
 }
 
 // Функция для фильтрации данных при больших временных диапазонах
