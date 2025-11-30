@@ -100,49 +100,62 @@ class DashboardApp {
     // Метод для фильтрации веток
     filterBranches(allBranches) {
         const filteredBranches = new Set();
-        
+
         // Шаг 1: Исключаем ветки с тегами (теги обычно содержат '/' или начинаются с цифр/спецсимволов)
         const branchesWithoutTags = Array.from(allBranches).filter(branch => {
             // Исключаем теги (предполагаем, что теги содержат '/' или начинаются с цифр/спецсимволов)
-            const isTag = branch.includes('/') || 
-                         /^[0-9]/.test(branch) || 
-                         /^v\d/.test(branch) ||
-                         branch.includes('tags/') ||
-                         branch === 'refs/heads/HEAD';
-            
+            const isTag = branch.includes('/') &&
+                         (branch.includes('tags/') ||
+                          /^refs\/tags\//.test(branch) ||
+                          branch.includes('refs/tags/'));
+
             if (isTag) {
                 console.log(`🏷️  Excluding tag: ${branch}`);
                 return false;
             }
-            
+
             // Оставляем только ветки (обычно начинаются с refs/heads/)
             return branch.startsWith('refs/heads/');
         });
-        
-        console.log(`📋 Branches without tags: ${branchesWithoutTags.length}`);
-        
+
+        console.log(`📋 Branches without tags: ${branchesWithoutTags.length}`, branchesWithoutTags);
+
+        // Если после фильтрации тегов веток меньше или равно 8, возвращаем все
+        if (branchesWithoutTags.length <= 8) {
+            branchesWithoutTags.forEach(branch => filteredBranches.add(branch));
+            console.log(`🎯 Using all ${branchesWithoutTags.length} branches (less than 8)`);
+            return filteredBranches;
+        }
+
         // Шаг 2: Получаем информацию о последних изменениях для каждой ветки
         const branchesWithLastActivity = this.getBranchesLastActivity(branchesWithoutTags);
-        
+
+        // Если не удалось получить информацию о активности, возвращаем первые 8 веток
+        if (branchesWithLastActivity.length === 0) {
+            console.log('⚠️  No activity data available, using first 8 branches');
+            branchesWithoutTags.slice(0, 8).forEach(branch => filteredBranches.add(branch));
+            return filteredBranches;
+        }
+
         // Шаг 3: Сортируем по времени последнего изменения (новые первыми)
         const sortedBranches = branchesWithLastActivity.sort((a, b) => {
             return new Date(b.lastActivity) - new Date(a.lastActivity);
         });
-        
+
         console.log('📊 Branches sorted by last activity:');
         sortedBranches.forEach((branch, index) => {
             console.log(`  ${index + 1}. ${branch.name} - ${new Date(branch.lastActivity).toLocaleDateString()}`);
         });
-        
+
         // Шаг 4: Берем только 8 самых актуальных веток
         const topBranches = sortedBranches.slice(0, 8);
-        
+
         topBranches.forEach(branch => {
             filteredBranches.add(branch.name);
         });
-        
+
         console.log(`🎯 Selected top ${topBranches.length} branches from ${sortedBranches.length} available`);
-        
+
         return filteredBranches;
     }
 
