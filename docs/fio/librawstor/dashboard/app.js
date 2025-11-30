@@ -11,7 +11,7 @@ class DashboardApp {
         // Управление видимостью операций
         this.visibleConfigOperations = new Set(['read']); // По умолчанию только read
         this.visibleBranchOperations = new Set(['read']); // По умолчанию только read
-        
+
         // Управление видимостью групп
         this.visibleConfigGroups = new Set();
         this.visibleBranchGroups = new Set();
@@ -30,9 +30,9 @@ class DashboardApp {
         
         try {
             await this.loadData();
-            this.createCharts();
             this.collectGroups();
             this.createLegends();
+            this.createCharts();
             this.setupEventListeners();
             this.updateDataInfo();
             
@@ -114,7 +114,7 @@ class DashboardApp {
                 timeRangeDays: timeRangeDays,
                 legendType: 'branch',
                 metricType: 'iops',
-                visibleOperations: Array.from(this.visibleConfigOperations)
+                visibleOperations: Array.from(this.visibleBranchOperations)
             },
             {
                 id: 'chart-latency-branch',
@@ -125,7 +125,7 @@ class DashboardApp {
                 timeRangeDays: timeRangeDays,
                 legendType: 'branch',
                 metricType: 'latency',
-                visibleOperations: Array.from(this.visibleConfigOperations)
+                visibleOperations: Array.from(this.visibleBranchOperations)
             }
         ];
 
@@ -163,7 +163,8 @@ class DashboardApp {
                     groupBy: config.groupBy,
                     timeRangeDays: timeRangeDays,
                     legendType: config.legendType,
-                    metricType: config.metricType
+                    metricType: config.metricType,
+                    visibleOperations: config.visibleOperations
                 });
                 this.charts.set(config.id, chart);
             } else {
@@ -477,9 +478,9 @@ class DashboardApp {
             this.configGroups.clear();
             this.branchGroups.clear();
             
-            this.createCharts();
             this.collectGroups();
             this.createLegends();
+            this.createCharts();
             this.updateDataInfo();
             this.showLoading(false);
         } catch (error) {

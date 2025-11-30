@@ -3,7 +3,7 @@ function createSafeClassName(name) {
 }
 
 function createChart(config) {
-    const { container, title, yLabel, data, accessor, id, groupBy, timeRangeDays, legendType, metricType } = config;
+    const { container, title, yLabel, data, accessor, id, groupBy, timeRangeDays, legendType, metricType, visibleOperations = ['read'] } = config;
     
     if (!data || data.length === 0) {
         container.html('<p class="no-data">No data available</p>');
@@ -252,15 +252,21 @@ function createChart(config) {
         .y(d => yScale(d.value))
         .curve(d3.curveMonotoneX);
 
-    // Рисуем линии и точки
+    // ОПРЕДЕЛЯЕМ НАЧАЛЬНУЮ ВИДИМОСТЬ НА ОСНОВЕ visibleOperations
     const chartState = {
-        groups: baseGroups, // Только базовые группы
-        fullGroups: fullGroups, // Полные группы с операциями
+        groups: baseGroups,
+        fullGroups: fullGroups,
         lines: new Map(),
         dots: new Map(),
-        visibleFullGroups: new Set(fullGroups.filter(fg => fg.includes('read'))) // По умолчанию только read
+        visibleFullGroups: new Set(
+            fullGroups.filter(fullGroup => {
+                const operation = fullGroup.split(' - ')[1];
+                return visibleOperations.includes(operation);
+            })
+        )
     };
 
+    // Рисуем линии и точки
     fullGroups.forEach((fullGroup, groupIndex) => {
         const groupData = dataByFullGroup.get(fullGroup)
             .sort((a, b) => a.timestamp - b.timestamp);
@@ -271,21 +277,20 @@ function createChart(config) {
         const baseGroup = groupData[0].group;
         const baseGroupIndex = baseGroups.indexOf(baseGroup);
 
-        const isVisibleByDefault = config.visibleOperations ?
-        config.visibleOperations.includes(operation) :
-        operation === 'read';
+        // Определяем начальную видимость
+        const isInitiallyVisible = chartState.visibleFullGroups.has(fullGroup);
 
         // Рисуем линию с стилем операции (один цвет для группы)
         const linePath = svg.append('path')
             .datum(groupData)
             .attr('class', `line line-${createSafeClassName(fullGroup)}`)
             .attr('d', line)
-            .style('stroke', getColor(baseGroupIndex)) // Один цвет для всей группы
+            .style('stroke', getColor(baseGroupIndex))
             .style('stroke-width', getOperationStyle(operation).strokeWidth)
             .style('stroke-dasharray', getOperationStyle(operation).strokeDasharray)
             .style('fill', 'none')
             .style('stroke-linecap', 'round')
-            .style('opacity', isVisibleByDefault ? 1 : 0); // НАЧАЛЬНАЯ ВИДИМОСТЬ
+            .style('opacity', isInitiallyVisible ? 1 : 0); // НАЧАЛЬНАЯ ВИДИМОСТЬ
 
         chartState.lines.set(fullGroup, linePath);
 
@@ -301,12 +306,12 @@ function createChart(config) {
                 .attr('cx', d => xScale(d.timestamp))
                 .attr('cy', d => yScale(d.value))
                 .attr('r', 3)
-                .style('fill', getColor(baseGroupIndex)) // Один цвет для всей группы
+                .style('fill', getColor(baseGroupIndex))
                 .style('stroke', '#fff')
                 .style('stroke-width', 1.5)
                 .style('cursor', 'pointer')
                 .style('transition', 'all 0.3s ease')
-                .style('opacity', isVisibleByDefault ? 1 : 0); // НАЧАЛЬНАЯ ВИДИМОСТЬ
+                .style('opacity', isInitiallyVisible ? 1 : 0); // НАЧАЛЬНАЯ ВИДИМОСТЬ
 
             chartState.dots.set(fullGroup, dots);
 
@@ -335,18 +340,9 @@ function createChart(config) {
         }
     });
 
-    // Обновляем chartState для начальной видимости
-    chartState.visibleFullGroups = new Set(
-        fullGroups.filter(fullGroup => {
-            const operation = fullGroup.split(' - ')[1];
-            return config.visibleOperations ?
-                config.visibleOperations.includes(operation) :
-                operation === 'read';
-        })
-    );
-
     // Функция для обновления видимости
     chartState.updateVisibility = function(visibleFullGroups) {
+        chartState.visibleFullGroups = visibleFullGroups;
         fullGroups.forEach(fullGroup => {
             const isVisible = visibleFullGroups.has(fullGroup);
             const line = chartState.lines.get(fullGroup);
