@@ -561,7 +561,7 @@ class DashboardApp {
 
         console.log(`🔄 Updating time range to: ${this.currentTimeRange} days`);
 
-        // Пересоздаем графики с новым масштабом
+        // Принудительно пересоздаем ВСЕ графики
         this.recreateCharts();
         this.updateDataInfo();
 
@@ -569,23 +569,29 @@ class DashboardApp {
     }
 
     recreateCharts() {
-        // Очищаем контейнеры графиков
-        const chartIds = [
-            'chart-iops-config',
-            'chart-latency-config',
-            'chart-iops-branch',
-            'chart-latency-branch'
+        console.log('🔄 Recreating charts with time range:', this.currentTimeRange);
+
+        // Полностью очищаем все контейнеры графиков
+        const chartContainers = [
+            '#chart-iops-config',
+            '#chart-latency-config',
+            '#chart-iops-branch',
+            '#chart-latency-branch'
         ];
 
-        chartIds.forEach(id => {
-            d3.select(`#${id}`).html('');
+        chartContainers.forEach(selector => {
+            const container = d3.select(selector);
+            container.html(''); // Полностью очищаем HTML
+            console.log(`✅ Cleared container: ${selector}`);
         });
 
-        // Очищаем старые графики
+        // Очищаем карту графиков
         this.charts.clear();
+        console.log('✅ Cleared charts map');
 
-        // Пересоздаем графики с новым timeRangeDays
+        // Пересоздаем графики
         this.createCharts();
+        console.log('✅ Charts recreated');
     }
 
     showLoading(show) {

@@ -3,6 +3,7 @@ function createSafeClassName(name) {
 }
 
 function createChart(config) {
+    console.log(`📊 Creating chart: ${config.id} with timeRangeDays: ${config.timeRangeDays}`);
     const { 
         container, title, yLabel, data, accessor, id, groupBy, 
         timeRangeDays, legendType, metricType, 
@@ -10,9 +11,11 @@ function createChart(config) {
     } = config;
     
     if (!data || data.length === 0) {
+        console.warn(`❌ No data for chart: ${id}`);
         container.html('<p class="no-data">No data available</p>');
         return null;
     }
+    console.log(`📈 Chart ${id}: ${data.length} data points`);
 
     // Очищаем контейнер
     container.html('');
