@@ -3,19 +3,18 @@ function createSafeClassName(name) {
 }
 
 function createChart(config) {
-    console.log(`📊 Creating chart: ${config.id} with timeRangeDays: ${config.timeRangeDays}`);
     const { 
         container, title, yLabel, data, accessor, id, groupBy, 
         timeRangeDays, legendType, metricType, 
         visibleOperations = ['read'], availableGroups = [] 
     } = config;
     
+    console.log(`📊 Creating chart: ${id} with timeRangeDays: ${timeRangeDays}`);
+    
     if (!data || data.length === 0) {
-        console.warn(`❌ No data for chart: ${id}`);
         container.html('<p class="no-data">No data available</p>');
         return null;
     }
-    console.log(`📈 Chart ${id}: ${data.length} data points`);
 
     // Очищаем контейнер
     container.html('');
@@ -132,6 +131,8 @@ function createChart(config) {
     const xAxisFormat = timeRangeDays < 15 ? 
         d3.timeFormat('%H:%M %d.%m') :
         d3.timeFormat('%d.%m');
+
+    console.log(`📅 Using X-axis format for ${timeRangeDays} days: ${timeRangeDays < 15 ? 'detailed' : 'daily'}`);
 
     const xAxis = d3.axisBottom(xScale)
         .ticks(timeRangeDays < 15 ? 10 : 8)

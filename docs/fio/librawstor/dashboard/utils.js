@@ -100,7 +100,7 @@ function showTooltip(event, data, chartTitle, accessor, groupBy, timeRangeDays =
             </div>
             ${groupBy === 'config' && data.branch ? `
             <div class="tooltip-branch">
-                <strong>Branch:</strong> ${data.branch}
+                <strong>Branch:</strong> ${data.branch.replace('refs/heads/', '')}
             </div>` : ''}
             ${groupBy === 'branch' && data.config ? `
             <div class="tooltip-config">
