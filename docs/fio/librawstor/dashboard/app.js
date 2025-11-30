@@ -229,7 +229,7 @@ class DashboardApp {
                     accessor: d => d.value,
                     id: config.id,
                     groupBy: config.groupBy,
-                    timeRangeDays: this.currentTimeRange,
+                    timeRangeDays: config.timeRangeDays,
                     legendType: config.legendType,
                     metricType: config.metricType,
                     visibleOperations: config.visibleOperations,
@@ -558,19 +558,33 @@ class DashboardApp {
             url.searchParams.set('days', this.currentTimeRange.toString());
         }
         window.history.pushState({}, '', url.toString());
-        
+
+        console.log(`🔄 Updating time range to: ${this.currentTimeRange} days`);
+
         // Пересоздаем графики с новым масштабом
         this.recreateCharts();
         this.updateDataInfo();
-        
+
         this.showNotification(`Time range updated to ${this.currentTimeRange === 0 ? 'all time' : `last ${this.currentTimeRange} days`}`, 'success');
     }
 
     recreateCharts() {
+        // Очищаем контейнеры графиков
+        const chartIds = [
+            'chart-iops-config',
+            'chart-latency-config',
+            'chart-iops-branch',
+            'chart-latency-branch'
+        ];
+
+        chartIds.forEach(id => {
+            d3.select(`#${id}`).html('');
+        });
+
         // Очищаем старые графики
         this.charts.clear();
-        
-        // Пересоздаем графики
+
+        // Пересоздаем графики с новым timeRangeDays
         this.createCharts();
     }
 
