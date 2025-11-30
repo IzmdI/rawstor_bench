@@ -81,10 +81,8 @@ function createChart(config) {
     // Фильтруем некорректные данные
     processedData = processedData.filter(d => d.value !== null && d.value !== undefined && !isNaN(d.value) && d.timestamp);
 
-    // Фильтруем данные для больших временных диапазонов (15+ дней)
-    if (timeRangeDays >= 15 && processedData.length > 0) {
-        processedData = filterDataForLargeTimeRange(processedData);
-    }
+    // ПРИМЕНЯЕМ ФИЛЬТРАЦИЮ ДАННЫХ
+    processedData = filterChartData(processedData, timeRangeDays);
 
     if (processedData.length === 0) {
         container.html('<p class="no-data">No valid data points</p>');
@@ -360,6 +358,53 @@ function createChart(config) {
     return chartState;
 }
 
+// ФУНКЦИЯ ДЛЯ ФИЛЬТРАЦИИ ДАННЫХ ГРАФИКА
+function filterChartData(data, timeRangeDays) {
+    if (!data || data.length === 0) return [];
+    
+    console.log(`📊 Initial data points: ${data.length}`);
+    
+    // Шаг 1: Группируем по fullGroup (группа + операция)
+    const dataByFullGroup = d3.group(data, d => d.fullGroup);
+    const filteredData = [];
+    
+    dataByFullGroup.forEach((groupData, fullGroup) => {
+        // Шаг 2: Для каждой группы - берем только последний тест в каждый день
+        const dailyGroups = d3.group(groupData, d => {
+            const date = new Date(d.timestamp);
+            return `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`;
+        });
+        
+        const uniqueDailyData = [];
+        dailyGroups.forEach((dayTests, day) => {
+            if (dayTests.length > 0) {
+                // Сортируем по времени и берем последний тест дня
+                const lastTest = dayTests.sort((a, b) => 
+                    new Date(b.timestamp) - new Date(a.timestamp)
+                )[0];
+                uniqueDailyData.push(lastTest);
+            }
+        });
+        
+        // Шаг 3: Проверяем, есть ли данные минимум в 2 разных дня
+        const uniqueDays = new Set(uniqueDailyData.map(d => {
+            const date = new Date(d.timestamp);
+            return `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`;
+        }));
+        
+        if (uniqueDays.size >= 2) {
+            // Добавляем данные только если есть минимум 2 дня
+            filteredData.push(...uniqueDailyData);
+            console.log(`✅ ${fullGroup}: ${uniqueDailyData.length} points across ${uniqueDays.size} days`);
+        } else {
+            console.log(`❌ ${fullGroup}: skipped - only ${uniqueDays.size} day(s) of data`);
+        }
+    });
+    
+    console.log(`📊 Filtered data points: ${filteredData.length} (removed ${data.length - filteredData.length})`);
+    return filteredData;
+}
+
 // Функция для построения URL теста
 function buildTestUrl(config, commitSha) {
     // Базовый URL дашборда: https://izmdi.github.io/rawstor_bench/fio/librawstor/dashboard/
@@ -379,29 +424,7 @@ function buildTestUrl(config, commitSha) {
     return `https://izmdi.github.io/rawstor_bench/fio/librawstor/${config}/${commitSha}.html`;
 }
 
-// Функция для фильтрации данных при больших временных диапазонах
+// Функция для фильтрации данных при больших временных диапазонах (старая - оставляем для совместимости)
 function filterDataForLargeTimeRange(data) {
-    const filteredData = [];
-    const groupsData = d3.group(data, d => d.fullGroup);
-    
-    groupsData.forEach((groupData, fullGroup) => {
-        // Группируем по дням
-        const dailyGroups = d3.group(groupData, d => 
-            new Date(d.timestamp).toDateString()
-        );
-        
-        // Для каждого дня берем только последний тест
-        dailyGroups.forEach((dayTests, day) => {
-            if (dayTests.length > 0) {
-                // Сортируем по времени и берем последний
-                const lastTest = dayTests.sort((a, b) => 
-                    new Date(b.timestamp) - new Date(a.timestamp)
-                )[0];
-                filteredData.push(lastTest);
-            }
-        });
-    });
-    
-    console.log(`📊 Filtered data: ${data.length} → ${filteredData.length} points`);
-    return filteredData;
+    return filterChartData(data, 15); // Используем новую функцию
 }
