@@ -54,6 +54,8 @@ class DashboardApp {
         this.configGroups.clear();
         this.branchGroups.clear();
         
+        console.log('🔄 Collecting groups from data...');
+        
         // Собираем группы из отфильтрованных данных графиков
         if (this.currentData?.charts) {
             // Временные наборы для сбора групп
@@ -82,6 +84,9 @@ class DashboardApp {
                 });
             });
             
+            console.log('📊 Raw config groups:', Array.from(tempConfigGroups));
+            console.log('📊 Raw branch groups:', Array.from(tempBranchGroups));
+            
             // Теперь фильтруем группы - оставляем только те, у которых есть данные в 2+ днях
             this.configGroups = this.filterGroupsWithEnoughData(tempConfigGroups, 'config');
             
@@ -93,69 +98,69 @@ class DashboardApp {
         this.configGroups.forEach(group => this.visibleConfigGroups.add(group));
         this.branchGroups.forEach(group => this.visibleBranchGroups.add(group));
         
-        console.log('Filtered Config groups:', Array.from(this.configGroups));
-        console.log('Filtered Branch groups:', Array.from(this.branchGroups));
+        console.log('✅ Filtered Config groups:', Array.from(this.configGroups));
+        console.log('✅ Filtered Branch groups:', Array.from(this.branchGroups));
     }
 
     // Метод для фильтрации веток
     filterBranches(allBranches) {
         const filteredBranches = new Set();
-
+        
         // Шаг 1: Исключаем ветки с тегами (теги обычно содержат '/' или начинаются с цифр/спецсимволов)
         const branchesWithoutTags = Array.from(allBranches).filter(branch => {
             // Исключаем теги (предполагаем, что теги содержат '/' или начинаются с цифр/спецсимволов)
-            const isTag = branch.includes('/') &&
-                         (branch.includes('tags/') ||
+            const isTag = branch.includes('/') && 
+                         (branch.includes('tags/') || 
                           /^refs\/tags\//.test(branch) ||
                           branch.includes('refs/tags/'));
-
+            
             if (isTag) {
                 console.log(`🏷️  Excluding tag: ${branch}`);
                 return false;
             }
-
+            
             // Оставляем только ветки (обычно начинаются с refs/heads/)
             return branch.startsWith('refs/heads/');
         });
-
+        
         console.log(`📋 Branches without tags: ${branchesWithoutTags.length}`, branchesWithoutTags);
-
+        
         // Если после фильтрации тегов веток меньше или равно 8, возвращаем все
         if (branchesWithoutTags.length <= 8) {
             branchesWithoutTags.forEach(branch => filteredBranches.add(branch));
             console.log(`🎯 Using all ${branchesWithoutTags.length} branches (less than 8)`);
             return filteredBranches;
         }
-
+        
         // Шаг 2: Получаем информацию о последних изменениях для каждой ветки
         const branchesWithLastActivity = this.getBranchesLastActivity(branchesWithoutTags);
-
+        
         // Если не удалось получить информацию о активности, возвращаем первые 8 веток
         if (branchesWithLastActivity.length === 0) {
             console.log('⚠️  No activity data available, using first 8 branches');
             branchesWithoutTags.slice(0, 8).forEach(branch => filteredBranches.add(branch));
             return filteredBranches;
         }
-
+        
         // Шаг 3: Сортируем по времени последнего изменения (новые первыми)
         const sortedBranches = branchesWithLastActivity.sort((a, b) => {
             return new Date(b.lastActivity) - new Date(a.lastActivity);
         });
-
+        
         console.log('📊 Branches sorted by last activity:');
         sortedBranches.forEach((branch, index) => {
             console.log(`  ${index + 1}. ${branch.name} - ${new Date(branch.lastActivity).toLocaleDateString()}`);
         });
-
+        
         // Шаг 4: Берем только 8 самых актуальных веток
         const topBranches = sortedBranches.slice(0, 8);
-
+        
         topBranches.forEach(branch => {
             filteredBranches.add(branch.name);
         });
-
+        
         console.log(`🎯 Selected top ${topBranches.length} branches from ${sortedBranches.length} available`);
-
+        
         return filteredBranches;
     }
 
@@ -250,6 +255,8 @@ class DashboardApp {
         if (!this.currentData?.charts) {
             throw new Error('No chart data available');
         }
+
+        console.log(`🎨 Creating charts with time range: ${this.currentTimeRange} days`);
 
         const chartsConfig = [
             {
@@ -426,12 +433,17 @@ class DashboardApp {
         const legendContainer = d3.select('#legend-branch');
         legendContainer.html('');
         
+        console.log('🔄 Creating branch legend...');
+        console.log('📊 Branch groups:', Array.from(this.branchGroups));
+        console.log('📊 Visible branch groups:', Array.from(this.visibleBranchGroups));
+        
         if (this.branchGroups.size === 0) {
-            legendContainer.html('<p style="color: #6c757d; font-style: italic;">No branch data</p>');
+            console.log('⚠️ No branch groups available');
+            legendContainer.html('<p style="color: #6c757d; font-style: italic;">No branch data available</p>');
             return;
         }
 
-        console.log('Creating branch legend with groups:', Array.from(this.branchGroups));
+        console.log('✅ Creating branch legend with groups:', Array.from(this.branchGroups));
 
         // Добавляем переключатель операций
         const operationToggle = legendContainer.append('div')
@@ -461,11 +473,15 @@ class DashboardApp {
         // Создаем группы для каждой ветки с красивыми названиями
         const branchesArray = Array.from(this.branchGroups);
         
+        console.log(`🎨 Rendering ${branchesArray.length} branch legends`);
+        
         branchesArray.forEach((branch, branchIndex) => {
             const groupContainer = legendContainer.append('div').attr('class', 'legend-group');
             
             // Красивое отображение названия ветки (убираем refs/heads/)
             const displayName = branch.replace('refs/heads/', '');
+            
+            console.log(`   📍 Adding branch: ${displayName} (original: ${branch})`);
             
             // Заголовок группы (кликабельный)
             groupContainer.append('div')
@@ -492,6 +508,8 @@ class DashboardApp {
                 .attr('class', 'legend-label')
                 .text('Read/Write');
         });
+        
+        console.log('✅ Branch legend created successfully');
     }
 
     setConfigOperations(operations) {
@@ -689,7 +707,8 @@ class DashboardApp {
         
         chartContainers.forEach(selector => {
             const container = d3.select(selector);
-            container.html(''); // Полностью очищаем HTML
+            // Полностью очищаем контейнер
+            container.selectAll('*').remove();
             console.log(`✅ Cleared container: ${selector}`);
         });
         
@@ -697,9 +716,9 @@ class DashboardApp {
         this.charts.clear();
         console.log('✅ Cleared charts map');
         
-        // Пересоздаем графики
+        // Пересоздаем графики с новым time range
         this.createCharts();
-        console.log('✅ Charts recreated');
+        console.log('✅ Charts recreated with new time range');
     }
 
     showLoading(show) {

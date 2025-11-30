@@ -10,8 +10,10 @@ function createChart(config) {
     } = config;
     
     console.log(`📊 Creating chart: ${id} with timeRangeDays: ${timeRangeDays}`);
+    console.log(`📈 Initial data points: ${data.length}`);
     
     if (!data || data.length === 0) {
+        console.warn(`❌ No data for chart: ${id}`);
         container.html('<p class="no-data">No data available</p>');
         return null;
     }
@@ -87,13 +89,16 @@ function createChart(config) {
     // Фильтруем некорректные данные
     processedData = processedData.filter(d => d.value !== null && d.value !== undefined && !isNaN(d.value) && d.timestamp);
 
-    // ПРИМЕНЯЕМ ФИЛЬТРАЦИЮ ДАННЫХ
+    // ПРИМЕНЯЕМ ФИЛЬТРАЦИЮ ДАННЫХ ПО ВРЕМЕНИ
     processedData = filterChartData(processedData, timeRangeDays);
 
     if (processedData.length === 0) {
-        container.html('<p class="no-data">No valid data points</p>');
+        console.warn(`❌ No valid data points after filtering for chart: ${id}`);
+        container.html('<p class="no-data">No data available for selected time range</p>');
         return null;
     }
+
+    console.log(`📈 Chart ${id}: ${processedData.length} data points after filtering`);
 
     // Группируем данные по полной группе (group + operation)
     const dataByFullGroup = d3.group(processedData, d => d.fullGroup);
@@ -118,6 +123,9 @@ function createChart(config) {
         .domain([Math.max(0, yMin - yPadding), yMax + yPadding])
         .range([height, 0])
         .nice();
+
+    console.log(`📅 X-axis domain: ${xScale.domain().map(d => d.toISOString().split('T')[0])}`);
+    console.log(`📊 Y-axis domain: [${yScale.domain()[0].toFixed(2)}, ${yScale.domain()[1].toFixed(2)}]`);
 
     // НАСТРОЙКИ ТИПОГРАФИКИ ДЛЯ ОСЕЙ
     const axisFontFamily = "'Segoe UI', 'Helvetica Neue', Arial, sans-serif";
@@ -276,6 +284,8 @@ function createChart(config) {
         )
     };
 
+    console.log(`👁️  Initial visibility: ${Array.from(chartState.visibleFullGroups).join(', ')}`);
+
     // Рисуем линии и точки
     fullGroups.forEach((fullGroup, groupIndex) => {
         const groupData = dataByFullGroup.get(fullGroup)
@@ -295,6 +305,8 @@ function createChart(config) {
 
         // Определяем начальную видимость
         const isInitiallyVisible = chartState.visibleFullGroups.has(fullGroup);
+
+        console.log(`🎨 Drawing ${fullGroup}: ${groupData.length} points, visible: ${isInitiallyVisible}`);
 
         // Рисуем линию с стилем операции (один цвет для группы)
         const linePath = svg.append('path')
@@ -359,6 +371,8 @@ function createChart(config) {
     // Функция для обновления видимости
     chartState.updateVisibility = function(visibleFullGroups) {
         chartState.visibleFullGroups = visibleFullGroups;
+        console.log(`👁️  Updating visibility: ${Array.from(visibleFullGroups).join(', ')}`);
+        
         fullGroups.forEach(fullGroup => {
             const isVisible = visibleFullGroups.has(fullGroup);
             const line = chartState.lines.get(fullGroup);
@@ -373,6 +387,7 @@ function createChart(config) {
         });
     };
 
+    console.log(`✅ Chart ${id} created successfully with ${fullGroups.length} groups`);
     return chartState;
 }
 
@@ -380,15 +395,39 @@ function createChart(config) {
 function filterChartData(data, timeRangeDays) {
     if (!data || data.length === 0) return [];
     
-    console.log(`📊 Initial data points: ${data.length}`);
+    console.log(`📊 Initial data points: ${data.length}, time range: ${timeRangeDays} days`);
+    
+    // Если timeRangeDays = 0 (all), возвращаем все данные без фильтрации
+    if (timeRangeDays === 0) {
+        console.log('📅 Using all data (no time filter)');
+        return data;
+    }
+    
+    // Рассчитываем дату отсечения
+    const cutoffDate = new Date();
+    cutoffDate.setDate(cutoffDate.getDate() - timeRangeDays);
+    
+    console.log(`📅 Filtering data since: ${cutoffDate.toISOString().split('T')[0]}`);
     
     // Шаг 1: Группируем по fullGroup (группа + операция)
     const dataByFullGroup = d3.group(data, d => d.fullGroup);
     const filteredData = [];
     
     dataByFullGroup.forEach((groupData, fullGroup) => {
-        // Шаг 2: Для каждой группы - берем только последний тест в каждый день
-        const dailyGroups = d3.group(groupData, d => {
+        // Шаг 2: Фильтруем данные по времени
+        const timeFilteredData = groupData.filter(d => {
+            if (!d.timestamp || d.timestamp === "Unknown date") return false;
+            const pointDate = new Date(d.timestamp);
+            return pointDate >= cutoffDate;
+        });
+        
+        if (timeFilteredData.length === 0) {
+            console.log(`❌ ${fullGroup}: no data in the last ${timeRangeDays} days`);
+            return;
+        }
+        
+        // Шаг 3: Для каждой группы - берем только последний тест в каждый день
+        const dailyGroups = d3.group(timeFilteredData, d => {
             const date = new Date(d.timestamp);
             return `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`;
         });
@@ -404,7 +443,7 @@ function filterChartData(data, timeRangeDays) {
             }
         });
         
-        // Шаг 3: Проверяем, есть ли данные минимум в 2 разных дня
+        // Шаг 4: Проверяем, есть ли данные минимум в 2 разных дня
         const uniqueDays = new Set(uniqueDailyData.map(d => {
             const date = new Date(d.timestamp);
             return `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`;
@@ -413,9 +452,9 @@ function filterChartData(data, timeRangeDays) {
         if (uniqueDays.size >= 2) {
             // Добавляем данные только если есть минимум 2 дня
             filteredData.push(...uniqueDailyData);
-            console.log(`✅ ${fullGroup}: ${uniqueDailyData.length} points across ${uniqueDays.size} days`);
+            console.log(`✅ ${fullGroup}: ${uniqueDailyData.length} points across ${uniqueDays.size} days (last ${timeRangeDays} days)`);
         } else {
-            console.log(`❌ ${fullGroup}: skipped - only ${uniqueDays.size} day(s) of data`);
+            console.log(`❌ ${fullGroup}: skipped - only ${uniqueDays.size} day(s) of data in last ${timeRangeDays} days`);
         }
     });
     
