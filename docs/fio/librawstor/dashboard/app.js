@@ -84,7 +84,9 @@ class DashboardApp {
             
             // Теперь фильтруем группы - оставляем только те, у которых есть данные в 2+ днях
             this.configGroups = this.filterGroupsWithEnoughData(tempConfigGroups, 'config');
-            this.branchGroups = this.filterGroupsWithEnoughData(tempBranchGroups, 'branch');
+            
+            // ФИЛЬТРУЕМ ВЕТКИ: исключаем теги и оставляем только 8 самых актуальных
+            this.branchGroups = this.filterBranches(tempBranchGroups);
         }
         
         // Показываем все отфильтрованные группы по умолчанию
@@ -93,6 +95,91 @@ class DashboardApp {
         
         console.log('Filtered Config groups:', Array.from(this.configGroups));
         console.log('Filtered Branch groups:', Array.from(this.branchGroups));
+    }
+
+    // Метод для фильтрации веток
+    filterBranches(allBranches) {
+        const filteredBranches = new Set();
+        
+        // Шаг 1: Исключаем ветки с тегами (теги обычно содержат '/' или начинаются с цифр/спецсимволов)
+        const branchesWithoutTags = Array.from(allBranches).filter(branch => {
+            // Исключаем теги (предполагаем, что теги содержат '/' или начинаются с цифр/спецсимволов)
+            const isTag = branch.includes('/') || 
+                         /^[0-9]/.test(branch) || 
+                         /^v\d/.test(branch) ||
+                         branch.includes('tags/') ||
+                         branch === 'refs/heads/HEAD';
+            
+            if (isTag) {
+                console.log(`🏷️  Excluding tag: ${branch}`);
+                return false;
+            }
+            
+            // Оставляем только ветки (обычно начинаются с refs/heads/)
+            return branch.startsWith('refs/heads/');
+        });
+        
+        console.log(`📋 Branches without tags: ${branchesWithoutTags.length}`);
+        
+        // Шаг 2: Получаем информацию о последних изменениях для каждой ветки
+        const branchesWithLastActivity = this.getBranchesLastActivity(branchesWithoutTags);
+        
+        // Шаг 3: Сортируем по времени последнего изменения (новые первыми)
+        const sortedBranches = branchesWithLastActivity.sort((a, b) => {
+            return new Date(b.lastActivity) - new Date(a.lastActivity);
+        });
+        
+        console.log('📊 Branches sorted by last activity:');
+        sortedBranches.forEach((branch, index) => {
+            console.log(`  ${index + 1}. ${branch.name} - ${new Date(branch.lastActivity).toLocaleDateString()}`);
+        });
+        
+        // Шаг 4: Берем только 8 самых актуальных веток
+        const topBranches = sortedBranches.slice(0, 8);
+        
+        topBranches.forEach(branch => {
+            filteredBranches.add(branch.name);
+        });
+        
+        console.log(`🎯 Selected top ${topBranches.length} branches from ${sortedBranches.length} available`);
+        
+        return filteredBranches;
+    }
+
+    // Метод для получения времени последней активности ветки
+    getBranchesLastActivity(branches) {
+        const branchesWithActivity = [];
+        
+        branches.forEach(branch => {
+            // Ищем последний тест для этой ветки во всех данных
+            let lastActivity = null;
+            
+            // Проверяем все типы графиков для этой ветки
+            const chartKeys = ['iops_read_by_branch', 'iops_write_by_branch', 'latency_read_by_branch', 'latency_write_by_branch'];
+            
+            chartKeys.forEach(chartKey => {
+                const chartData = this.currentData.charts[chartKey] || [];
+                chartData.forEach(point => {
+                    if (point.group === branch && point.timestamp && point.timestamp !== "Unknown date") {
+                        const pointDate = new Date(point.timestamp);
+                        if (!lastActivity || pointDate > lastActivity) {
+                            lastActivity = pointDate;
+                        }
+                    }
+                });
+            });
+            
+            if (lastActivity) {
+                branchesWithActivity.push({
+                    name: branch,
+                    lastActivity: lastActivity
+                });
+            } else {
+                console.log(`⚠️  No activity data for branch: ${branch}`);
+            }
+        });
+        
+        return branchesWithActivity;
     }
 
     // Метод для фильтрации групп
@@ -115,6 +202,11 @@ class DashboardApp {
     // Метод для проверки, есть ли у группы данные в 2+ днях
     hasGroupEnoughData(group, groupType, timeRangeDays) {
         if (!this.currentData?.charts) return false;
+        
+        // Для веток проверяем только если ветка есть в отфильтрованном списке
+        if (groupType === 'branch' && !this.branchGroups.has(group)) {
+            return false;
+        }
         
         // Определяем какие chart keys использовать в зависимости от типа группы
         const chartKeys = groupType === 'config' 
@@ -229,7 +321,7 @@ class DashboardApp {
                     accessor: d => d.value,
                     id: config.id,
                     groupBy: config.groupBy,
-                    timeRangeDays: config.timeRangeDays,
+                    timeRangeDays: this.currentTimeRange,
                     legendType: config.legendType,
                     metricType: config.metricType,
                     visibleOperations: config.visibleOperations,
@@ -353,17 +445,20 @@ class DashboardApp {
                 this.setBranchOperations(['read', 'write']);
             });
 
-        // Создаем группы для каждой ветки
+        // Создаем группы для каждой ветки с красивыми названиями
         const branchesArray = Array.from(this.branchGroups);
         
         branchesArray.forEach((branch, branchIndex) => {
             const groupContainer = legendContainer.append('div').attr('class', 'legend-group');
             
+            // Красивое отображение названия ветки (убираем refs/heads/)
+            const displayName = branch.replace('refs/heads/', '');
+            
             // Заголовок группы (кликабельный)
             groupContainer.append('div')
                 .attr('class', 'legend-group-title')
                 .style('cursor', 'pointer')
-                .text(branch)
+                .text(displayName)
                 .on('click', () => {
                     this.toggleBranchGroup(branch);
                 });
@@ -503,7 +598,7 @@ class DashboardApp {
             <p><strong>Generated:</strong> ${new Date(this.currentData.generated_at).toLocaleString()}</p>
             <p><strong>Total tests:</strong> ${this.currentData.summary?.total_tests || 0}</p>
             <p><strong>Configurations:</strong> ${this.currentData.summary?.configurations?.join(', ') || 'N/A'}</p>
-            <p><strong>Branches:</strong> ${this.currentData.summary?.branches?.join(', ') || 'N/A'}</p>
+            <p><strong>Branches:</strong> ${Array.from(this.branchGroups).map(b => b.replace('refs/heads/', '')).join(', ') || 'N/A'}</p>
             <p><strong>Time range:</strong> ${this.currentTimeRange === 0 ? 'All data' : `Last ${this.currentTimeRange} days`}</p>
             <p><strong>Data coverage:</strong> Last 365 days (full dataset)</p>
         `;
@@ -558,37 +653,37 @@ class DashboardApp {
             url.searchParams.set('days', this.currentTimeRange.toString());
         }
         window.history.pushState({}, '', url.toString());
-
+        
         console.log(`🔄 Updating time range to: ${this.currentTimeRange} days`);
-
-        // Принудительно пересоздаем ВСЕ графики
+        
+        // Пересоздаем графики с новым масштабом
         this.recreateCharts();
         this.updateDataInfo();
-
+        
         this.showNotification(`Time range updated to ${this.currentTimeRange === 0 ? 'all time' : `last ${this.currentTimeRange} days`}`, 'success');
     }
 
     recreateCharts() {
         console.log('🔄 Recreating charts with time range:', this.currentTimeRange);
-
+        
         // Полностью очищаем все контейнеры графиков
         const chartContainers = [
             '#chart-iops-config',
             '#chart-latency-config',
-            '#chart-iops-branch',
+            '#chart-iops-branch', 
             '#chart-latency-branch'
         ];
-
+        
         chartContainers.forEach(selector => {
             const container = d3.select(selector);
             container.html(''); // Полностью очищаем HTML
             console.log(`✅ Cleared container: ${selector}`);
         });
-
+        
         // Очищаем карту графиков
         this.charts.clear();
         console.log('✅ Cleared charts map');
-
+        
         // Пересоздаем графики
         this.createCharts();
         console.log('✅ Charts recreated');
