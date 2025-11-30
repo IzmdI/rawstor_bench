@@ -3,7 +3,11 @@ function createSafeClassName(name) {
 }
 
 function createChart(config) {
-    const { container, title, yLabel, data, accessor, id, groupBy, timeRangeDays, legendType, metricType, visibleOperations = ['read'] } = config;
+    const { 
+        container, title, yLabel, data, accessor, id, groupBy, 
+        timeRangeDays, legendType, metricType, 
+        visibleOperations = ['read'], availableGroups = [] 
+    } = config;
     
     if (!data || data.length === 0) {
         container.html('<p class="no-data">No data available</p>');
@@ -92,7 +96,11 @@ function createChart(config) {
     // Группируем данные по полной группе (group + operation)
     const dataByFullGroup = d3.group(processedData, d => d.fullGroup);
     const fullGroups = Array.from(dataByFullGroup.keys());
-    const baseGroups = Array.from(new Set(processedData.map(d => d.group)));
+    
+    // Используем availableGroups если переданы, иначе берем из данных
+    const baseGroups = availableGroups.length > 0 
+        ? availableGroups 
+        : Array.from(new Set(processedData.map(d => d.group)));
 
     // Создаем шкалы
     const xScale = d3.scaleTime()
@@ -273,7 +281,13 @@ function createChart(config) {
 
         const operation = groupData[0].operation;
         const baseGroup = groupData[0].group;
+        
+        // Находим индекс группы в baseGroups для правильного цвета
         const baseGroupIndex = baseGroups.indexOf(baseGroup);
+        if (baseGroupIndex === -1) {
+            console.warn(`Group "${baseGroup}" not found in available groups, skipping`);
+            return;
+        }
 
         // Определяем начальную видимость
         const isInitiallyVisible = chartState.visibleFullGroups.has(fullGroup);
@@ -292,7 +306,7 @@ function createChart(config) {
 
         chartState.lines.set(fullGroup, linePath);
 
-        // ВСЕГДА РИСУЕМ ТОЧКИ - убираем условие showDots
+        // ВСЕГДА РИСУЕМ ТОЧКИ
         const dots = svg.selectAll(`.dot-${createSafeClassName(fullGroup)}`)
             .data(groupData)
             .enter()
@@ -300,14 +314,14 @@ function createChart(config) {
             .attr('class', `dot dot-${createSafeClassName(fullGroup)}`)
             .attr('cx', d => xScale(d.timestamp))
             .attr('cy', d => yScale(d.value))
-            .attr('r', 4) // Немного увеличим размер точек
+            .attr('r', 4)
             .style('fill', getColor(baseGroupIndex))
             .style('stroke', '#fff')
             .style('stroke-width', 2)
             .style('cursor', 'pointer')
             .style('transition', 'all 0.3s ease')
             .style('opacity', isInitiallyVisible ? 1 : 0)
-            .style('pointer-events', 'all'); // Убедимся что точки кликабельны
+            .style('pointer-events', 'all');
 
         chartState.dots.set(fullGroup, dots);
 

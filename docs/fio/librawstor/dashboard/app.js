@@ -47,44 +47,98 @@ class DashboardApp {
         console.log('Data loaded successfully');
     }
 
-    // Собираем группы отдельно для конфигураций и веток
     collectGroups() {
         this.configGroups.clear();
         this.branchGroups.clear();
-        
-        // Собираем группы из всех доступных данных
+
+        // Собираем группы из отфильтрованных данных графиков
         if (this.currentData?.charts) {
-            // Для конфигураций
+            // Временные наборы для сбора групп
+            const tempConfigGroups = new Set();
+            const tempBranchGroups = new Set();
+
+            // Собираем группы из всех доступных данных
             const configCharts = ['iops_read_by_config', 'iops_write_by_config', 'latency_read_by_config', 'latency_write_by_config'];
+            const branchCharts = ['iops_read_by_branch', 'iops_write_by_branch', 'latency_read_by_branch', 'latency_write_by_branch'];
+
             configCharts.forEach(chartKey => {
                 const chartData = this.currentData.charts[chartKey] || [];
                 chartData.forEach(point => {
                     if (point.group) {
-                        this.configGroups.add(point.group);
+                        tempConfigGroups.add(point.group);
                     }
                 });
             });
-            
-            // Для веток
-            const branchCharts = ['iops_read_by_branch', 'iops_write_by_branch', 'latency_read_by_branch', 'latency_write_by_branch'];
+
             branchCharts.forEach(chartKey => {
                 const chartData = this.currentData.charts[chartKey] || [];
                 chartData.forEach(point => {
                     if (point.group) {
-                        this.branchGroups.add(point.group);
+                        tempBranchGroups.add(point.group);
                     }
                 });
             });
+
+            // Теперь фильтруем группы - оставляем только те, у которых есть данные в 2+ днях
+            this.configGroups = this.filterGroupsWithEnoughData(tempConfigGroups, 'config');
+            this.branchGroups = this.filterGroupsWithEnoughData(tempBranchGroups, 'branch');
         }
-        
-        // Показываем все группы по умолчанию
+
+        // Показываем все отфильтрованные группы по умолчанию
         this.configGroups.forEach(group => this.visibleConfigGroups.add(group));
         this.branchGroups.forEach(group => this.visibleBranchGroups.add(group));
-        
-        console.log('Config groups:', Array.from(this.configGroups));
-        console.log('Branch groups:', Array.from(this.branchGroups));
+
+        console.log('Filtered Config groups:', Array.from(this.configGroups));
+        console.log('Filtered Branch groups:', Array.from(this.branchGroups));
     }
 
+    // Добавляем новый метод для фильтрации групп
+    filterGroupsWithEnoughData(groups, groupType) {
+        const filteredGroups = new Set();
+        const timeRangeDays = this.currentData.filter?.days || 30;
+
+        groups.forEach(group => {
+            // Проверяем, есть ли у группы данные минимум в 2 разных днях
+            if (this.hasGroupEnoughData(group, groupType, timeRangeDays)) {
+                filteredGroups.add(group);
+            } else {
+                console.log(`⚠️ Filtered out ${groupType} group "${group}" - insufficient data across days`);
+            }
+        });
+
+        return filteredGroups;
+    }
+
+    // Метод для проверки, есть ли у группы данные в 2+ днях
+    hasGroupEnoughData(group, groupType, timeRangeDays) {
+        if (!this.currentData?.charts) return false;
+
+        // Определяем какие chart keys использовать в зависимости от типа группы
+        const chartKeys = groupType === 'config'
+            ? ['iops_read_by_config', 'iops_write_by_config', 'latency_read_by_config', 'latency_write_by_config']
+            : ['iops_read_by_branch', 'iops_write_by_branch', 'latency_read_by_branch', 'latency_write_by_branch'];
+
+        const uniqueDays = new Set();
+
+        // Собираем все уникальные дни для этой группы
+        chartKeys.forEach(chartKey => {
+            const chartData = this.currentData.charts[chartKey] || [];
+            chartData.forEach(point => {
+                if (point.group === group && point.timestamp && point.timestamp !== "Unknown date") {
+                    const date = new Date(point.timestamp);
+                    const dayKey = `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`;
+                    uniqueDays.add(dayKey);
+                }
+            });
+        });
+
+        const hasEnoughData = uniqueDays.size >= 2;
+        console.log(`📅 Group "${group}" (${groupType}): ${uniqueDays.size} unique days - ${hasEnoughData ? 'KEEP' : 'FILTER OUT'}`);
+
+        return hasEnoughData;
+    }
+
+    // Также обновим метод createCharts чтобы использовать правильные индексы для цветов
     createCharts() {
         if (!this.currentData?.charts) {
             throw new Error('No chart data available');
@@ -102,7 +156,8 @@ class DashboardApp {
                 timeRangeDays: timeRangeDays,
                 legendType: 'config',
                 metricType: 'iops',
-                visibleOperations: Array.from(this.visibleConfigOperations) // Передаем видимые операции
+                visibleOperations: Array.from(this.visibleConfigOperations),
+                availableGroups: Array.from(this.configGroups) // Передаем доступные группы
             },
             {
                 id: 'chart-latency-config',
@@ -113,7 +168,8 @@ class DashboardApp {
                 timeRangeDays: timeRangeDays,
                 legendType: 'config',
                 metricType: 'latency',
-                visibleOperations: Array.from(this.visibleConfigOperations)
+                visibleOperations: Array.from(this.visibleConfigOperations),
+                availableGroups: Array.from(this.configGroups)
             },
             {
                 id: 'chart-iops-branch',
@@ -124,7 +180,8 @@ class DashboardApp {
                 timeRangeDays: timeRangeDays,
                 legendType: 'branch',
                 metricType: 'iops',
-                visibleOperations: Array.from(this.visibleBranchOperations)
+                visibleOperations: Array.from(this.visibleBranchOperations),
+                availableGroups: Array.from(this.branchGroups)
             },
             {
                 id: 'chart-latency-branch',
@@ -135,27 +192,26 @@ class DashboardApp {
                 timeRangeDays: timeRangeDays,
                 legendType: 'branch',
                 metricType: 'latency',
-                visibleOperations: Array.from(this.visibleBranchOperations)
+                visibleOperations: Array.from(this.visibleBranchOperations),
+                availableGroups: Array.from(this.branchGroups)
             }
         ];
 
         chartsConfig.forEach(config => {
             let chartData = [];
-            
+
             if (config.metricType === 'iops') {
-                // Комбинируем IOPS read и write данные
                 const iopsReadData = this.currentData.charts[`iops_read_by_${config.groupBy}`] || [];
                 const iopsWriteData = this.currentData.charts[`iops_write_by_${config.groupBy}`] || [];
-                
+
                 chartData = [
                     ...iopsReadData.map(d => ({ ...d, metric: 'iops_read', dataKey: `iops_read_by_${config.groupBy}` })),
                     ...iopsWriteData.map(d => ({ ...d, metric: 'iops_write', dataKey: `iops_write_by_${config.groupBy}` }))
                 ];
             } else if (config.metricType === 'latency') {
-                // Комбинируем Latency read и write данные
                 const latencyReadData = this.currentData.charts[`latency_read_by_${config.groupBy}`] || [];
                 const latencyWriteData = this.currentData.charts[`latency_write_by_${config.groupBy}`] || [];
-                
+
                 chartData = [
                     ...latencyReadData.map(d => ({ ...d, metric: 'latency_read', dataKey: `latency_read_by_${config.groupBy}` })),
                     ...latencyWriteData.map(d => ({ ...d, metric: 'latency_write', dataKey: `latency_write_by_${config.groupBy}` }))
@@ -176,7 +232,8 @@ class DashboardApp {
                     timeRangeDays: timeRangeDays,
                     legendType: config.legendType,
                     metricType: config.metricType,
-                    visibleOperations: config.visibleOperations
+                    visibleOperations: config.visibleOperations,
+                    availableGroups: config.availableGroups // Передаем в createChart
                 });
                 this.charts.set(config.id, chart);
             } else {
