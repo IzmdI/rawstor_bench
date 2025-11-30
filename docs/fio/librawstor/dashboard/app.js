@@ -47,20 +47,21 @@ class DashboardApp {
         console.log('Data loaded successfully');
     }
 
+    // Собираем группы отдельно для конфигураций и веток
     collectGroups() {
         this.configGroups.clear();
         this.branchGroups.clear();
-
+        
         // Собираем группы из отфильтрованных данных графиков
         if (this.currentData?.charts) {
             // Временные наборы для сбора групп
             const tempConfigGroups = new Set();
             const tempBranchGroups = new Set();
-
+            
             // Собираем группы из всех доступных данных
             const configCharts = ['iops_read_by_config', 'iops_write_by_config', 'latency_read_by_config', 'latency_write_by_config'];
             const branchCharts = ['iops_read_by_branch', 'iops_write_by_branch', 'latency_read_by_branch', 'latency_write_by_branch'];
-
+            
             configCharts.forEach(chartKey => {
                 const chartData = this.currentData.charts[chartKey] || [];
                 chartData.forEach(point => {
@@ -69,7 +70,7 @@ class DashboardApp {
                     }
                 });
             });
-
+            
             branchCharts.forEach(chartKey => {
                 const chartData = this.currentData.charts[chartKey] || [];
                 chartData.forEach(point => {
@@ -78,16 +79,16 @@ class DashboardApp {
                     }
                 });
             });
-
+            
             // Теперь фильтруем группы - оставляем только те, у которых есть данные в 2+ днях
             this.configGroups = this.filterGroupsWithEnoughData(tempConfigGroups, 'config');
             this.branchGroups = this.filterGroupsWithEnoughData(tempBranchGroups, 'branch');
         }
-
+        
         // Показываем все отфильтрованные группы по умолчанию
         this.configGroups.forEach(group => this.visibleConfigGroups.add(group));
         this.branchGroups.forEach(group => this.visibleBranchGroups.add(group));
-
+        
         console.log('Filtered Config groups:', Array.from(this.configGroups));
         console.log('Filtered Branch groups:', Array.from(this.branchGroups));
     }
@@ -96,7 +97,7 @@ class DashboardApp {
     filterGroupsWithEnoughData(groups, groupType) {
         const filteredGroups = new Set();
         const timeRangeDays = this.currentData.filter?.days || 30;
-
+        
         groups.forEach(group => {
             // Проверяем, есть ли у группы данные минимум в 2 разных днях
             if (this.hasGroupEnoughData(group, groupType, timeRangeDays)) {
@@ -105,21 +106,21 @@ class DashboardApp {
                 console.log(`⚠️ Filtered out ${groupType} group "${group}" - insufficient data across days`);
             }
         });
-
+        
         return filteredGroups;
     }
 
     // Метод для проверки, есть ли у группы данные в 2+ днях
     hasGroupEnoughData(group, groupType, timeRangeDays) {
         if (!this.currentData?.charts) return false;
-
+        
         // Определяем какие chart keys использовать в зависимости от типа группы
-        const chartKeys = groupType === 'config'
+        const chartKeys = groupType === 'config' 
             ? ['iops_read_by_config', 'iops_write_by_config', 'latency_read_by_config', 'latency_write_by_config']
             : ['iops_read_by_branch', 'iops_write_by_branch', 'latency_read_by_branch', 'latency_write_by_branch'];
-
+        
         const uniqueDays = new Set();
-
+        
         // Собираем все уникальные дни для этой группы
         chartKeys.forEach(chartKey => {
             const chartData = this.currentData.charts[chartKey] || [];
@@ -131,14 +132,13 @@ class DashboardApp {
                 }
             });
         });
-
+        
         const hasEnoughData = uniqueDays.size >= 2;
         console.log(`📅 Group "${group}" (${groupType}): ${uniqueDays.size} unique days - ${hasEnoughData ? 'KEEP' : 'FILTER OUT'}`);
-
+        
         return hasEnoughData;
     }
 
-    // Также обновим метод createCharts чтобы использовать правильные индексы для цветов
     createCharts() {
         if (!this.currentData?.charts) {
             throw new Error('No chart data available');
@@ -199,11 +199,11 @@ class DashboardApp {
 
         chartsConfig.forEach(config => {
             let chartData = [];
-
+            
             if (config.metricType === 'iops') {
                 const iopsReadData = this.currentData.charts[`iops_read_by_${config.groupBy}`] || [];
                 const iopsWriteData = this.currentData.charts[`iops_write_by_${config.groupBy}`] || [];
-
+                
                 chartData = [
                     ...iopsReadData.map(d => ({ ...d, metric: 'iops_read', dataKey: `iops_read_by_${config.groupBy}` })),
                     ...iopsWriteData.map(d => ({ ...d, metric: 'iops_write', dataKey: `iops_write_by_${config.groupBy}` }))
@@ -211,7 +211,7 @@ class DashboardApp {
             } else if (config.metricType === 'latency') {
                 const latencyReadData = this.currentData.charts[`latency_read_by_${config.groupBy}`] || [];
                 const latencyWriteData = this.currentData.charts[`latency_write_by_${config.groupBy}`] || [];
-
+                
                 chartData = [
                     ...latencyReadData.map(d => ({ ...d, metric: 'latency_read', dataKey: `latency_read_by_${config.groupBy}` })),
                     ...latencyWriteData.map(d => ({ ...d, metric: 'latency_write', dataKey: `latency_write_by_${config.groupBy}` }))
@@ -521,7 +521,7 @@ class DashboardApp {
             this.refreshData();
         });
 
-        // Time range selector
+        // Time range selector - ИЗМЕНЯЕМ ЛОГИКУ
         d3.select('#timeRange').on('change', (event) => {
             this.handleTimeRangeChange(event.target.value);
         });
@@ -563,24 +563,48 @@ class DashboardApp {
             return;
         }
         
-        if (confirm(`Change time range to ${days === '0' ? 'all time' : `last ${days} days`}? This will reload the dashboard.`)) {
-            this.reprocessData(days);
-        } else {
-            // Восстанавливаем предыдущее значение
-            d3.select('#timeRange').property('value', currentDays === 0 ? 'all' : currentDays.toString());
-        }
+        // ВМЕСТО ПЕРЕЗАГРУЗКИ СТРАНИЦЫ - ПЕРЕЗАГРУЖАЕМ ДАННЫЕ
+        this.reloadWithNewTimeRange(days);
     }
 
-    reprocessData(days) {
-        // Пока просто перезагружаем страницу с параметром
-        const url = new URL(window.location.href);
-        if (days === '0') {
-            url.searchParams.delete('days');
-        } else {
-            url.searchParams.set('days', days);
+    async reloadWithNewTimeRange(days) {
+        try {
+            this.showLoading(true);
+            
+            // Обновляем URL без перезагрузки страницы
+            const url = new URL(window.location.href);
+            if (days === '0') {
+                url.searchParams.delete('days');
+            } else {
+                url.searchParams.set('days', days);
+            }
+            window.history.pushState({}, '', url.toString());
+            
+            // Перезагружаем данные с новым time range
+            await this.loadData();
+            
+            // Пересоздаем все компоненты
+            this.charts.clear();
+            this.visibleConfigGroups.clear();
+            this.visibleBranchGroups.clear();
+            this.visibleConfigOperations.clear().add('read');
+            this.visibleBranchOperations.clear().add('read');
+            this.configGroups.clear();
+            this.branchGroups.clear();
+            
+            this.collectGroups();
+            this.createLegends();
+            this.createCharts();
+            this.updateDataInfo();
+            
+            this.showLoading(false);
+            this.showNotification(`Time range updated to ${days === '0' ? 'all time' : `last ${days} days`}`, 'success');
+            
+        } catch (error) {
+            console.error('Failed to reload data with new time range:', error);
+            this.showNotification('Error updating time range', 'error');
+            this.showLoading(false);
         }
-        
-        window.location.href = url.toString();
     }
 
     showLoading(show) {
