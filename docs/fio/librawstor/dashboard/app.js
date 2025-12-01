@@ -154,27 +154,49 @@ class DashboardApp {
     // Метод для фильтрации данных на клиенте по временному диапазону
     filterDataByTimeRange(chartData, timeRangeDays) {
         if (!chartData || !Array.isArray(chartData)) {
+            console.log('❌ No chart data to filter');
             return [];
         }
-        
+
         if (timeRangeDays === 0) {
             // "All time" - возвращаем все данные
+            console.log(`📅 Returning all ${chartData.length} data points (timeRangeDays = 0)`);
             return chartData;
         }
-        
+
         const cutoffDate = new Date();
         cutoffDate.setDate(cutoffDate.getDate() - timeRangeDays);
-        
-        console.log(`📅 Filtering data since: ${cutoffDate.toISOString().split('T')[0]} (${timeRangeDays} days)`);
-        
-        return chartData.filter(point => {
+        cutoffDate.setHours(0, 0, 0, 0); // Начало дня
+
+        console.log(`📅 Filtering data since: ${cutoffDate.toISOString().split('T')[0]} (${timeRangeDays} days ago)`);
+        console.log(`📅 Cutoff date: ${cutoffDate}`);
+        console.log(`📅 Current date: ${new Date()}`);
+
+        const filteredData = chartData.filter(point => {
             if (!point.timestamp || point.timestamp === "Unknown date") {
                 return false;
             }
-            
+
             const pointDate = new Date(point.timestamp);
+
+            // Для отладки выведем несколько дат
+            if (Math.random() < 0.01) { // 1% точек для отладки
+                console.log(`   Sample point: ${pointDate} >= ${cutoffDate}? ${pointDate >= cutoffDate}`);
+            }
+
             return pointDate >= cutoffDate;
         });
+
+        console.log(`📊 Filtered ${chartData.length} -> ${filteredData.length} data points`);
+
+        // Проверим даты в отфильтрованных данных
+        if (filteredData.length > 0) {
+            const dates = filteredData.map(d => new Date(d.timestamp).toISOString().split('T')[0]);
+            const uniqueDates = [...new Set(dates)];
+            console.log(`📅 Unique dates in filtered data: ${uniqueDates.length} (${uniqueDates.slice(0, 5).join(', ')}...)`);
+        }
+
+        return filteredData;
     }
 
     // Собираем группы отдельно для конфигураций и веток
@@ -459,19 +481,19 @@ class DashboardApp {
 
         chartsConfig.forEach(config => {
             let chartData = [];
-            
+
             // Собираем данные из полных (нефильтрованных) чартов
             config.sourceChartKeys.forEach(chartKey => {
                 const fullData = this.fullChartData.charts[chartKey] || [];
-                
+
                 // Применяем клиентскую фильтрацию по времени
                 const timeFilteredData = this.filterDataByTimeRange(fullData, this.currentTimeRange);
-                
+
                 // Добавляем метаданные
                 const metric = chartKey.includes('iops_read') ? 'iops_read' :
                               chartKey.includes('iops_write') ? 'iops_write' :
                               chartKey.includes('latency_read') ? 'latency_read' : 'latency_write';
-                
+
                 timeFilteredData.forEach(d => {
                     chartData.push({
                         ...d,
@@ -506,12 +528,14 @@ class DashboardApp {
                     legendType: config.legendType,
                     metricType: config.metricType,
                     visibleOperations: config.visibleOperations,
-                    availableGroups: config.availableGroups
+                    availableGroups: config.availableGroups,
+                    // ВАЖНО: говорим charts.js что данные уже отфильтрованы
+                    dataAlreadyFiltered: true
                 });
                 this.charts.set(config.id, chart);
             } else {
                 console.warn(`No data for chart: ${config.id}`);
-                const noDataMessage = config.branchFilter 
+                const noDataMessage = config.branchFilter
                     ? `<p class="no-data">No data available for ${this.formatBranchDisplayName(config.branchFilter)} branch in last ${this.currentTimeRange} days</p>`
                     : `<p class="no-data">No data available in last ${this.currentTimeRange} days</p>`;
                 d3.select(`#${config.id}`).html(noDataMessage);

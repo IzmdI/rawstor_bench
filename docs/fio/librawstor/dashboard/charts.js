@@ -6,12 +6,15 @@ function createChart(config) {
     const { 
         container, title, yLabel, data, accessor, id, groupBy, 
         timeRangeDays, legendType, metricType, 
-        visibleOperations = ['read'], availableGroups = [] 
+        visibleOperations = ['read'], availableGroups = [],
+        // Новый параметр: указывает, что данные уже отфильтрованы
+        dataAlreadyFiltered = false
     } = config;
-    
+
     console.log(`📊 Creating chart: ${id} with timeRangeDays: ${timeRangeDays}`);
     console.log(`📈 Initial data points: ${data.length}`);
-    
+    console.log(`🔍 Data already filtered: ${dataAlreadyFiltered}`);
+
     if (!data || data.length === 0) {
         console.warn(`❌ No data for chart: ${id}`);
         container.html('<p class="no-data">No data available</p>');
@@ -37,12 +40,12 @@ function createChart(config) {
 
     // Обрабатываем данные - объединяем read и write
     let processedData = [];
-    
+
     if (metricType === 'iops') {
         // Объединяем IOPS read и write
         const iopsReadData = data.filter(d => d.metric === 'iops_read' || d.dataKey?.includes('iops_read'));
         const iopsWriteData = data.filter(d => d.metric === 'iops_write' || d.dataKey?.includes('iops_write'));
-        
+
         processedData = [
             ...iopsReadData.map(d => ({
                 ...d,
@@ -65,7 +68,7 @@ function createChart(config) {
         // Объединяем Latency read и write
         const latencyReadData = data.filter(d => d.metric === 'latency_read' || d.dataKey?.includes('latency_read'));
         const latencyWriteData = data.filter(d => d.metric === 'latency_write' || d.dataKey?.includes('latency_write'));
-        
+
         processedData = [
             ...latencyReadData.map(d => ({
                 ...d,
@@ -89,8 +92,14 @@ function createChart(config) {
     // Фильтруем некорректные данные
     processedData = processedData.filter(d => d.value !== null && d.value !== undefined && !isNaN(d.value) && d.timestamp);
 
-    // ПРИМЕНЯЕМ ФИЛЬТРАЦИЮ ДАННЫХ ПО ВРЕМЕНИ
-    processedData = filterChartData(processedData, timeRangeDays);
+    // ВАЖНО: НЕ применяем дополнительную фильтрацию, если данные уже отфильтрованы в app.js
+    if (!dataAlreadyFiltered && timeRangeDays > 0) {
+        // Только если данные не отфильтрованы, применяем фильтрацию
+        console.log(`🔍 Applying time filter in chart.js for ${timeRangeDays} days`);
+        processedData = filterChartData(processedData, timeRangeDays);
+    } else {
+        console.log(`✅ Using pre-filtered data, skipping chart-level time filter`);
+    }
 
     if (processedData.length === 0) {
         console.warn(`❌ No valid data points after filtering for chart: ${id}`);
@@ -98,7 +107,7 @@ function createChart(config) {
         return null;
     }
 
-    console.log(`📈 Chart ${id}: ${processedData.length} data points after filtering`);
+    console.log(`📈 Chart ${id}: ${processedData.length} data points after processing`);
 
     // Группируем данные по полной группе (group + operation)
     const dataByFullGroup = d3.group(processedData, d => d.fullGroup);
