@@ -8,6 +8,9 @@ class DashboardApp {
         this.currentData = null;
         this.charts = new Map();
         
+        // Храним полные нефильтрованные данные
+        this.fullChartData = null;
+        
         // Управление видимостью операций
         this.visibleConfigOperations = new Set(['read']);
         this.visibleBranchOperations = new Set(['read']);
@@ -54,6 +57,10 @@ class DashboardApp {
 
     async loadData() {
         this.currentData = await this.dataLoader.loadData();
+        
+        // Сохраняем полные данные для фильтрации на клиенте
+        this.fullChartData = { ...this.currentData };
+        
         console.log('Data loaded successfully');
     }
 
@@ -61,7 +68,7 @@ class DashboardApp {
     collectAllBranches() {
         this.allAvailableBranches.clear();
         
-        if (this.currentData?.charts) {
+        if (this.fullChartData?.charts) {
             // Собираем ветки из всех типов графиков
             const allChartKeys = [
                 'iops_read_by_config', 'iops_write_by_config', 
@@ -71,7 +78,7 @@ class DashboardApp {
             ];
             
             allChartKeys.forEach(chartKey => {
-                const chartData = this.currentData.charts[chartKey] || [];
+                const chartData = this.fullChartData.charts[chartKey] || [];
                 chartData.forEach(point => {
                     if (point.branch && point.branch !== "unknown") {
                         this.allAvailableBranches.add(point.branch);
@@ -144,27 +151,52 @@ class DashboardApp {
         return displayName;
     }
 
+    // Метод для фильтрации данных на клиенте по временному диапазону
+    filterDataByTimeRange(chartData, timeRangeDays) {
+        if (!chartData || !Array.isArray(chartData)) {
+            return [];
+        }
+        
+        if (timeRangeDays === 0) {
+            // "All time" - возвращаем все данные
+            return chartData;
+        }
+        
+        const cutoffDate = new Date();
+        cutoffDate.setDate(cutoffDate.getDate() - timeRangeDays);
+        
+        console.log(`📅 Filtering data since: ${cutoffDate.toISOString().split('T')[0]} (${timeRangeDays} days)`);
+        
+        return chartData.filter(point => {
+            if (!point.timestamp || point.timestamp === "Unknown date") {
+                return false;
+            }
+            
+            const pointDate = new Date(point.timestamp);
+            return pointDate >= cutoffDate;
+        });
+    }
+
     // Собираем группы отдельно для конфигураций и веток
     collectGroups() {
         this.configGroups.clear();
         this.branchGroups.clear();
         
-        console.log(`🔄 Collecting groups for config branch: ${this.currentConfigBranch}`);
+        console.log(`🔄 Collecting groups for config branch: ${this.currentConfigBranch}, time range: ${this.currentTimeRange} days`);
         
-        // Собираем группы из отфильтрованных данных графиков
-        if (this.currentData?.charts) {
-            // Временные наборы для сбора групп
+        if (this.fullChartData?.charts) {
             const tempConfigGroups = new Set();
             const tempBranchGroups = new Set();
             
-            // Собираем группы из всех доступных данных
-            const configCharts = ['iops_read_by_config', 'iops_write_by_config', 'latency_read_by_config', 'latency_write_by_config'];
-            const branchCharts = ['iops_read_by_branch', 'iops_write_by_branch', 'latency_read_by_branch', 'latency_write_by_branch'];
+            const configChartKeys = ['iops_read_by_config', 'iops_write_by_config', 'latency_read_by_config', 'latency_write_by_config'];
+            const branchChartKeys = ['iops_read_by_branch', 'iops_write_by_branch', 'latency_read_by_branch', 'latency_write_by_branch'];
             
-            // Для конфигураций фильтруем по выбранной ветке (или все если 'all')
-            configCharts.forEach(chartKey => {
-                const chartData = this.currentData.charts[chartKey] || [];
-                chartData.forEach(point => {
+            // Для конфигураций фильтруем по выбранной ветке И времени
+            configChartKeys.forEach(chartKey => {
+                const fullData = this.fullChartData.charts[chartKey] || [];
+                const timeFilteredData = this.filterDataByTimeRange(fullData, this.currentTimeRange);
+                
+                timeFilteredData.forEach(point => {
                     if (point.group) {
                         // Если выбрана конкретная ветка - фильтруем
                         if (this.currentConfigBranch !== 'all' && point.branch !== this.currentConfigBranch) {
@@ -175,20 +207,22 @@ class DashboardApp {
                 });
             });
             
-            // Для веток собираем все как раньше
-            branchCharts.forEach(chartKey => {
-                const chartData = this.currentData.charts[chartKey] || [];
-                chartData.forEach(point => {
+            // Для веток фильтруем только по времени
+            branchChartKeys.forEach(chartKey => {
+                const fullData = this.fullChartData.charts[chartKey] || [];
+                const timeFilteredData = this.filterDataByTimeRange(fullData, this.currentTimeRange);
+                
+                timeFilteredData.forEach(point => {
                     if (point.group) {
                         tempBranchGroups.add(point.group);
                     }
                 });
             });
             
-            console.log('📊 Raw config groups:', Array.from(tempConfigGroups));
-            console.log('📊 Raw branch groups:', Array.from(tempBranchGroups));
+            console.log('📊 Raw config groups after time filter:', Array.from(tempConfigGroups));
+            console.log('📊 Raw branch groups after time filter:', Array.from(tempBranchGroups));
             
-            // Теперь фильтруем группы - для конфигураций используем фильтр по ветке если нужно
+            // Фильтруем группы с учетом выбранной ветки
             const branchFilterForConfigs = this.currentConfigBranch === 'all' ? null : this.currentConfigBranch;
             this.configGroups = this.filterGroupsWithEnoughData(tempConfigGroups, 'config', branchFilterForConfigs);
             
@@ -269,17 +303,18 @@ class DashboardApp {
     // Метод для получения времени последней активности ветки
     getBranchesLastActivity(branches) {
         const branchesWithActivity = [];
+        const timeRangeDays = 365; // Используем полный диапазон для выбора актуальных веток
         
         branches.forEach(branch => {
-            // Ищем последний тест для этой ветки во всех данных
             let lastActivity = null;
             
-            // Проверяем все типы графиков для этой ветки
             const chartKeys = ['iops_read_by_branch', 'iops_write_by_branch', 'latency_read_by_branch', 'latency_write_by_branch'];
             
             chartKeys.forEach(chartKey => {
-                const chartData = this.currentData.charts[chartKey] || [];
-                chartData.forEach(point => {
+                const fullData = this.fullChartData.charts[chartKey] || [];
+                const timeFilteredData = this.filterDataByTimeRange(fullData, timeRangeDays);
+                
+                timeFilteredData.forEach(point => {
                     if (point.group === branch && point.timestamp && point.timestamp !== "Unknown date") {
                         const pointDate = new Date(point.timestamp);
                         if (!lastActivity || pointDate > lastActivity) {
@@ -295,7 +330,7 @@ class DashboardApp {
                     lastActivity: lastActivity
                 });
             } else {
-                console.log(`⚠️  No activity data for branch: ${branch}`);
+                console.log(`⚠️  No activity data for branch: ${branch} in last ${timeRangeDays} days`);
             }
         });
         
@@ -305,10 +340,9 @@ class DashboardApp {
     // Метод для фильтрации групп
     filterGroupsWithEnoughData(groups, groupType, branchFilter = null) {
         const filteredGroups = new Set();
-        const timeRangeDays = 365; // Всегда используем полный набор данных
+        const timeRangeDays = this.currentTimeRange === 0 ? 365 : this.currentTimeRange; // Используем текущий диапазон
         
         groups.forEach(group => {
-            // Проверяем, есть ли у группы данные минимум в 2 разных днях
             if (this.hasGroupEnoughData(group, groupType, timeRangeDays, branchFilter)) {
                 filteredGroups.add(group);
             } else {
@@ -319,27 +353,25 @@ class DashboardApp {
         return filteredGroups;
     }
 
-    // Метод для проверки, есть ли у группы данные в 2+ днях (с поддержкой фильтрации по ветке)
+    // Метод для проверки, есть ли у группы данные в 2+ днях (с поддержкой фильтрации по ветке и времени)
     hasGroupEnoughData(group, groupType, timeRangeDays, branchFilter = null) {
-        if (!this.currentData?.charts) return false;
+        if (!this.fullChartData?.charts) return false;
         
-        // Для веток проверяем только если ветка есть в отфильтрованном списке
         if (groupType === 'branch' && !this.branchGroups.has(group)) {
             return false;
         }
         
-        // Определяем какие chart keys использовать в зависимости от типа группы
         const chartKeys = groupType === 'config' 
             ? ['iops_read_by_config', 'iops_write_by_config', 'latency_read_by_config', 'latency_write_by_config']
             : ['iops_read_by_branch', 'iops_write_by_branch', 'latency_read_by_branch', 'latency_write_by_branch'];
         
         const uniqueDays = new Set();
         
-        // Собираем все уникальные дни для этой группы
         chartKeys.forEach(chartKey => {
-            const chartData = this.currentData.charts[chartKey] || [];
-            chartData.forEach(point => {
-                // ПРИМЕНЯЕМ ФИЛЬТРАЦИЮ ПО ВЕТКЕ
+            const fullData = this.fullChartData.charts[chartKey] || [];
+            const timeFilteredData = this.filterDataByTimeRange(fullData, timeRangeDays);
+            
+            timeFilteredData.forEach(point => {
                 if (branchFilter && point.branch !== branchFilter) {
                     return;
                 }
@@ -353,13 +385,13 @@ class DashboardApp {
         });
         
         const hasEnoughData = uniqueDays.size >= 2;
-        console.log(`📅 Group "${group}" (${groupType})${branchFilter ? ` [branch: ${branchFilter}]` : ''}: ${uniqueDays.size} unique days - ${hasEnoughData ? 'KEEP' : 'FILTER OUT'}`);
+        console.log(`📅 Group "${group}" (${groupType})${branchFilter ? ` [branch: ${branchFilter}]` : ''} in last ${timeRangeDays} days: ${uniqueDays.size} unique days - ${hasEnoughData ? 'KEEP' : 'FILTER OUT'}`);
         
         return hasEnoughData;
     }
 
     createCharts() {
-        if (!this.currentData?.charts) {
+        if (!this.currentData?.charts || !this.fullChartData?.charts) {
             throw new Error('No chart data available');
         }
 
@@ -377,7 +409,9 @@ class DashboardApp {
                 metricType: 'iops',
                 visibleOperations: Array.from(this.visibleConfigOperations),
                 availableGroups: Array.from(this.configGroups),
-                branchFilter: this.currentConfigBranch === 'all' ? null : this.currentConfigBranch
+                branchFilter: this.currentConfigBranch === 'all' ? null : this.currentConfigBranch,
+                // Используем полные данные
+                sourceChartKeys: ['iops_read_by_config', 'iops_write_by_config']
             },
             {
                 id: 'chart-latency-config',
@@ -390,7 +424,8 @@ class DashboardApp {
                 metricType: 'latency',
                 visibleOperations: Array.from(this.visibleConfigOperations),
                 availableGroups: Array.from(this.configGroups),
-                branchFilter: this.currentConfigBranch === 'all' ? null : this.currentConfigBranch
+                branchFilter: this.currentConfigBranch === 'all' ? null : this.currentConfigBranch,
+                sourceChartKeys: ['latency_read_by_config', 'latency_write_by_config']
             },
             {
                 id: 'chart-iops-branch',
@@ -403,7 +438,8 @@ class DashboardApp {
                 metricType: 'iops',
                 visibleOperations: Array.from(this.visibleBranchOperations),
                 availableGroups: Array.from(this.branchGroups),
-                branchFilter: null
+                branchFilter: null,
+                sourceChartKeys: ['iops_read_by_branch', 'iops_write_by_branch']
             },
             {
                 id: 'chart-latency-branch',
@@ -416,30 +452,36 @@ class DashboardApp {
                 metricType: 'latency',
                 visibleOperations: Array.from(this.visibleBranchOperations),
                 availableGroups: Array.from(this.branchGroups),
-                branchFilter: null
+                branchFilter: null,
+                sourceChartKeys: ['latency_read_by_branch', 'latency_write_by_branch']
             }
         ];
 
         chartsConfig.forEach(config => {
             let chartData = [];
             
-            if (config.metricType === 'iops') {
-                const iopsReadData = this.currentData.charts[`iops_read_by_${config.groupBy}`] || [];
-                const iopsWriteData = this.currentData.charts[`iops_write_by_${config.groupBy}`] || [];
+            // Собираем данные из полных (нефильтрованных) чартов
+            config.sourceChartKeys.forEach(chartKey => {
+                const fullData = this.fullChartData.charts[chartKey] || [];
                 
-                chartData = [
-                    ...iopsReadData.map(d => ({ ...d, metric: 'iops_read', dataKey: `iops_read_by_${config.groupBy}` })),
-                    ...iopsWriteData.map(d => ({ ...d, metric: 'iops_write', dataKey: `iops_write_by_${config.groupBy}` }))
-                ];
-            } else if (config.metricType === 'latency') {
-                const latencyReadData = this.currentData.charts[`latency_read_by_${config.groupBy}`] || [];
-                const latencyWriteData = this.currentData.charts[`latency_write_by_${config.groupBy}`] || [];
+                // Применяем клиентскую фильтрацию по времени
+                const timeFilteredData = this.filterDataByTimeRange(fullData, this.currentTimeRange);
                 
-                chartData = [
-                    ...latencyReadData.map(d => ({ ...d, metric: 'latency_read', dataKey: `latency_read_by_${config.groupBy}` })),
-                    ...latencyWriteData.map(d => ({ ...d, metric: 'latency_write', dataKey: `latency_write_by_${config.groupBy}` }))
-                ];
-            }
+                // Добавляем метаданные
+                const metric = chartKey.includes('iops_read') ? 'iops_read' :
+                              chartKey.includes('iops_write') ? 'iops_write' :
+                              chartKey.includes('latency_read') ? 'latency_read' : 'latency_write';
+                
+                timeFilteredData.forEach(d => {
+                    chartData.push({
+                        ...d,
+                        metric: metric,
+                        dataKey: chartKey
+                    });
+                });
+            });
+
+            console.log(`📊 ${config.id}: Loaded ${chartData.length} points from full dataset`);
 
             // ПРИМЕНЯЕМ ФИЛЬТРАЦИЮ ПО ВЕТКЕ ДЛЯ ГРАФИКОВ ПО КОНФИГУРАЦИЯМ
             if (config.branchFilter && config.groupBy === 'config') {
@@ -449,7 +491,7 @@ class DashboardApp {
                 console.log(`📊 Filtered from ${originalCount} to ${chartData.length} data points`);
             }
 
-            console.log(`Chart ${config.id} data points:`, chartData.length);
+            console.log(`Chart ${config.id} data points after filtering:`, chartData.length);
 
             if (chartData && chartData.length > 0) {
                 const chart = createChart({
@@ -470,8 +512,8 @@ class DashboardApp {
             } else {
                 console.warn(`No data for chart: ${config.id}`);
                 const noDataMessage = config.branchFilter 
-                    ? `<p class="no-data">No data available for ${this.formatBranchDisplayName(config.branchFilter)} branch</p>`
-                    : '<p class="no-data">No data available</p>';
+                    ? `<p class="no-data">No data available for ${this.formatBranchDisplayName(config.branchFilter)} branch in last ${this.currentTimeRange} days</p>`
+                    : `<p class="no-data">No data available in last ${this.currentTimeRange} days</p>`;
                 d3.select(`#${config.id}`).html(noDataMessage);
             }
         });
@@ -500,7 +542,7 @@ class DashboardApp {
             const branchName = this.currentConfigBranch === 'all' 
                 ? 'any branch' 
                 : this.formatBranchDisplayName(this.currentConfigBranch);
-            legendContainer.html(`<p style="color: #6c757d; font-style: italic;">No configuration data for ${branchName}</p>`);
+            legendContainer.html(`<p style="color: #6c757d; font-style: italic;">No configuration data for ${branchName} in last ${this.currentTimeRange} days</p>`);
             return;
         }
 
@@ -574,7 +616,7 @@ class DashboardApp {
         
         if (this.branchGroups.size === 0) {
             console.log('⚠️ No branch groups available');
-            legendContainer.html('<p style="color: #6c757d; font-style: italic;">No branch data available</p>');
+            legendContainer.html(`<p style="color: #6c757d; font-style: italic;">No branch data available in last ${this.currentTimeRange} days</p>`);
             return;
         }
 
@@ -764,14 +806,18 @@ class DashboardApp {
             ? 'All Branches' 
             : this.formatBranchDisplayName(this.currentConfigBranch);
 
+        const timeRangeDisplay = this.currentTimeRange === 0 
+            ? 'All time (full dataset)' 
+            : `Last ${this.currentTimeRange} days`;
+
         const infoHtml = `
             <p><strong>Generated:</strong> ${new Date(this.currentData.generated_at).toLocaleString()}</p>
-            <p><strong>Total tests:</strong> ${this.currentData.summary?.total_tests || 0}</p>
+            <p><strong>Total tests in dataset:</strong> ${this.currentData.summary?.total_tests || 0}</p>
+            <p><strong>Showing data for:</strong> ${timeRangeDisplay}</p>
             <p><strong>Configurations:</strong> ${this.currentData.summary?.configurations?.join(', ') || 'N/A'}</p>
             <p><strong>Config Branch:</strong> ${configBranchDisplay}</p>
             <p><strong>Branches in comparison:</strong> ${Array.from(this.branchGroups).map(b => this.formatBranchDisplayName(b)).join(', ') || 'N/A'}</p>
-            <p><strong>Time range:</strong> ${this.currentTimeRange === 0 ? 'All data' : `Last ${this.currentTimeRange} days`}</p>
-            <p><strong>Data coverage:</strong> Last 365 days (full dataset)</p>
+            <p><strong>Full dataset coverage:</strong> Last 365 days</p>
         `;
 
         d3.select('#data-info').html(infoHtml);
@@ -871,7 +917,8 @@ class DashboardApp {
         
         console.log(`🔄 Updating time range to: ${this.currentTimeRange} days`);
         
-        // Пересоздаем графики с новым масштабом
+        // Пересобираем группы и пересоздаем графики
+        this.collectGroups();
         this.recreateCharts();
         this.updateDataInfo();
         
