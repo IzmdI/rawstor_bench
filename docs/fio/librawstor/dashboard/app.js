@@ -722,7 +722,6 @@ class DashboardApp {
     }
 
     updateTimeRange() {
-        // Обновляем URL без перезагрузки страницы
         const url = new URL(window.location.href);
         if (this.currentTimeRange === 0) {
             url.searchParams.delete('days');
@@ -731,20 +730,172 @@ class DashboardApp {
         }
         window.history.pushState({}, '', url.toString());
 
-        console.log(`🔄 updateTimeRange CALLED: ${this.currentTimeRange} days`);
-        console.log(`🔄 Branch remains: ${this.currentConfigBranch}`);
+        console.log(`🔄 updateTimeRange: ${this.currentTimeRange} days`);
 
-        // КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Пересоздаем графики полностью
-        this.recreateCharts();
+        // КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Полная перестройка графиков
+        this.destroyCharts();
+        this.collectGroups();
+        this.renderCharts();
+        this.createLegend();
         this.updateDataInfo();
 
         this.showNotification(`Time range updated to ${this.currentTimeRange === 0 ? 'all time' : `last ${this.currentTimeRange} days`}`, 'success');
     }
 
+    destroyCharts() {
+        console.log('🔥 Destroying all charts...');
+
+        // Полностью очищаем контейнеры
+        d3.select('#chart-iops-config').html('');
+        d3.select('#chart-latency-config').html('');
+
+        // Очищаем кэш
+        this.charts.clear();
+
+        // Очищаем SVG элементы
+        d3.selectAll('#chart-iops-config svg').remove();
+        d3.selectAll('#chart-latency-config svg').remove();
+
+        console.log('✅ Charts destroyed');
+    }
+
+    renderCharts() {
+        console.log(`🎨 renderCharts: timeRange=${this.currentTimeRange} days, branch=${this.currentConfigBranch}`);
+
+        // Создаем график IOPS
+        this.renderIopsChart();
+
+        // Создаем график Latency
+        this.renderLatencyChart();
+
+        console.log('✅ All charts rendered');
+    }
+
+    renderIopsChart() {
+        const container = d3.select('#chart-iops-config');
+        const chartId = 'chart-iops-config';
+
+        console.log(`📊 Rendering IOPS chart for ${this.currentTimeRange} days`);
+
+        // Получаем и фильтруем данные
+        const iopsData = this.getFilteredChartData('iops');
+        this.debugFilteredData(iopsData, 'IOPS');
+
+        if (iopsData.length === 0) {
+            container.html(`<p class="no-data">No IOPS data for last ${this.currentTimeRange} days</p>`);
+            return;
+        }
+
+        // Создаем график с нуля
+        const chart = createChart({
+            container: container,
+            title: this.getChartTitle('IOPS'),
+            yLabel: 'kIOPS',
+            data: iopsData,
+            accessor: d => d.value,
+            id: chartId,
+            groupBy: 'config',
+            timeRangeDays: this.currentTimeRange,
+            legendType: 'config',
+            metricType: 'iops',
+            visibleOperations: Array.from(this.visibleOperations),
+            availableGroups: Array.from(this.configGroups),
+            dataAlreadyFiltered: false // ВАЖНО: false для применения фильтрации
+        });
+
+        if (chart) {
+            this.charts.set(chartId, chart);
+            console.log(`✅ IOPS chart created with ${iopsData.length} points`);
+        }
+    }
+
+    renderLatencyChart() {
+        const container = d3.select('#chart-latency-config');
+        const chartId = 'chart-latency-config';
+
+        console.log(`📊 Rendering Latency chart for ${this.currentTimeRange} days`);
+
+        // Получаем и фильтруем данные
+        const latencyData = this.getFilteredChartData('latency');
+        this.debugFilteredData(latencyData, 'IOPS');
+
+        if (latencyData.length === 0) {
+            container.html(`<p class="no-data">No Latency data for last ${this.currentTimeRange} days</p>`);
+            return;
+        }
+
+        // Создаем график с нуля
+        const chart = createChart({
+            container: container,
+            title: this.getChartTitle('Latency'),
+            yLabel: 'ms',
+            data: latencyData,
+            accessor: d => d.value,
+            id: chartId,
+            groupBy: 'config',
+            timeRangeDays: this.currentTimeRange,
+            legendType: 'config',
+            metricType: 'latency',
+            visibleOperations: Array.from(this.visibleOperations),
+            availableGroups: Array.from(this.configGroups),
+            dataAlreadyFiltered: false // ВАЖНО: false для применения фильтрации
+        });
+
+        if (chart) {
+            this.charts.set(chartId, chart);
+            console.log(`✅ Latency chart created with ${latencyData.length} points`);
+        }
+    }
+
+    // НОВЫЙ МЕТОД: Получение отфильтрованных данных для графиков
+    getFilteredChartData(metricType) {
+        if (!this.fullChartData?.charts) {
+            console.warn('No chart data available');
+            return [];
+        }
+
+        const chartKeys = metricType === 'iops'
+            ? ['iops_read_by_config', 'iops_write_by_config']
+            : ['latency_read_by_config', 'latency_write_by_config'];
+
+        let allData = [];
+
+        chartKeys.forEach(chartKey => {
+            const fullData = this.fullChartData.charts[chartKey] || [];
+            console.log(`  📊 ${chartKey}: ${fullData.length} raw points`);
+
+            // Фильтрация по времени
+            const timeFiltered = this.filterByTimeRange(fullData, this.currentTimeRange);
+            console.log(`  📊 ${chartKey}: ${timeFiltered.length} points after time filter`);
+
+            // Фильтрация по ветке
+            const branchFiltered = this.currentConfigBranch === 'all'
+                ? timeFiltered
+                : timeFiltered.filter(d => d.branch === this.currentConfigBranch);
+
+            if (this.currentConfigBranch !== 'all') {
+                console.log(`  📊 ${chartKey}: ${branchFiltered.length} points after branch filter`);
+            }
+
+            // Добавляем метаданные
+            const metric = chartKey.includes('read') ? 'read' : 'write';
+            branchFiltered.forEach(d => {
+                allData.push({
+                    ...d,
+                    metric: `${metricType}_${metric}`,
+                    dataKey: chartKey,
+                    operation: metric
+                });
+            });
+        });
+
+        console.log(`📊 Total ${metricType} data points: ${allData.length}`);
+        return allData;
+    }
+
     recreateCharts() {
         console.log('🔄 recreateCharts called');
 
-        // Очищаем все контейнеры графиков
         const chartContainers = [
             '#chart-iops-config',
             '#chart-latency-config'
@@ -752,22 +903,49 @@ class DashboardApp {
 
         chartContainers.forEach(selector => {
             const container = d3.select(selector);
-            container.html('');  // Полная очистка
+            container.selectAll('*').remove(); // Очистка SVG
             console.log(`   ✅ Cleared container: ${selector}`);
         });
 
-        // Очищаем кэш графиков
-        this.charts.clear();
-        console.log(`   ✅ Cleared charts map (had ${this.charts.size} charts)`);
+        this.charts.clear(); // Очистка кэша
 
-        // Собираем группы заново с новым временным диапазоном
-        this.collectGroups();
-
-        // Создаем графики заново
-        this.createCharts();
+        this.createCharts(); // ПЕРЕСОЗДАНИЕ графиков
         this.createLegend();
+    }
 
-        console.log('✅ Charts recreated');
+    filterByTimeRange(data, timeRangeDays) {
+        if (!data || data.length === 0 || timeRangeDays === 0) {
+            return data;
+        }
+
+        const cutoffDate = new Date();
+        cutoffDate.setDate(cutoffDate.getDate() - timeRangeDays);
+        cutoffDate.setHours(0, 0, 0, 0);
+
+        console.log(`⏰ Filtering data since: ${cutoffDate.toISOString().split('T')[0]}`);
+
+        const filtered = data.filter(point => {
+            if (!point.timestamp || point.timestamp === "Unknown date") return false;
+
+            try {
+                const pointDate = new Date(point.timestamp);
+                return pointDate >= cutoffDate;
+            } catch (e) {
+                console.warn(`Invalid date: ${point.timestamp}`, e);
+                return false;
+            }
+        });
+
+        console.log(`⏰ Time filter: ${data.length} -> ${filtered.length} points`);
+
+        // Отладка: покажем диапазон дат
+        if (filtered.length > 0) {
+            const dates = filtered.map(p => new Date(p.timestamp).toISOString().split('T')[0]);
+            const uniqueDates = [...new Set(dates)].sort();
+            console.log(`📅 Date range: ${uniqueDates[0]} to ${uniqueDates[uniqueDates.length - 1]}`);
+        }
+
+        return filtered;
     }
 
     showLoading(show) {
@@ -816,6 +994,37 @@ class DashboardApp {
             </div>
         `;
         d3.select('body').html(errorHtml);
+    }
+
+    debugFilteredData(data, metricType) {
+        console.log(`🔍 DEBUG ${metricType} DATA:`);
+        console.log(`   Total points: ${data.length}`);
+
+        if (data.length > 0) {
+            // Группировка по датам
+            const byDate = {};
+            data.forEach(d => {
+                if (d.timestamp && d.timestamp !== "Unknown date") {
+                    const date = new Date(d.timestamp).toISOString().split('T')[0];
+                    byDate[date] = (byDate[date] || 0) + 1;
+                }
+            });
+
+            const dates = Object.keys(byDate).sort();
+            console.log(`   Date range: ${dates[0]} to ${dates[dates.length - 1]}`);
+            console.log(`   Unique dates: ${dates.length}`);
+
+            // Группировка по конфигурациям
+            const byConfig = {};
+            data.forEach(d => {
+                byConfig[d.group] = (byConfig[d.group] || 0) + 1;
+            });
+
+            console.log(`   Configurations: ${Object.keys(byConfig).length}`);
+            Object.entries(byConfig).forEach(([config, count]) => {
+                console.log(`     ${config}: ${count} points`);
+            });
+        }
     }
 }
 
