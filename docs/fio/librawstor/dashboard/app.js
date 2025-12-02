@@ -267,9 +267,10 @@ class DashboardApp {
 
             configChartKeys.forEach(chartKey => {
                 const fullData = this.fullChartData.charts[chartKey] || [];
-                console.log(`  📊 ${chartKey}: ${fullData.length} points before time filter`);
+                console.log(`  📊 ${chartKey}: ${fullData.length} points in full dataset`);
 
-                const timeFilteredData = this.filterDataByTimeRange(fullData, this.currentTimeRange);
+                // ИСПРАВЛЕНИЕ: Используем ту же логику фильтрации, что и в charts.js
+                const timeFilteredData = this.filterDataForChart(fullData, this.currentTimeRange);
                 console.log(`  📊 ${chartKey}: ${timeFilteredData.length} points after time filter`);
 
                 timeFilteredData.forEach(point => {
@@ -291,9 +292,28 @@ class DashboardApp {
         }
 
         // Показываем все отфильтрованные группы по умолчанию
+        this.visibleConfigGroups.clear();
         this.configGroups.forEach(group => this.visibleConfigGroups.add(group));
 
         console.log('✅ Filtered Config groups:', Array.from(this.configGroups));
+        console.log('✅ Visible Config groups:', Array.from(this.visibleConfigGroups));
+    }
+
+    // Новая функция для фильтрации данных для графиков
+    filterDataForChart(data, timeRangeDays) {
+        if (!data || data.length === 0 || timeRangeDays === 0) {
+            return data;
+        }
+
+        const cutoffDate = new Date();
+        cutoffDate.setDate(cutoffDate.getDate() - timeRangeDays);
+        cutoffDate.setHours(0, 0, 0, 0);
+
+        return data.filter(point => {
+            if (!point.timestamp || point.timestamp === "Unknown date") return false;
+            const pointDate = new Date(point.timestamp);
+            return pointDate >= cutoffDate;
+        });
     }
 
     // Метод для фильтрации групп
@@ -366,7 +386,8 @@ class DashboardApp {
                 visibleOperations: Array.from(this.visibleOperations),
                 availableGroups: Array.from(this.configGroups),
                 branchFilter: this.currentConfigBranch === 'all' ? null : this.currentConfigBranch,
-                sourceChartKeys: ['iops_read_by_config', 'iops_write_by_config']
+                sourceChartKeys: ['iops_read_by_config', 'iops_write_by_config'],
+                dataAlreadyFiltered: false  // ИСПРАВЛЕНИЕ: передаем false для применения фильтрации в charts.js
             },
             {
                 id: 'chart-latency-config',
@@ -380,7 +401,8 @@ class DashboardApp {
                 visibleOperations: Array.from(this.visibleOperations),
                 availableGroups: Array.from(this.configGroups),
                 branchFilter: this.currentConfigBranch === 'all' ? null : this.currentConfigBranch,
-                sourceChartKeys: ['latency_read_by_config', 'latency_write_by_config']
+                sourceChartKeys: ['latency_read_by_config', 'latency_write_by_config'],
+                dataAlreadyFiltered: false  // ИСПРАВЛЕНИЕ
             }
         ];
 
@@ -388,7 +410,8 @@ class DashboardApp {
             console.log(`\n📈 Processing chart: ${config.id}`);
             console.log(`   Time range: ${config.timeRangeDays} days`);
             console.log(`   Branch filter: ${config.branchFilter || 'none'}`);
-            
+            console.log(`   Data already filtered: ${config.dataAlreadyFiltered}`);
+
             let chartData = [];
 
             config.sourceChartKeys.forEach(chartKey => {
@@ -396,14 +419,12 @@ class DashboardApp {
                 const fullData = this.fullChartData.charts[chartKey] || [];
                 console.log(`  📊 Full data points: ${fullData.length}`);
 
-                const timeFilteredData = this.filterDataByTimeRange(fullData, this.currentTimeRange);
-                console.log(`  📊 After time filter: ${timeFilteredData.length} points`);
-
+                // ВАЖНО: Не фильтруем здесь! Пусть charts.js делает это
                 const metric = chartKey.includes('iops_read') ? 'iops_read' :
                               chartKey.includes('iops_write') ? 'iops_write' :
                               chartKey.includes('latency_read') ? 'latency_read' : 'latency_write';
 
-                timeFilteredData.forEach(d => {
+                fullData.forEach(d => {
                     chartData.push({
                         ...d,
                         metric: metric,
@@ -412,8 +433,9 @@ class DashboardApp {
                 });
             });
 
-            console.log(`📊 ${config.id}: Total data points before branch filter: ${chartData.length}`);
+            console.log(`📊 ${config.id}: Total data points before filters: ${chartData.length}`);
 
+            // Только branch фильтр применяем здесь
             if (config.branchFilter) {
                 console.log(`🔍 Applying branch filter: ${config.branchFilter}`);
                 const originalCount = chartData.length;
@@ -438,7 +460,7 @@ class DashboardApp {
                         metricType: config.metricType,
                         visibleOperations: config.visibleOperations,
                         availableGroups: config.availableGroups,
-                        dataAlreadyFiltered: true  // Ключевой параметр!
+                        dataAlreadyFiltered: config.dataAlreadyFiltered  // Теперь false
                     });
                     this.charts.set(config.id, chart);
                     console.log(`✅ Chart ${config.id} created successfully`);
@@ -712,9 +734,7 @@ class DashboardApp {
         console.log(`🔄 updateTimeRange CALLED: ${this.currentTimeRange} days`);
         console.log(`🔄 Branch remains: ${this.currentConfigBranch}`);
 
-        this.collectGroups();
-        console.log(`🔄 Groups collected: ${Array.from(this.configGroups).length}`);
-        
+        // КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Пересоздаем графики полностью
         this.recreateCharts();
         this.updateDataInfo();
 
@@ -723,7 +743,8 @@ class DashboardApp {
 
     recreateCharts() {
         console.log('🔄 recreateCharts called');
-        
+
+        // Очищаем все контейнеры графиков
         const chartContainers = [
             '#chart-iops-config',
             '#chart-latency-config'
@@ -731,16 +752,21 @@ class DashboardApp {
 
         chartContainers.forEach(selector => {
             const container = d3.select(selector);
-            container.selectAll('*').remove();
+            container.html('');  // Полная очистка
             console.log(`   ✅ Cleared container: ${selector}`);
         });
 
+        // Очищаем кэш графиков
         this.charts.clear();
         console.log(`   ✅ Cleared charts map (had ${this.charts.size} charts)`);
 
+        // Собираем группы заново с новым временным диапазоном
+        this.collectGroups();
+
+        // Создаем графики заново
         this.createCharts();
         this.createLegend();
-        
+
         console.log('✅ Charts recreated');
     }
 

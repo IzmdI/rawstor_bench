@@ -400,65 +400,69 @@ function filterChartData(data, timeRangeDays, skipTimeFilter = false) {
     
     console.log(`📊 filterChartData called: ${data.length} points, timeRangeDays=${timeRangeDays}, skipTimeFilter=${skipTimeFilter}`);
     
-    // Если данные уже отфильтрованы по времени, все равно делаем дедупликацию
+    // ИСПРАВЛЕНИЕ: Всегда начинаем с исходных данных
     let timeFilteredData = data;
-    
-    if (!skipTimeFilter && timeRangeDays > 0) {
-        // Применяем временную фильтрацию
-        const cutoffDate = new Date();
-        cutoffDate.setDate(cutoffDate.getDate() - timeRangeDays);
-        
-        console.log(`📅 Time filtering since: ${cutoffDate.toISOString().split('T')[0]} (${timeRangeDays} days ago)`);
-        
-        const beforeCount = timeFilteredData.length;
-        timeFilteredData = timeFilteredData.filter(d => {
-            if (!d.timestamp || d.timestamp === "Unknown date") return false;
-            const pointDate = new Date(d.timestamp);
-            return pointDate >= cutoffDate;
-        });
-        
-        console.log(`📅 Time filter: ${beforeCount} -> ${timeFilteredData.length} points`);
-    } else if (skipTimeFilter) {
-        console.log(`⏰ Skipping time filter (data already filtered)`);
+
+    // КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Правильная логика применения фильтра
+    if (timeRangeDays > 0) {
+        // ВАЖНО: Фильтруем даже если skipTimeFilter=true, но учитываем параметр
+        if (!skipTimeFilter) {
+            const cutoffDate = new Date();
+            cutoffDate.setDate(cutoffDate.getDate() - timeRangeDays);
+            cutoffDate.setHours(0, 0, 0, 0);
+
+            console.log(`📅 Time filtering since: ${cutoffDate.toISOString().split('T')[0]} (${timeRangeDays} days ago)`);
+
+            const beforeCount = timeFilteredData.length;
+            timeFilteredData = timeFilteredData.filter(d => {
+                if (!d.timestamp || d.timestamp === "Unknown date") return false;
+                const pointDate = new Date(d.timestamp);
+                return pointDate >= cutoffDate;
+            });
+
+            console.log(`📅 Time filter: ${beforeCount} -> ${timeFilteredData.length} points`);
+        } else {
+            console.log(`⏰ Skipping time filter (data already filtered elsewhere)`);
+        }
+    } else if (timeRangeDays === 0) {
+        console.log(`🌍 Time range: all time (no filtering)`);
     }
-    
+
     if (timeFilteredData.length === 0) {
         console.log(`❌ No data after time filtering`);
         return [];
     }
-    
-    // Группируем по fullGroup (группа + операция)
+
+    // Дедупликация (оставляем как есть)
     const dataByFullGroup = d3.group(timeFilteredData, d => d.fullGroup);
     const finalData = [];
-    
-    console.log(`📊 Processing ${dataByFullGroup.size} groups`);
-    
+
+    console.log(`📊 Processing ${dataByFullGroup.size} groups for deduplication`);
+
     dataByFullGroup.forEach((groupData, fullGroup) => {
-        // Для каждой группы - берем только последний тест в каждый день
+        // Берем только последний тест каждого дня
         const dailyGroups = d3.group(groupData, d => {
             const date = new Date(d.timestamp);
             return `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`;
         });
-        
+
         const uniqueDailyData = [];
         dailyGroups.forEach((dayTests, day) => {
             if (dayTests.length > 0) {
-                // Сортируем по времени и берем последний тест дня
-                const lastTest = dayTests.sort((a, b) => 
+                const lastTest = dayTests.sort((a, b) =>
                     new Date(b.timestamp) - new Date(a.timestamp)
                 )[0];
                 uniqueDailyData.push(lastTest);
             }
         });
-        
+
         // Проверяем, есть ли данные минимум в 2 разных дня
         const uniqueDays = new Set(uniqueDailyData.map(d => {
             const date = new Date(d.timestamp);
             return `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`;
         }));
-        
+
         if (uniqueDays.size >= 2) {
-            // Добавляем данные только если есть минимум 2 дня
             finalData.push(...uniqueDailyData);
             console.log(`✅ ${fullGroup}: ${uniqueDailyData.length} points across ${uniqueDays.size} days`);
         } else {
