@@ -7,7 +7,6 @@ function createChart(config) {
         container, title, yLabel, data, accessor, id, groupBy, 
         timeRangeDays, legendType, metricType, 
         visibleOperations = ['read'], availableGroups = [],
-        // Новый параметр: указывает, что данные уже отфильтрованы
         dataAlreadyFiltered = false
     } = config;
 
@@ -92,14 +91,9 @@ function createChart(config) {
     // Фильтруем некорректные данные
     processedData = processedData.filter(d => d.value !== null && d.value !== undefined && !isNaN(d.value) && d.timestamp);
 
-    // ВАЖНО: НЕ применяем дополнительную фильтрацию, если данные уже отфильтрованы в app.js
-    if (!dataAlreadyFiltered && timeRangeDays > 0) {
-        // Только если данные не отфильтрованы, применяем фильтрацию
-        console.log(`🔍 Applying time filter in chart.js for ${timeRangeDays} days`);
-        processedData = filterChartData(processedData, timeRangeDays);
-    } else {
-        console.log(`✅ Using pre-filtered data, skipping chart-level time filter`);
-    }
+    // ВАЖНОЕ ИСПРАВЛЕНИЕ: Всегда применяем обработку данных, но пропускаем временную фильтрацию если dataAlreadyFiltered
+    console.log(`🔍 Processing chart data (skipTimeFilter: ${dataAlreadyFiltered})`);
+    processedData = filterChartData(processedData, timeRangeDays, dataAlreadyFiltered);
 
     if (processedData.length === 0) {
         console.warn(`❌ No valid data points after filtering for chart: ${id}`);
@@ -187,6 +181,17 @@ function createChart(config) {
             .attr('font-weight', axisFontWeight)
             .attr('text-anchor', 'middle')
             .attr('dy', '1em'));
+
+    // Добавляем заголовок оси X
+    svg.append('text')
+        .attr('transform', `translate(${width / 2},${height + 45})`)
+        .attr('text-anchor', 'middle')
+        .attr('fill', axisColor)
+        .attr('font-family', axisFontFamily)
+        .attr('font-size', '14px')
+        .attr('font-weight', '600')
+        .attr('letter-spacing', '0.5px')
+        .text('Time');
 
     // РИСУЕМ ОСЬ Y С УЛУЧШЕННОЙ ТИПОГРАФИКОЙ
     const yAxisGroup = svg.append('g')
@@ -389,43 +394,48 @@ function createChart(config) {
     return chartState;
 }
 
-// ФУНКЦИЯ ДЛЯ ФИЛЬТРАЦИИ ДАННЫХ ГРАФИКА
-function filterChartData(data, timeRangeDays) {
+// ФУНКЦИЯ ДЛЯ ФИЛЬТРАЦИИ И ОБРАБОТКИ ДАННЫХ ГРАФИКА
+function filterChartData(data, timeRangeDays, skipTimeFilter = false) {
     if (!data || data.length === 0) return [];
     
-    console.log(`📊 Initial data points: ${data.length}, time range: ${timeRangeDays} days`);
+    console.log(`📊 filterChartData called: ${data.length} points, timeRangeDays=${timeRangeDays}, skipTimeFilter=${skipTimeFilter}`);
     
-    // Если timeRangeDays = 0 (all), возвращаем все данные без фильтрации
-    if (timeRangeDays === 0) {
-        console.log('📅 Using all data (no time filter)');
-        return data;
-    }
+    // Если данные уже отфильтрованы по времени, все равно делаем дедупликацию
+    let timeFilteredData = data;
     
-    // Рассчитываем дату отсечения
-    const cutoffDate = new Date();
-    cutoffDate.setDate(cutoffDate.getDate() - timeRangeDays);
-    
-    console.log(`📅 Filtering data since: ${cutoffDate.toISOString().split('T')[0]}`);
-    
-    // Шаг 1: Группируем по fullGroup (группа + операция)
-    const dataByFullGroup = d3.group(data, d => d.fullGroup);
-    const filteredData = [];
-    
-    dataByFullGroup.forEach((groupData, fullGroup) => {
-        // Шаг 2: Фильтруем данные по времени
-        const timeFilteredData = groupData.filter(d => {
+    if (!skipTimeFilter && timeRangeDays > 0) {
+        // Применяем временную фильтрацию
+        const cutoffDate = new Date();
+        cutoffDate.setDate(cutoffDate.getDate() - timeRangeDays);
+        
+        console.log(`📅 Time filtering since: ${cutoffDate.toISOString().split('T')[0]} (${timeRangeDays} days ago)`);
+        
+        const beforeCount = timeFilteredData.length;
+        timeFilteredData = timeFilteredData.filter(d => {
             if (!d.timestamp || d.timestamp === "Unknown date") return false;
             const pointDate = new Date(d.timestamp);
             return pointDate >= cutoffDate;
         });
         
-        if (timeFilteredData.length === 0) {
-            console.log(`❌ ${fullGroup}: no data in the last ${timeRangeDays} days`);
-            return;
-        }
-        
-        // Шаг 3: Для каждой группы - берем только последний тест в каждый день
-        const dailyGroups = d3.group(timeFilteredData, d => {
+        console.log(`📅 Time filter: ${beforeCount} -> ${timeFilteredData.length} points`);
+    } else if (skipTimeFilter) {
+        console.log(`⏰ Skipping time filter (data already filtered)`);
+    }
+    
+    if (timeFilteredData.length === 0) {
+        console.log(`❌ No data after time filtering`);
+        return [];
+    }
+    
+    // Группируем по fullGroup (группа + операция)
+    const dataByFullGroup = d3.group(timeFilteredData, d => d.fullGroup);
+    const finalData = [];
+    
+    console.log(`📊 Processing ${dataByFullGroup.size} groups`);
+    
+    dataByFullGroup.forEach((groupData, fullGroup) => {
+        // Для каждой группы - берем только последний тест в каждый день
+        const dailyGroups = d3.group(groupData, d => {
             const date = new Date(d.timestamp);
             return `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`;
         });
@@ -441,7 +451,7 @@ function filterChartData(data, timeRangeDays) {
             }
         });
         
-        // Шаг 4: Проверяем, есть ли данные минимум в 2 разных дня
+        // Проверяем, есть ли данные минимум в 2 разных дня
         const uniqueDays = new Set(uniqueDailyData.map(d => {
             const date = new Date(d.timestamp);
             return `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`;
@@ -449,15 +459,23 @@ function filterChartData(data, timeRangeDays) {
         
         if (uniqueDays.size >= 2) {
             // Добавляем данные только если есть минимум 2 дня
-            filteredData.push(...uniqueDailyData);
-            console.log(`✅ ${fullGroup}: ${uniqueDailyData.length} points across ${uniqueDays.size} days (last ${timeRangeDays} days)`);
+            finalData.push(...uniqueDailyData);
+            console.log(`✅ ${fullGroup}: ${uniqueDailyData.length} points across ${uniqueDays.size} days`);
         } else {
-            console.log(`❌ ${fullGroup}: skipped - only ${uniqueDays.size} day(s) of data in last ${timeRangeDays} days`);
+            console.log(`❌ ${fullGroup}: skipped - only ${uniqueDays.size} day(s) of data`);
         }
     });
     
-    console.log(`📊 Filtered data points: ${filteredData.length} (removed ${data.length - filteredData.length})`);
-    return filteredData;
+    console.log(`📊 Final result: ${finalData.length} points (from ${data.length} input)`);
+    
+    // Проверим диапазон дат
+    if (finalData.length > 0) {
+        const dates = finalData.map(d => new Date(d.timestamp).toISOString().split('T')[0]);
+        const uniqueDates = [...new Set(dates)].sort();
+        console.log(`📅 Date range in final data: ${uniqueDates[0]} to ${uniqueDates[uniqueDates.length - 1]} (${uniqueDates.length} unique days)`);
+    }
+    
+    return finalData;
 }
 
 // Функция для построения URL теста

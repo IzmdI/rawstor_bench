@@ -27,11 +27,13 @@ class DashboardApp {
     }
 
     async init() {
-        console.log('Initializing dashboard...');
+        console.log('🚀 Initializing dashboard...');
 
         const params = this.getUrlParams();
         this.currentTimeRange = params.days ? parseInt(params.days) : 30;
         this.currentConfigBranch = params.configBranch || 'refs/heads/main';
+
+        console.log(`🔧 Initial params: timeRange=${this.currentTimeRange} days, branch=${this.currentConfigBranch}`);
 
         d3.select('#timeRange').property('value', this.currentTimeRange.toString());
 
@@ -45,13 +47,17 @@ class DashboardApp {
             this.setupEventListeners();
             this.updateDataInfo();
 
+            // Тестовый вывод для отладки
+            this.debugDataInfo();
+            
         } catch (error) {
-            console.error('Failed to initialize dashboard:', error);
+            console.error('❌ Failed to initialize dashboard:', error);
             this.displayError(error);
         }
     }
 
     async loadData() {
+        console.log('📥 Loading data...');
         this.currentData = await this.dataLoader.loadData();
 
         // Сохраняем полные данные для фильтрации на клиенте
@@ -59,6 +65,53 @@ class DashboardApp {
 
         console.log('✅ Data loaded successfully');
         console.log(`📊 Full dataset has ${this.fullChartData.summary?.total_tests || 0} tests`);
+        
+        // Проверим диапазон дат в данных
+        if (this.fullChartData.summary?.time_range) {
+            console.log(`📅 Data time range in summary: ${this.fullChartData.summary.time_range.start} to ${this.fullChartData.summary.time_range.end}`);
+        }
+        
+        // Проверим фактические даты в данных
+        this.debugDataDates();
+    }
+
+    // Метод для отладки дат в данных
+    debugDataDates() {
+        if (!this.fullChartData?.charts) return;
+        
+        const testChartKey = 'iops_read_by_config';
+        const testData = this.fullChartData.charts[testChartKey] || [];
+        
+        if (testData.length > 0) {
+            const dates = testData
+                .map(p => p.timestamp)
+                .filter(ts => ts && ts !== "Unknown date")
+                .map(ts => new Date(ts).toISOString().split('T')[0]);
+            
+            const uniqueDates = [...new Set(dates)].sort();
+            console.log(`📅 Debug: ${testChartKey} has ${testData.length} points, ${uniqueDates.length} unique dates`);
+            console.log(`📅 Date range: ${uniqueDates[0]} to ${uniqueDates[uniqueDates.length - 1]}`);
+            
+            // Покажем распределение по месяцам
+            const months = dates.map(d => d.substring(0, 7));
+            const monthCounts = {};
+            months.forEach(m => monthCounts[m] = (monthCounts[m] || 0) + 1);
+            console.log(`📅 Monthly distribution:`, monthCounts);
+        }
+    }
+
+    // Метод для общей отладки
+    debugDataInfo() {
+        console.log('🔍 DEBUG INFO:');
+        console.log(`   Current time range: ${this.currentTimeRange} days`);
+        console.log(`   Current branch: ${this.currentConfigBranch}`);
+        console.log(`   Config groups: ${Array.from(this.configGroups).length}`);
+        console.log(`   Full data available: ${!!this.fullChartData}`);
+        
+        if (this.fullChartData?.summary) {
+            console.log(`   Total tests: ${this.fullChartData.summary.total_tests}`);
+            console.log(`   Configurations: ${this.fullChartData.summary.configurations?.length || 0}`);
+        }
     }
 
     // Метод для сбора всех доступных веток из данных
@@ -137,9 +190,10 @@ class DashboardApp {
 
     // Метод для фильтрации данных на клиенте по временному диапазону
     filterDataByTimeRange(chartData, timeRangeDays) {
-        console.log(`⏰ filterDataByTimeRange: timeRangeDays=${timeRangeDays}, data points=${chartData?.length || 0}`);
+        console.log(`⏰ filterDataByTimeRange: timeRangeDays=${timeRangeDays}, input points=${chartData?.length || 0}`);
 
         if (!chartData || !Array.isArray(chartData)) {
+            console.log('⏰ No data to filter');
             return [];
         }
 
@@ -150,24 +204,52 @@ class DashboardApp {
 
         const now = new Date();
         const cutoffDate = new Date(now.getTime() - timeRangeDays * 24 * 60 * 60 * 1000);
+        
+        // Устанавливаем время на начало дня для точной фильтрации
+        cutoffDate.setHours(0, 0, 0, 0);
 
+        console.log(`⏰ Now: ${now.toISOString().split('T')[0]}`);
         console.log(`⏰ Cutoff date: ${cutoffDate.toISOString().split('T')[0]} (${timeRangeDays} days ago)`);
 
-        const filteredData = chartData.filter(point => {
+        const filteredData = [];
+        let skippedCount = 0;
+
+        chartData.forEach(point => {
             if (!point.timestamp || point.timestamp === "Unknown date") {
-                return false;
+                skippedCount++;
+                return;
             }
 
             try {
                 const pointDate = new Date(point.timestamp);
-                return pointDate >= cutoffDate;
+                
+                // Для отладки: покажем несколько точек у границы
+                if (filteredData.length < 3 && pointDate >= cutoffDate) {
+                    console.log(`   ✅ Sample kept point: ${pointDate.toISOString().split('T')[0]} (group: ${point.group})`);
+                }
+                if (skippedCount < 3 && pointDate < cutoffDate) {
+                    console.log(`   ❌ Sample skipped point: ${pointDate.toISOString().split('T')[0]} (group: ${point.group})`);
+                }
+                
+                if (pointDate >= cutoffDate) {
+                    filteredData.push(point);
+                } else {
+                    skippedCount++;
+                }
             } catch (e) {
-                console.warn(`Error parsing date: ${point.timestamp}`, e);
-                return false;
+                console.warn(`⏰ Error parsing date: ${point.timestamp}`, e);
+                skippedCount++;
             }
         });
 
-        console.log(`⏰ Filter result: ${filteredData.length} points kept, ${chartData.length - filteredData.length} points removed`);
+        console.log(`⏰ Filter result: ${filteredData.length} points kept, ${skippedCount} points removed`);
+        
+        // Проверим диапазон дат в отфильтрованных данных
+        if (filteredData.length > 0) {
+            const dates = filteredData.map(p => new Date(p.timestamp).toISOString().split('T')[0]);
+            const uniqueDates = [...new Set(dates)].sort();
+            console.log(`⏰ Filtered data range: ${uniqueDates[0]} to ${uniqueDates[uniqueDates.length - 1]} (${uniqueDates.length} unique days)`);
+        }
 
         return filteredData;
     }
@@ -219,6 +301,8 @@ class DashboardApp {
         const filteredGroups = new Set();
         const timeRangeDays = this.currentTimeRange === 0 ? 365 : this.currentTimeRange;
 
+        console.log(`🔍 filterGroupsWithEnoughData: checking ${groups.size} groups for ${timeRangeDays} days`);
+
         groups.forEach(group => {
             if (this.hasGroupEnoughData(group, timeRangeDays, branchFilter)) {
                 filteredGroups.add(group);
@@ -267,6 +351,7 @@ class DashboardApp {
         }
 
         console.log(`🎨 createCharts: timeRange=${this.currentTimeRange} days, branch=${this.currentConfigBranch}`);
+        console.log(`🎨 Available config groups: ${Array.from(this.configGroups).length}`);
 
         const chartsConfig = [
             {
@@ -301,6 +386,9 @@ class DashboardApp {
 
         chartsConfig.forEach(config => {
             console.log(`\n📈 Processing chart: ${config.id}`);
+            console.log(`   Time range: ${config.timeRangeDays} days`);
+            console.log(`   Branch filter: ${config.branchFilter || 'none'}`);
+            
             let chartData = [];
 
             config.sourceChartKeys.forEach(chartKey => {
@@ -333,7 +421,7 @@ class DashboardApp {
                 console.log(`📊 After branch filter: ${chartData.length} points (removed ${originalCount - chartData.length})`);
             }
 
-            console.log(`✅ ${config.id}: Final data points: ${chartData.length}`);
+            console.log(`✅ ${config.id}: Final data points for chart: ${chartData.length}`);
 
             if (chartData && chartData.length > 0) {
                 try {
@@ -350,7 +438,7 @@ class DashboardApp {
                         metricType: config.metricType,
                         visibleOperations: config.visibleOperations,
                         availableGroups: config.availableGroups,
-                        dataAlreadyFiltered: true
+                        dataAlreadyFiltered: true  // Ключевой параметр!
                     });
                     this.charts.set(config.id, chart);
                     console.log(`✅ Chart ${config.id} created successfully`);
@@ -545,7 +633,10 @@ class DashboardApp {
     }
 
     handleConfigBranchChange(branchValue) {
+        console.log(`🌿 Branch change: ${this.currentConfigBranch} -> ${branchValue}`);
+        
         if (branchValue === this.currentConfigBranch) {
+            console.log('🌿 Branch unchanged');
             return;
         }
 
@@ -554,6 +645,7 @@ class DashboardApp {
     }
 
     updateConfigBranch() {
+        // Обновляем URL без перезагрузки страницы
         const url = new URL(window.location.href);
         if (this.currentConfigBranch === 'refs/heads/main') {
             url.searchParams.delete('configBranch');
@@ -563,6 +655,7 @@ class DashboardApp {
         window.history.pushState({}, '', url.toString());
 
         console.log(`🌿 Updating config branch to: ${this.currentConfigBranch}`);
+        console.log(`🌿 Time range remains: ${this.currentTimeRange} days`);
 
         this.collectGroups();
         this.recreateCharts();
@@ -594,17 +687,20 @@ class DashboardApp {
 
     handleTimeRangeChange(days) {
         const newTimeRange = days === 'all' ? 0 : parseInt(days);
+        
+        console.log(`⏰ Time range change: ${this.currentTimeRange} -> ${newTimeRange} days`);
 
         if (newTimeRange === this.currentTimeRange) {
+            console.log('⏰ Time range unchanged');
             return;
         }
 
-        console.log(`⏰ Time range changed from ${this.currentTimeRange} to ${newTimeRange} days`);
         this.currentTimeRange = newTimeRange;
         this.updateTimeRange();
     }
 
     updateTimeRange() {
+        // Обновляем URL без перезагрузки страницы
         const url = new URL(window.location.href);
         if (this.currentTimeRange === 0) {
             url.searchParams.delete('days');
@@ -613,9 +709,12 @@ class DashboardApp {
         }
         window.history.pushState({}, '', url.toString());
 
-        console.log(`🔄 Updating time range to: ${this.currentTimeRange} days`);
+        console.log(`🔄 updateTimeRange CALLED: ${this.currentTimeRange} days`);
+        console.log(`🔄 Branch remains: ${this.currentConfigBranch}`);
 
         this.collectGroups();
+        console.log(`🔄 Groups collected: ${Array.from(this.configGroups).length}`);
+        
         this.recreateCharts();
         this.updateDataInfo();
 
@@ -624,7 +723,7 @@ class DashboardApp {
 
     recreateCharts() {
         console.log('🔄 recreateCharts called');
-
+        
         const chartContainers = [
             '#chart-iops-config',
             '#chart-latency-config'
@@ -633,12 +732,16 @@ class DashboardApp {
         chartContainers.forEach(selector => {
             const container = d3.select(selector);
             container.selectAll('*').remove();
+            console.log(`   ✅ Cleared container: ${selector}`);
         });
 
         this.charts.clear();
+        console.log(`   ✅ Cleared charts map (had ${this.charts.size} charts)`);
 
         this.createCharts();
         this.createLegend();
+        
+        console.log('✅ Charts recreated');
     }
 
     showLoading(show) {
