@@ -59,6 +59,15 @@ function formatDate(date, timeRangeDays = 30) {
     }
 }
 
+function filterChartData(data, timeRangeDays, skipTimeFilter = false) {
+    console.log(`⚠️ filterChartData called but temporarily disabled`);
+    console.log(`   Input: ${data.length} points, timeRangeDays=${timeRangeDays}, skipTimeFilter=${skipTimeFilter}`);
+
+    // ВОЗВРАЩАЕМ ДАННЫЕ БЕЗ ФИЛЬТРАЦИИ
+    // Вся фильтрация теперь в app.js
+    return data;
+}
+
 function formatMetricValue(value, metricType) {
     if (metricType.toLowerCase().includes('iops')) {
         // Форматируем IOPS в kIOPS/MIOPS
