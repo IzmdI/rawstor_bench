@@ -90,9 +90,9 @@ function createChart(config) {
         return null;
     }
 
-    // Шаг 5: Создать шкалы (основная проблема была здесь!)
+    // Шаг 5: Создать шкалы
     const xScale = d3.scaleTime()
-        .domain(d3.extent(transformedData, d => d.timestamp)) // ВАЖНО: используем ОТФИЛЬТРОВАННЫЕ данные
+        .domain(d3.extent(transformedData, d => d.timestamp))
         .range([0, width])
         .nice();
 
@@ -108,24 +108,270 @@ function createChart(config) {
     console.log(`📅 X-axis domain: ${xScale.domain().map(d => d.toISOString().split('T')[0])}`);
     console.log(`📊 Y-axis domain: [${yScale.domain()[0].toFixed(2)}, ${yScale.domain()[1].toFixed(2)}]`);
 
-    // ... остальной код создания осей, линий, точек ...
+    // НАСТРОЙКИ ТИПОГРАФИКИ ДЛЯ ОСЕЙ
+    const axisFontFamily = "'Segoe UI', 'Helvetica Neue', Arial, sans-serif";
+    const axisFontSize = '13px';
+    const axisFontWeight = '500';
+    const axisColor = '#444';
+    const gridColor = '#f0f0f0';
+    const axisLineColor = '#ddd';
 
-    // ВОЗВРАЩАЕМ ПРОСТОЙ ОБЪЕКТ, а не сложный state
-    return {
+    // Настраиваем формат оси X
+    const xAxisFormat = timeRangeDays < 15 ?
+        d3.timeFormat('%H:%M %d.%m') :
+        d3.timeFormat('%d.%m');
+
+    console.log(`📅 Using X-axis format for ${timeRangeDays} days: ${timeRangeDays < 15 ? 'detailed' : 'daily'}`);
+
+    const xAxis = d3.axisBottom(xScale)
+        .ticks(timeRangeDays < 15 ? 10 : 8)
+        .tickFormat(xAxisFormat);
+
+    // Настраиваем формат оси Y
+    const formatYAxis = (value) => {
+        if (metricType === 'iops') {
+            if (value >= 1000000) return (value / 1000000).toFixed(1) + 'M';
+            if (value >= 1000) return (value / 1000).toFixed(1) + 'k';
+            return value.toFixed(0);
+        } else {
+            return value >= 1 ? value.toFixed(1) : value.toFixed(3);
+        }
+    };
+
+    const yAxis = d3.axisLeft(yScale)
+        .ticks(8)
+        .tickFormat(formatYAxis);
+
+    // РИСУЕМ ОСЬ X
+    const xAxisGroup = svg.append('g')
+        .attr('transform', `translate(0,${height})`)
+        .call(xAxis)
+        .call(g => g.select('.domain')
+            .attr('stroke', axisLineColor)
+            .attr('stroke-width', 1.5))
+        .call(g => g.selectAll('.tick line')
+            .attr('stroke', axisLineColor)
+            .attr('stroke-width', 1))
+        .call(g => g.selectAll('.tick text')
+            .attr('fill', axisColor)
+            .attr('font-family', axisFontFamily)
+            .attr('font-size', axisFontSize)
+            .attr('font-weight', axisFontWeight)
+            .attr('text-anchor', 'middle')
+            .attr('dy', '1em'));
+
+    // Добавляем заголовок оси X
+    svg.append('text')
+        .attr('transform', `translate(${width / 2},${height + 45})`)
+        .attr('text-anchor', 'middle')
+        .attr('fill', axisColor)
+        .attr('font-family', axisFontFamily)
+        .attr('font-size', '14px')
+        .attr('font-weight', '600')
+        .attr('letter-spacing', '0.5px')
+        .text('Time');
+
+    // РИСУЕМ ОСЬ Y
+    const yAxisGroup = svg.append('g')
+        .call(yAxis)
+        .call(g => g.select('.domain')
+            .attr('stroke', axisLineColor)
+            .attr('stroke-width', 1.5))
+        .call(g => g.selectAll('.tick line')
+            .attr('stroke', axisLineColor)
+            .attr('stroke-width', 1))
+        .call(g => g.selectAll('.tick text')
+            .attr('fill', axisColor)
+            .attr('font-family', axisFontFamily)
+            .attr('font-size', axisFontSize)
+            .attr('font-weight', axisFontWeight)
+            .attr('text-anchor', 'end')
+            .attr('dx', '-0.5em'));
+
+    // Добавляем заголовок оси Y
+    const yAxisLabel = svg.append('text')
+        .attr('transform', 'rotate(-90)')
+        .attr('y', -70)
+        .attr('x', -height / 2)
+        .attr('text-anchor', 'middle')
+        .attr('fill', axisColor)
+        .attr('font-family', axisFontFamily)
+        .attr('font-size', '15px')
+        .attr('font-weight', '600')
+        .attr('letter-spacing', '0.5px');
+
+    // Устанавливаем текст в зависимости от типа метрики
+    if (metricType === 'iops') {
+        yAxisLabel.text('IOPS');
+    } else if (metricType === 'latency') {
+        yAxisLabel.text('Latency (ms)');
+    } else {
+        yAxisLabel.text(yLabel);
+    }
+
+    // УЛУЧШЕННАЯ СЕТКА
+    svg.append('g')
+        .attr('class', 'grid')
+        .attr('transform', `translate(0,${height})`)
+        .call(d3.axisBottom(xScale)
+            .tickSize(-height)
+            .tickFormat('')
+        )
+        .call(g => g.selectAll('.tick line')
+            .attr('stroke', gridColor)
+            .attr('stroke-width', 1)
+            .attr('stroke-dasharray', '3,3'));
+
+    svg.append('g')
+        .attr('class', 'grid')
+        .call(d3.axisLeft(yScale)
+            .tickSize(-width)
+            .tickFormat('')
+        )
+        .call(g => g.selectAll('.tick line')
+            .attr('stroke', gridColor)
+            .attr('stroke-width', 1)
+            .attr('stroke-dasharray', '3,3'));
+
+    // ДОБАВЛЯЕМ ЗАГОЛОВОК ГРАФИКА
+    svg.append('text')
+        .attr('x', width / 2)
+        .attr('y', -20)
+        .attr('text-anchor', 'middle')
+        .attr('fill', '#2c3e50')
+        .attr('font-family', "'Segoe UI', 'Helvetica Neue', Arial, sans-serif")
+        .attr('font-size', '16px')
+        .attr('font-weight', '600')
+        .attr('letter-spacing', '0.5px')
+        .text(title);
+
+    // Создаем line generator
+    const line = d3.line()
+        .x(d => xScale(d.timestamp))
+        .y(d => yScale(d.value))
+        .curve(d3.curveMonotoneX);
+
+    // Группируем данные по полной группе
+    const dataByFullGroup = d3.group(transformedData, d => d.fullGroup);
+    const fullGroups = Array.from(dataByFullGroup.keys());
+
+    // Используем availableGroups если переданы, иначе берем из данных
+    const baseGroups = availableGroups.length > 0
+        ? availableGroups
+        : Array.from(new Set(transformedData.map(d => d.group)));
+
+    // ОПРЕДЕЛЯЕМ НАЧАЛЬНУЮ ВИДИМОСТЬ
+    const visibleFullGroups = new Set(
+        fullGroups.filter(fullGroup => {
+            const operation = fullGroup.split(' - ')[1];
+            return visibleOperations.includes(operation);
+        })
+    );
+
+    console.log(`👁️  Initial visibility: ${Array.from(visibleFullGroups).join(', ')}`);
+
+    // Рисуем линии и точки
+    fullGroups.forEach((fullGroup, groupIndex) => {
+        const groupData = dataByFullGroup.get(fullGroup)
+            .sort((a, b) => a.timestamp - b.timestamp);
+
+        if (groupData.length === 0) return;
+
+        const operation = groupData[0].operation;
+        const baseGroup = groupData[0].group;
+
+        // Находим индекс группы в baseGroups для правильного цвета
+        const baseGroupIndex = baseGroups.indexOf(baseGroup);
+        if (baseGroupIndex === -1) {
+            console.warn(`Group "${baseGroup}" not found in available groups, skipping`);
+            return;
+        }
+
+        // Определяем начальную видимость
+        const isInitiallyVisible = visibleFullGroups.has(fullGroup);
+
+        console.log(`🎨 Drawing ${fullGroup}: ${groupData.length} points, visible: ${isInitiallyVisible}`);
+
+        // Рисуем линию с стилем операции
+        svg.append('path')
+            .datum(groupData)
+            .attr('class', `line line-${createSafeClassName(fullGroup)}`)
+            .attr('d', line)
+            .style('stroke', getColor(baseGroupIndex))
+            .style('stroke-width', getOperationStyle(operation).strokeWidth)
+            .style('stroke-dasharray', getOperationStyle(operation).strokeDasharray)
+            .style('fill', 'none')
+            .style('stroke-linecap', 'round')
+            .style('opacity', isInitiallyVisible ? 1 : 0);
+
+        // Рисуем точки
+        svg.selectAll(`.dot-${createSafeClassName(fullGroup)}`)
+            .data(groupData)
+            .enter()
+            .append('circle')
+            .attr('class', `dot dot-${createSafeClassName(fullGroup)}`)
+            .attr('cx', d => xScale(d.timestamp))
+            .attr('cy', d => yScale(d.value))
+            .attr('r', 4)
+            .style('fill', getColor(baseGroupIndex))
+            .style('stroke', '#fff')
+            .style('stroke-width', 2)
+            .style('cursor', 'pointer')
+            .style('transition', 'all 0.3s ease')
+            .style('opacity', isInitiallyVisible ? 1 : 0)
+            .style('pointer-events', 'all')
+            .on('mouseover', function(event, d) {
+                if (visibleFullGroups.has(fullGroup)) {
+                    d3.select(this)
+                        .attr('r', 6)
+                        .style('stroke-width', 3);
+                    showTooltip(event, d, title, accessor, groupBy, timeRangeDays);
+                }
+            })
+            .on('mouseout', function(event, d) {
+                if (visibleFullGroups.has(fullGroup)) {
+                    d3.select(this)
+                        .attr('r', 4)
+                        .style('stroke-width', 2);
+                    hideTooltip();
+                }
+            })
+            .on('click', function(event, d) {
+                if (visibleFullGroups.has(fullGroup) && d.commit_sha) {
+                    const testUrl = buildTestUrl(d.config, d.commit_sha);
+                    console.log('Opening test URL:', testUrl);
+                    window.open(testUrl, '_blank');
+                }
+            });
+    });
+
+    // Создаем объект chart
+    const chartObj = {
         id: id,
-        data: transformedData,
-        updateVisibility: function(visibleFullGroups) {
-            // Простая реализация обновления видимости
+        fullGroups: fullGroups,
+        updateVisibility: function(newVisibleFullGroups) {
+            console.log(`👁️  Updating visibility for ${this.id}`);
+            console.log(`👁️  Visible groups:`, Array.from(newVisibleFullGroups));
+
             fullGroups.forEach(fullGroup => {
-                const isVisible = visibleFullGroups.has(fullGroup);
+                const isVisible = newVisibleFullGroups.has(fullGroup);
                 const line = svg.select(`.line-${createSafeClassName(fullGroup)}`);
                 const dots = svg.selectAll(`.dot-${createSafeClassName(fullGroup)}`);
 
-                if (!line.empty()) line.style('opacity', isVisible ? 1 : 0);
-                if (!dots.empty()) dots.style('opacity', isVisible ? 1 : 0);
+                if (!line.empty()) {
+                    line.style('opacity', isVisible ? 1 : 0);
+                }
+                if (!dots.empty()) {
+                    dots.style('opacity', isVisible ? 1 : 0);
+                }
             });
         }
     };
+
+    console.log(`✅ Chart ${id} created successfully with ${fullGroups.length} groups`);
+    console.log(`📋 Chart object:`, chartObj);
+
+    return chartObj;
 }
 
 // ФУНКЦИЯ ДЛЯ ФИЛЬТРАЦИИ И ОБРАБОТКИ ДАННЫХ ГРАФИКА
