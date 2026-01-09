@@ -7,22 +7,12 @@ class DashboardApp {
         this.dataLoader = new DataLoader();
         this.currentData = null;
         this.charts = new Map();
-        
-        // Храним полные нефильтрованные данные
         this.fullChartData = null;
-        
-        // Управление видимостью операций
         this.visibleOperations = new Set(['read']);
-
-        // Управление видимостью групп
         this.visibleConfigGroups = new Set();
         this.configGroups = new Set();
-
-        // Текущий масштаб времени и выбранная ветка
-        this.currentTimeRange = 30; // по умолчанию 30 дней
-        this.currentConfigBranch = 'refs/heads/main'; // по умолчанию main ветка
-
-        // Все доступные ветки для селектора
+        this.currentTimeRange = 30;
+        this.currentConfigBranch = 'refs/heads/main';
         this.allAvailableBranches = new Set();
     }
 
@@ -46,9 +36,6 @@ class DashboardApp {
             this.createCharts();
             this.setupEventListeners();
             this.updateDataInfo();
-
-            // Тестовый вывод для отладки
-            this.debugDataInfo();
             
         } catch (error) {
             console.error('❌ Failed to initialize dashboard:', error);
@@ -59,67 +46,14 @@ class DashboardApp {
     async loadData() {
         console.log('📥 Loading data...');
         this.currentData = await this.dataLoader.loadData();
-
-        // Сохраняем полные данные для фильтрации на клиенте
         this.fullChartData = { ...this.currentData };
-
         console.log('✅ Data loaded successfully');
-        console.log(`📊 Full dataset has ${this.fullChartData.summary?.total_tests || 0} tests`);
-        
-        // Проверим диапазон дат в данных
-        if (this.fullChartData.summary?.time_range) {
-            console.log(`📅 Data time range in summary: ${this.fullChartData.summary.time_range.start} to ${this.fullChartData.summary.time_range.end}`);
-        }
-        
-        // Проверим фактические даты в данных
-        this.debugDataDates();
     }
 
-    // Метод для отладки дат в данных
-    debugDataDates() {
-        if (!this.fullChartData?.charts) return;
-        
-        const testChartKey = 'iops_read_by_config';
-        const testData = this.fullChartData.charts[testChartKey] || [];
-        
-        if (testData.length > 0) {
-            const dates = testData
-                .map(p => p.timestamp)
-                .filter(ts => ts && ts !== "Unknown date")
-                .map(ts => new Date(ts).toISOString().split('T')[0]);
-            
-            const uniqueDates = [...new Set(dates)].sort();
-            console.log(`📅 Debug: ${testChartKey} has ${testData.length} points, ${uniqueDates.length} unique dates`);
-            console.log(`📅 Date range: ${uniqueDates[0]} to ${uniqueDates[uniqueDates.length - 1]}`);
-            
-            // Покажем распределение по месяцам
-            const months = dates.map(d => d.substring(0, 7));
-            const monthCounts = {};
-            months.forEach(m => monthCounts[m] = (monthCounts[m] || 0) + 1);
-            console.log(`📅 Monthly distribution:`, monthCounts);
-        }
-    }
-
-    // Метод для общей отладки
-    debugDataInfo() {
-        console.log('🔍 DEBUG INFO:');
-        console.log(`   Current time range: ${this.currentTimeRange} days`);
-        console.log(`   Current branch: ${this.currentConfigBranch}`);
-        console.log(`   Config groups: ${Array.from(this.configGroups).length}`);
-        console.log(`   Full data available: ${!!this.fullChartData}`);
-        
-        if (this.fullChartData?.summary) {
-            console.log(`   Total tests: ${this.fullChartData.summary.total_tests}`);
-            console.log(`   Configurations: ${this.fullChartData.summary.configurations?.length || 0}`);
-        }
-    }
-
-    // Метод для сбора всех доступных веток из данных
     collectAllBranches() {
         this.allAvailableBranches.clear();
 
         if (this.fullChartData?.charts) {
-            // Собираем ветки из всех конфигурационных графиков
             const configChartKeys = [
                 'iops_read_by_config', 'iops_write_by_config',
                 'latency_read_by_config', 'latency_write_by_config'
@@ -138,7 +72,6 @@ class DashboardApp {
         console.log('🌿 All available branches:', Array.from(this.allAvailableBranches));
     }
 
-    // Метод для заполнения селектора веток
     populateBranchSelector() {
         const branchSelect = d3.select('#configBranch');
         branchSelect.html('');
@@ -188,73 +121,6 @@ class DashboardApp {
         return displayName;
     }
 
-    // Метод для фильтрации данных на клиенте по временному диапазону
-    filterDataByTimeRange(chartData, timeRangeDays) {
-        console.log(`⏰ filterDataByTimeRange: timeRangeDays=${timeRangeDays}, input points=${chartData?.length || 0}`);
-
-        if (!chartData || !Array.isArray(chartData)) {
-            console.log('⏰ No data to filter');
-            return [];
-        }
-
-        if (timeRangeDays === 0) {
-            console.log(`⏰ Returning all ${chartData.length} points (timeRangeDays=0)`);
-            return chartData;
-        }
-
-        const now = new Date();
-        const cutoffDate = new Date(now.getTime() - timeRangeDays * 24 * 60 * 60 * 1000);
-        
-        // Устанавливаем время на начало дня для точной фильтрации
-        cutoffDate.setHours(0, 0, 0, 0);
-
-        console.log(`⏰ Now: ${now.toISOString().split('T')[0]}`);
-        console.log(`⏰ Cutoff date: ${cutoffDate.toISOString().split('T')[0]} (${timeRangeDays} days ago)`);
-
-        const filteredData = [];
-        let skippedCount = 0;
-
-        chartData.forEach(point => {
-            if (!point.timestamp || point.timestamp === "Unknown date") {
-                skippedCount++;
-                return;
-            }
-
-            try {
-                const pointDate = new Date(point.timestamp);
-                
-                // Для отладки: покажем несколько точек у границы
-                if (filteredData.length < 3 && pointDate >= cutoffDate) {
-                    console.log(`   ✅ Sample kept point: ${pointDate.toISOString().split('T')[0]} (group: ${point.group})`);
-                }
-                if (skippedCount < 3 && pointDate < cutoffDate) {
-                    console.log(`   ❌ Sample skipped point: ${pointDate.toISOString().split('T')[0]} (group: ${point.group})`);
-                }
-                
-                if (pointDate >= cutoffDate) {
-                    filteredData.push(point);
-                } else {
-                    skippedCount++;
-                }
-            } catch (e) {
-                console.warn(`⏰ Error parsing date: ${point.timestamp}`, e);
-                skippedCount++;
-            }
-        });
-
-        console.log(`⏰ Filter result: ${filteredData.length} points kept, ${skippedCount} points removed`);
-        
-        // Проверим диапазон дат в отфильтрованных данных
-        if (filteredData.length > 0) {
-            const dates = filteredData.map(p => new Date(p.timestamp).toISOString().split('T')[0]);
-            const uniqueDates = [...new Set(dates)].sort();
-            console.log(`⏰ Filtered data range: ${uniqueDates[0]} to ${uniqueDates[uniqueDates.length - 1]} (${uniqueDates.length} unique days)`);
-        }
-
-        return filteredData;
-    }
-
-    // Собираем группы конфигураций
     collectGroups() {
         this.configGroups.clear();
 
@@ -267,15 +133,10 @@ class DashboardApp {
 
             configChartKeys.forEach(chartKey => {
                 const fullData = this.fullChartData.charts[chartKey] || [];
-                console.log(`  📊 ${chartKey}: ${fullData.length} points in full dataset`);
-
-                // ИСПРАВЛЕНИЕ: Используем ту же логику фильтрации, что и в charts.js
-                const timeFilteredData = this.filterDataForChart(fullData, this.currentTimeRange);
-                console.log(`  📊 ${chartKey}: ${timeFilteredData.length} points after time filter`);
+                const timeFilteredData = this.filterDataByTimeRange(fullData, this.currentTimeRange);
 
                 timeFilteredData.forEach(point => {
                     if (point.group) {
-                        // Если выбрана конкретная ветка - фильтруем
                         if (this.currentConfigBranch !== 'all' && point.branch !== this.currentConfigBranch) {
                             return;
                         }
@@ -284,62 +145,65 @@ class DashboardApp {
                 });
             });
 
-            console.log('📊 Raw config groups after time filter:', Array.from(tempConfigGroups));
+            console.log('📊 Raw config groups:', Array.from(tempConfigGroups));
 
-            // Фильтруем группы с учетом выбранной ветки
             const branchFilterForConfigs = this.currentConfigBranch === 'all' ? null : this.currentConfigBranch;
             this.configGroups = this.filterGroupsWithEnoughData(tempConfigGroups, branchFilterForConfigs);
         }
 
-        // Показываем все отфильтрованные группы по умолчанию
         this.visibleConfigGroups.clear();
         this.configGroups.forEach(group => this.visibleConfigGroups.add(group));
 
         console.log('✅ Filtered Config groups:', Array.from(this.configGroups));
-        console.log('✅ Visible Config groups:', Array.from(this.visibleConfigGroups));
     }
 
-    // Новая функция для фильтрации данных для графиков
-    filterDataForChart(data, timeRangeDays) {
-        if (!data || data.length === 0 || timeRangeDays === 0) {
-            return data;
+    filterDataByTimeRange(chartData, timeRangeDays) {
+        console.log(`⏰ filterDataByTimeRange: ${timeRangeDays} days, input points=${chartData?.length || 0}`);
+
+        if (!chartData || !Array.isArray(chartData) || timeRangeDays === 0) {
+            return chartData;
         }
 
-        const cutoffDate = new Date();
-        cutoffDate.setDate(cutoffDate.getDate() - timeRangeDays);
+        const now = new Date();
+        const cutoffDate = new Date(now.getTime() - timeRangeDays * 24 * 60 * 60 * 1000);
         cutoffDate.setHours(0, 0, 0, 0);
 
-        return data.filter(point => {
-            if (!point.timestamp || point.timestamp === "Unknown date") return false;
-            const pointDate = new Date(point.timestamp);
-            return pointDate >= cutoffDate;
+        const filteredData = chartData.filter(point => {
+            if (!point.timestamp || point.timestamp === "Unknown date") {
+                return false;
+            }
+
+            try {
+                const pointDate = new Date(point.timestamp);
+                return pointDate >= cutoffDate;
+            } catch (e) {
+                return false;
+            }
         });
+
+        console.log(`⏰ Filter result: ${chartData.length} -> ${filteredData.length} points`);
+        return filteredData;
     }
 
-    // Метод для фильтрации групп
     filterGroupsWithEnoughData(groups, branchFilter = null) {
         const filteredGroups = new Set();
         const timeRangeDays = this.currentTimeRange === 0 ? 365 : this.currentTimeRange;
-
-        console.log(`🔍 filterGroupsWithEnoughData: checking ${groups.size} groups for ${timeRangeDays} days`);
 
         groups.forEach(group => {
             if (this.hasGroupEnoughData(group, timeRangeDays, branchFilter)) {
                 filteredGroups.add(group);
             } else {
-                console.log(`⚠️ Filtered out config group "${group}" - insufficient data across days`);
+                console.log(`⚠️ Filtered out config group "${group}" - insufficient data`);
             }
         });
 
         return filteredGroups;
     }
 
-    // Метод для проверки, есть ли у группы данные в 2+ днях
     hasGroupEnoughData(group, timeRangeDays, branchFilter = null) {
         if (!this.fullChartData?.charts) return false;
 
         const chartKeys = ['iops_read_by_config', 'iops_write_by_config', 'latency_read_by_config', 'latency_write_by_config'];
-
         const uniqueDays = new Set();
 
         chartKeys.forEach(chartKey => {
@@ -360,8 +224,7 @@ class DashboardApp {
         });
 
         const hasEnoughData = uniqueDays.size >= 2;
-        console.log(`📅 Config group "${group}"${branchFilter ? ` [branch: ${branchFilter}]` : ''} in last ${timeRangeDays} days: ${uniqueDays.size} unique days - ${hasEnoughData ? 'KEEP' : 'FILTER OUT'}`);
-
+        console.log(`📅 Config group "${group}": ${uniqueDays.size} unique days - ${hasEnoughData ? 'KEEP' : 'FILTER OUT'}`);
         return hasEnoughData;
     }
 
@@ -387,7 +250,7 @@ class DashboardApp {
                 availableGroups: Array.from(this.configGroups),
                 branchFilter: this.currentConfigBranch === 'all' ? null : this.currentConfigBranch,
                 sourceChartKeys: ['iops_read_by_config', 'iops_write_by_config'],
-                dataAlreadyFiltered: false  // ИСПРАВЛЕНИЕ: передаем false для применения фильтрации в charts.js
+                dataAlreadyFiltered: false
             },
             {
                 id: 'chart-latency-config',
@@ -402,24 +265,17 @@ class DashboardApp {
                 availableGroups: Array.from(this.configGroups),
                 branchFilter: this.currentConfigBranch === 'all' ? null : this.currentConfigBranch,
                 sourceChartKeys: ['latency_read_by_config', 'latency_write_by_config'],
-                dataAlreadyFiltered: false  // ИСПРАВЛЕНИЕ
+                dataAlreadyFiltered: false
             }
         ];
 
         chartsConfig.forEach(config => {
             console.log(`\n📈 Processing chart: ${config.id}`);
-            console.log(`   Time range: ${config.timeRangeDays} days`);
-            console.log(`   Branch filter: ${config.branchFilter || 'none'}`);
-            console.log(`   Data already filtered: ${config.dataAlreadyFiltered}`);
-
+            
             let chartData = [];
 
             config.sourceChartKeys.forEach(chartKey => {
-                console.log(`  📊 Loading from ${chartKey}`);
                 const fullData = this.fullChartData.charts[chartKey] || [];
-                console.log(`  📊 Full data points: ${fullData.length}`);
-
-                // ВАЖНО: Не фильтруем здесь! Пусть charts.js делает это
                 const metric = chartKey.includes('iops_read') ? 'iops_read' :
                               chartKey.includes('iops_write') ? 'iops_write' :
                               chartKey.includes('latency_read') ? 'latency_read' : 'latency_write';
@@ -433,14 +289,12 @@ class DashboardApp {
                 });
             });
 
-            console.log(`📊 ${config.id}: Total data points before filters: ${chartData.length}`);
+            console.log(`📊 ${config.id}: Total data points: ${chartData.length}`);
 
-            // Только branch фильтр применяем здесь
             if (config.branchFilter) {
-                console.log(`🔍 Applying branch filter: ${config.branchFilter}`);
                 const originalCount = chartData.length;
                 chartData = chartData.filter(d => d.branch === config.branchFilter);
-                console.log(`📊 After branch filter: ${chartData.length} points (removed ${originalCount - chartData.length})`);
+                console.log(`📊 After branch filter: ${chartData.length} points`);
             }
 
             console.log(`✅ ${config.id}: Final data points for chart: ${chartData.length}`);
@@ -460,27 +314,26 @@ class DashboardApp {
                         metricType: config.metricType,
                         visibleOperations: config.visibleOperations,
                         availableGroups: config.availableGroups,
-                        dataAlreadyFiltered: config.dataAlreadyFiltered  // Теперь false
+                        dataAlreadyFiltered: false
                     });
-                    this.charts.set(config.id, chart);
-                    console.log(`✅ Chart ${config.id} created successfully`);
+                    
+                    if (chart) {
+                        this.charts.set(config.id, chart);
+                        console.log(`✅ Chart ${config.id} created successfully`);
+                    }
                 } catch (error) {
                     console.error(`❌ Error creating chart ${config.id}:`, error);
-                    d3.select(`#${config.id}`).html(`<p class="error">Error creating chart: ${error.message}</p>`);
+                    d3.select(`#${config.id}`).html(`<p class="error">Error: ${error.message}</p>`);
                 }
             } else {
-                console.warn(`⚠️ No data for chart: ${config.id}`);
                 const noDataMessage = config.branchFilter
-                    ? `<p class="no-data">No data available for ${this.formatBranchDisplayName(config.branchFilter)} branch in last ${this.currentTimeRange} days</p>`
-                    : `<p class="no-data">No data available in last ${this.currentTimeRange} days</p>`;
+                    ? `<p class="no-data">No data for ${this.formatBranchDisplayName(config.branchFilter)} branch</p>`
+                    : `<p class="no-data">No data available</p>`;
                 d3.select(`#${config.id}`).html(noDataMessage);
             }
         });
-
-        console.log('✅ All charts processed');
     }
 
-    // Метод для заголовка графиков
     getChartTitle(metric) {
         if (this.currentConfigBranch === 'all') {
             return `${metric} (All Branches)`;
@@ -490,7 +343,6 @@ class DashboardApp {
         }
     }
 
-    // Создаем легенду
     createLegend() {
         const legendContainer = d3.select('#legend-config');
         legendContainer.html('');
@@ -499,53 +351,41 @@ class DashboardApp {
             const branchName = this.currentConfigBranch === 'all'
                 ? 'any branch'
                 : this.formatBranchDisplayName(this.currentConfigBranch);
-            legendContainer.html(`<p style="color: #6c757d; font-style: italic;">No configuration data for ${branchName} in last ${this.currentTimeRange} days</p>`);
+            legendContainer.html(`<p style="color: #6c757d; font-style: italic;">No data for ${branchName}</p>`);
             return;
         }
 
-        console.log('Creating legend with groups:', Array.from(this.configGroups));
-
-        // Добавляем переключатель операций
+        // Операции
         const operationToggle = legendContainer.append('div')
             .attr('class', 'operation-toggle');
 
         operationToggle.append('button')
             .attr('class', `operation-toggle-btn ${this.visibleOperations.has('read') && !this.visibleOperations.has('write') ? 'active' : ''}`)
             .text('Read Only')
-            .on('click', () => {
-                this.setOperations(['read']);
-            });
+            .on('click', () => this.setOperations(['read']));
 
         operationToggle.append('button')
             .attr('class', `operation-toggle-btn ${this.visibleOperations.has('write') && !this.visibleOperations.has('read') ? 'active' : ''}`)
             .text('Write Only')
-            .on('click', () => {
-                this.setOperations(['write']);
-            });
+            .on('click', () => this.setOperations(['write']));
 
         operationToggle.append('button')
             .attr('class', `operation-toggle-btn ${this.visibleOperations.has('read') && this.visibleOperations.has('write') ? 'active' : ''}`)
             .text('Both')
-            .on('click', () => {
-                this.setOperations(['read', 'write']);
-            });
+            .on('click', () => this.setOperations(['read', 'write']));
 
-        // Создаем группы для каждой конфигурации
+        // Группы
         const configsArray = Array.from(this.configGroups);
 
         configsArray.forEach((config, configIndex) => {
             const groupContainer = legendContainer.append('div').attr('class', 'legend-group');
 
-            // Заголовок группы (кликабельный)
             groupContainer.append('div')
                 .attr('class', 'legend-group-title')
                 .style('cursor', 'pointer')
                 .text(config)
-                .on('click', () => {
-                    this.toggleConfigGroup(config);
-                });
+                .on('click', () => this.toggleConfigGroup(config));
 
-            // Легенда для группы
             const legendItem = groupContainer.append('div')
                 .attr('class', `legend-item ${this.visibleConfigGroups.has(config) ? '' : 'disabled'}`)
                 .on('click', (event) => {
@@ -564,13 +404,8 @@ class DashboardApp {
     }
 
     setOperations(operations) {
-        console.log('🔄 setOperations called');
-        console.log(`   Previous: ${Array.from(this.visibleOperations)}`);
-        console.log(`   New: ${operations}`);
-
+        console.log(`🔄 setOperations: ${Array.from(operations)}`);
         this.visibleOperations = new Set(operations);
-
-        // Просто обновляем видимость
         this.updateChartsVisibility();
         this.updateLegendAppearance();
     }
@@ -587,78 +422,62 @@ class DashboardApp {
 
     updateChartsVisibility() {
         console.log('👁️ Updating charts visibility...');
-        console.log(`👁️ Charts in cache: ${this.charts.size}`);
+        console.log(`   Visible operations: ${Array.from(this.visibleOperations)}`);
+        console.log(`   Visible groups: ${Array.from(this.visibleConfigGroups)}`);
 
         const chartIds = ['chart-iops-config', 'chart-latency-config'];
 
         chartIds.forEach(chartId => {
             const chart = this.charts.get(chartId);
-
             if (chart && chart.updateVisibility && chart.fullGroups) {
-                console.log(`👁️ Updating visibility for ${chartId}`);
-
                 const visibleFullGroups = new Set();
+                
                 chart.fullGroups.forEach(fullGroup => {
                     const [group, operation] = fullGroup.split(' - ');
                     if (this.visibleConfigGroups.has(group) && this.visibleOperations.has(operation)) {
                         visibleFullGroups.add(fullGroup);
                     }
                 });
-
-                console.log(`👁️ Visible full groups: ${Array.from(visibleFullGroups).join(', ')}`);
+                
+                console.log(`   ${chartId}: ${visibleFullGroups.size} visible groups`);
                 chart.updateVisibility(visibleFullGroups);
-            } else {
-                console.warn(`⚠️ Cannot update chart ${chartId}:`, {
-                    hasChart: !!chart,
-                    hasUpdateVisibility: !!(chart && chart.updateVisibility),
-                    hasFullGroups: !!(chart && chart.fullGroups)
-                });
             }
         });
     }
 
     updateLegendAppearance() {
-        console.log('🔄 Updating legend appearance...');
+        try {
+            // Обновляем кнопки операций
+            const operationButtons = document.querySelectorAll('#legend-config .operation-toggle-btn');
+            operationButtons.forEach(button => {
+                const text = button.textContent.trim();
+                let isActive = false;
+                
+                if (text === 'Read Only') {
+                    isActive = this.visibleOperations.has('read') && !this.visibleOperations.has('write');
+                } else if (text === 'Write Only') {
+                    isActive = this.visibleOperations.has('write') && !this.visibleOperations.has('read');
+                } else if (text === 'Both') {
+                    isActive = this.visibleOperations.has('read') && this.visibleOperations.has('write');
+                }
+                
+                button.classList.toggle('active', isActive);
+            });
 
-        // ИСПРАВЛЕНИЕ 1: Правильный выбор кнопок переключателя операций
-        const operationButtons = d3.select('#legend-config')
-            .selectAll('.operation-toggle-btn')
-            .nodes(); // Получаем массив DOM элементов
-
-        operationButtons.forEach((buttonNode, i) => {
-            const button = d3.select(buttonNode);
-            const text = button.text();
-
-            let isActive = false;
-            if (text === 'Read Only') {
-                isActive = this.visibleOperations.has('read') && !this.visibleOperations.has('write');
-            } else if (text === 'Write Only') {
-                isActive = this.visibleOperations.has('write') && !this.visibleOperations.has('read');
-            } else if (text === 'Both') {
-                isActive = this.visibleOperations.has('read') && this.visibleOperations.has('write');
-            }
-
-            button.classed('active', isActive);
-            console.log(`   ${text}: ${isActive ? 'active' : 'inactive'}`);
-        });
-
-        // ИСПРАВЛЕНИЕ 2: Правильный выбор групп легенды
-        const legendGroups = d3.select('#legend-config')
-            .selectAll('.legend-group')
-            .nodes();
-
-        legendGroups.forEach((groupNode, i) => {
-            const group = d3.select(groupNode);
-            const groupTitle = group.select('.legend-group-title').text();
-            const legendItem = group.select('.legend-item');
-
-            const isGroupVisible = this.visibleConfigGroups.has(groupTitle);
-            legendItem.classed('disabled', !isGroupVisible);
-
-            console.log(`   Legend group "${groupTitle}": ${isGroupVisible ? 'visible' : 'disabled'}`);
-        });
-
-        console.log('✅ Legend appearance updated');
+            // Обновляем группы
+            const legendGroups = document.querySelectorAll('#legend-config .legend-group');
+            legendGroups.forEach(group => {
+                const titleElement = group.querySelector('.legend-group-title');
+                const legendItem = group.querySelector('.legend-item');
+                
+                if (titleElement && legendItem) {
+                    const groupTitle = titleElement.textContent.trim();
+                    legendItem.classList.toggle('disabled', !this.visibleConfigGroups.has(groupTitle));
+                }
+            });
+        } catch (error) {
+            console.error('Error updating legend appearance:', error);
+        }
     }
 
     updateDataInfo() {
@@ -669,49 +488,31 @@ class DashboardApp {
             : this.formatBranchDisplayName(this.currentConfigBranch);
 
         const timeRangeDisplay = this.currentTimeRange === 0
-            ? 'All time (full dataset)'
+            ? 'All time'
             : `Last ${this.currentTimeRange} days`;
 
         const infoHtml = `
             <p><strong>Generated:</strong> ${new Date(this.currentData.generated_at).toLocaleString()}</p>
-            <p><strong>Total tests in dataset:</strong> ${this.currentData.summary?.total_tests || 0}</p>
-            <p><strong>Showing data for:</strong> ${timeRangeDisplay}</p>
+            <p><strong>Total tests:</strong> ${this.currentData.summary?.total_tests || 0}</p>
+            <p><strong>Time range:</strong> ${timeRangeDisplay}</p>
             <p><strong>Branch:</strong> ${configBranchDisplay}</p>
-            <p><strong>Configurations shown:</strong> ${Array.from(this.configGroups).join(', ') || 'N/A'}</p>
-            <p><strong>Full dataset coverage:</strong> Last 365 days</p>
+            <p><strong>Configurations:</strong> ${Array.from(this.configGroups).join(', ') || 'N/A'}</p>
         `;
 
         d3.select('#data-info').html(infoHtml);
     }
 
     setupEventListeners() {
-        d3.select('#refreshBtn').on('click', () => {
-            this.refreshData();
-        });
-
-        d3.select('#timeRange').on('change', (event) => {
-            this.handleTimeRangeChange(event.target.value);
-        });
-
-        d3.select('#configBranch').on('change', (event) => {
-            this.handleConfigBranchChange(event.target.value);
-        });
+        d3.select('#refreshBtn').on('click', () => this.refreshData());
+        d3.select('#timeRange').on('change', (event) => this.handleTimeRangeChange(event.target.value));
+        d3.select('#configBranch').on('change', (event) => this.handleConfigBranchChange(event.target.value));
     }
 
     handleConfigBranchChange(branchValue) {
-        console.log(`🌿 Branch change: ${this.currentConfigBranch} -> ${branchValue}`);
+        if (branchValue === this.currentConfigBranch) return;
         
-        if (branchValue === this.currentConfigBranch) {
-            console.log('🌿 Branch unchanged');
-            return;
-        }
-
         this.currentConfigBranch = branchValue;
-        this.updateConfigBranch();
-    }
-
-    updateConfigBranch() {
-        // Обновляем URL без перезагрузки страницы
+        
         const url = new URL(window.location.href);
         if (this.currentConfigBranch === 'refs/heads/main') {
             url.searchParams.delete('configBranch');
@@ -720,18 +521,11 @@ class DashboardApp {
         }
         window.history.pushState({}, '', url.toString());
 
-        console.log(`🌿 Updating config branch to: ${this.currentConfigBranch}`);
-        console.log(`🌿 Time range remains: ${this.currentTimeRange} days`);
-
+        console.log(`🌿 Branch updated to: ${this.currentConfigBranch}`);
+        
         this.collectGroups();
         this.recreateCharts();
         this.updateDataInfo();
-
-        const branchDisplayName = this.currentConfigBranch === 'all'
-            ? 'all branches'
-            : this.formatBranchDisplayName(this.currentConfigBranch);
-
-        this.showNotification(`Branch updated to ${branchDisplayName}`, 'success');
     }
 
     async refreshData() {
@@ -743,10 +537,10 @@ class DashboardApp {
             this.collectGroups();
             this.recreateCharts();
             this.showLoading(false);
-            this.showNotification('Data refreshed successfully', 'success');
+            this.showNotification('Data refreshed', 'success');
         } catch (error) {
-            console.error('Failed to refresh data:', error);
-            this.showNotification('Error refreshing data', 'error');
+            console.error('Refresh failed:', error);
+            this.showNotification('Refresh failed', 'error');
             this.showLoading(false);
         }
     }
@@ -754,29 +548,13 @@ class DashboardApp {
     handleTimeRangeChange(days) {
         const newTimeRange = days === 'all' ? 0 : parseInt(days);
         
-        console.log(`⏰ Time range change: ${this.currentTimeRange} -> ${newTimeRange} days`);
-
-        if (newTimeRange === this.currentTimeRange) {
-            console.log('⏰ Time range unchanged');
-            return;
-        }
-
+        if (newTimeRange === this.currentTimeRange) return;
+        
         this.currentTimeRange = newTimeRange;
         this.updateTimeRange();
     }
 
     updateTimeRange() {
-        const newTimeRange = parseInt(d3.select('#timeRange').property('value'));
-
-        if (newTimeRange === this.currentTimeRange) {
-            console.log('⏰ Time range unchanged');
-            return;
-        }
-
-        console.log(`🔄 Time range change: ${this.currentTimeRange} -> ${newTimeRange} days`);
-        this.currentTimeRange = newTimeRange;
-
-        // Обновляем URL
         const url = new URL(window.location.href);
         if (this.currentTimeRange === 0) {
             url.searchParams.delete('days');
@@ -786,66 +564,36 @@ class DashboardApp {
         window.history.pushState({}, '', url.toString());
 
         console.log(`🔄 Time range updated to: ${this.currentTimeRange} days`);
-
-        // Пересоздаем графики
-        this.destroyCharts();
+        
         this.collectGroups();
-        this.createCharts(); // Используем старый createCharts, а не renderCharts
-        this.createLegend();
+        this.recreateCharts();
         this.updateDataInfo();
-
-        this.showNotification(`Time range updated to ${this.currentTimeRange === 0 ? 'all time' : `last ${this.currentTimeRange} days`}`, 'success');
-    }
-
-    destroyCharts() {
-        console.log('🔥 Destroying all charts...');
-
-        // Полностью очищаем контейнеры
-        d3.select('#chart-iops-config').html('');
-        d3.select('#chart-latency-config').html('');
-
-        // Очищаем кэш
-        this.charts.clear();
-
-        // Очищаем SVG элементы
-        d3.selectAll('#chart-iops-config svg').remove();
-        d3.selectAll('#chart-latency-config svg').remove();
-
-        console.log('✅ Charts destroyed');
+        
+        this.showNotification(`Time range: ${this.currentTimeRange === 0 ? 'all time' : `${this.currentTimeRange} days`}`, 'success');
     }
 
     recreateCharts() {
-        console.log('🔄 recreateCharts called');
-
-        const chartContainers = [
-            '#chart-iops-config',
-            '#chart-latency-config'
-        ];
-
-        chartContainers.forEach(selector => {
-            const container = d3.select(selector);
-            container.selectAll('*').remove(); // Очистка SVG
-            console.log(`   ✅ Cleared container: ${selector}`);
+        console.log('🔄 Recreating charts...');
+        
+        ['#chart-iops-config', '#chart-latency-config'].forEach(selector => {
+            d3.select(selector).html('');
         });
-
-        this.charts.clear(); // Очистка кэша
-
-        this.createCharts(); // ПЕРЕСОЗДАНИЕ графиков
+        
+        this.charts.clear();
+        this.createCharts();
         this.createLegend();
     }
 
     showLoading(show) {
         const loading = d3.select('#loading');
         const button = d3.select('#refreshBtn');
-
+        
         if (show) {
             loading.style('display', 'flex');
-            button.attr('disabled', true);
-            button.text('Refreshing...');
+            button.attr('disabled', true).text('Refreshing...');
         } else {
             loading.style('display', 'none');
-            button.attr('disabled', null);
-            button.text('Refresh Data');
+            button.attr('disabled', null).text('Refresh Data');
         }
     }
 
@@ -855,12 +603,7 @@ class DashboardApp {
             .attr('class', `notification ${type}`)
             .text(message);
 
-        setTimeout(() => {
-            notification.transition()
-                .duration(300)
-                .style('opacity', 0)
-                .remove();
-        }, 3000);
+        setTimeout(() => notification.remove(), 3000);
     }
 
     getUrlParams() {
@@ -876,7 +619,7 @@ class DashboardApp {
             <div class="error">
                 <h3>Error Loading Dashboard</h3>
                 <p>${error.message}</p>
-                <p>Please check the console for details.</p>
+                <p>Please check the console.</p>
             </div>
         `;
         d3.select('body').html(errorHtml);
