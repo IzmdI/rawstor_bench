@@ -85,6 +85,25 @@ function createChart(config) {
     // Фильтруем некорректные данные
     processedData = processedData.filter(d => d.value !== null && d.value !== undefined && !isNaN(d.value) && d.timestamp);
 
+    console.log(`🔍 DEBUG after operation filter:`);
+    console.log(`   Visible operations: ${visibleOperations}`);
+    console.log(`   Processed data length: ${processedData.length}`);
+
+    if (processedData.length > 0) {
+        const byOperation = {};
+        processedData.forEach(d => {
+            byOperation[d.operation] = (byOperation[d.operation] || 0) + 1;
+        });
+        console.log(`   Data by operation:`, byOperation);
+
+        // Покажем группы с write данными
+        const writeGroups = processedData
+            .filter(d => d.operation === 'write')
+            .map(d => d.group);
+        const uniqueWriteGroups = [...new Set(writeGroups)];
+        console.log(`   Write groups: ${uniqueWriteGroups.length}`, uniqueWriteGroups);
+    }
+
     // 2. Применяем фильтрацию по времени (если не применена)
     if (!dataAlreadyFiltered && timeRangeDays > 0) {
         const cutoffDate = new Date();

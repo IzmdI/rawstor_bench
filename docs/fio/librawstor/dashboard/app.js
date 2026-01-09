@@ -400,10 +400,51 @@ class DashboardApp {
     }
 
     setOperations(operations) {
-        console.log(`🔄 setOperations: ${Array.from(operations)}`);
+        console.log('='.repeat(50));
+        console.log('🔄 SET OPERATIONS DEBUG');
+        console.log(`   New operations: ${Array.from(operations)}`);
+
+        // Проверим данные для write операций
+        if (operations.includes('write')) {
+            console.log('📊 Checking write data availability:');
+
+            const chartIds = ['chart-iops-config', 'chart-latency-config'];
+            chartIds.forEach(chartId => {
+                const chart = this.charts.get(chartId);
+                if (chart && chart.data) {
+                    console.log(`   ${chartId}:`);
+
+                    // Посчитаем точки по операциям
+                    const writeData = chart.data.filter(d =>
+                        d.operation === 'write' ||
+                        d.metric?.includes('write') ||
+                        d.dataKey?.includes('write')
+                    );
+                    const readData = chart.data.filter(d =>
+                        d.operation === 'read' ||
+                        d.metric?.includes('read') ||
+                        d.dataKey?.includes('read')
+                    );
+
+                    console.log(`     Write points: ${writeData.length}`);
+                    console.log(`     Read points: ${readData.length}`);
+
+                    if (writeData.length > 0) {
+                        console.log('     Sample write points:', writeData.slice(0, 3).map(d => ({
+                            group: d.group,
+                            operation: d.operation,
+                            timestamp: d.timestamp,
+                            value: d.value
+                        })));
+                    }
+                }
+            });
+        }
+
         this.visibleOperations = new Set(operations);
         this.updateChartsVisibility();
         this.updateLegendAppearance();
+        console.log('='.repeat(50));
     }
 
     toggleConfigGroup(group) {
@@ -502,6 +543,97 @@ class DashboardApp {
         d3.select('#refreshBtn').on('click', () => this.refreshData());
         d3.select('#timeRange').on('change', (event) => this.handleTimeRangeChange(event.target.value));
         d3.select('#configBranch').on('change', (event) => this.handleConfigBranchChange(event.target.value));
+        d3.select('#debugWriteBtn').on('click', () => {
+            this.debugWriteData();
+        });
+    }
+
+    debugWriteData() {
+        console.log('='.repeat(60));
+        console.log('🐛 DEBUG WRITE DATA');
+        console.log('='.repeat(60));
+
+        if (!this.fullChartData?.charts) {
+            console.log('❌ No data available');
+            return;
+        }
+
+        // 1. Проверим исходные данные
+        console.log('📊 1. RAW DATA FROM data.json:');
+        const writeChartKeys = ['iops_write_by_config', 'latency_write_by_config'];
+        writeChartKeys.forEach(chartKey => {
+            const data = this.fullChartData.charts[chartKey] || [];
+            console.log(`   ${chartKey}: ${data.length} points`);
+
+            if (data.length > 0) {
+                // Группировка по конфигурациям
+                const byConfig = {};
+                data.forEach(d => {
+                    byConfig[d.group] = (byConfig[d.group] || 0) + 1;
+                });
+
+                console.log(`     Configurations: ${Object.keys(byConfig).length}`);
+                Object.entries(byConfig).forEach(([config, count]) => {
+                    console.log(`       ${config}: ${count} points`);
+                });
+
+                // Покажем диапазон дат
+                const dates = data
+                    .map(d => d.timestamp)
+                    .filter(t => t && t !== "Unknown date")
+                    .map(t => new Date(t).toISOString().split('T')[0]);
+                const uniqueDates = [...new Set(dates)].sort();
+                if (uniqueDates.length > 0) {
+                    console.log(`     Date range: ${uniqueDates[0]} to ${uniqueDates[uniqueDates.length - 1]}`);
+                }
+            }
+        });
+
+        // 2. Проверим текущие графики
+        console.log('\n📊 2. CURRENT CHARTS:');
+        const chartIds = ['chart-iops-config', 'chart-latency-config'];
+        chartIds.forEach(chartId => {
+            const chart = this.charts.get(chartId);
+            if (chart) {
+                console.log(`   ${chartId}:`);
+                console.log(`     Full groups: ${chart.fullGroups?.length || 0}`);
+
+                if (chart.fullGroups) {
+                    const writeGroups = chart.fullGroups.filter(g => g.includes('write'));
+                    console.log(`     Write groups: ${writeGroups.length}`, writeGroups);
+                }
+
+                if (chart.data) {
+                    const writeData = chart.data.filter(d =>
+                        d.operation === 'write' ||
+                        d.metric?.includes('write')
+                    );
+                    console.log(`     Write data points: ${writeData.length}`);
+                }
+            }
+        });
+
+        // 3. Проверим фильтрацию
+        console.log('\n📊 3. FILTER STATUS:');
+        console.log(`   Time range: ${this.currentTimeRange} days`);
+        console.log(`   Branch: ${this.currentConfigBranch}`);
+        console.log(`   Visible operations: ${Array.from(this.visibleOperations)}`);
+        console.log(`   Visible config groups: ${Array.from(this.visibleConfigGroups).length}`);
+
+        // 4. Тест: принудительно покажем write данные
+        console.log('\n📊 4. TEST: Force show write data');
+        const testData = this.fullChartData.charts['iops_write_by_config'] || [];
+        if (testData.length > 0) {
+            console.log(`   First write point sample:`);
+            const sample = testData[0];
+            console.log(`     Group: ${sample.group}`);
+            console.log(`     Timestamp: ${sample.timestamp}`);
+            console.log(`     Value: ${sample.value}`);
+            console.log(`     Branch: ${sample.branch}`);
+            console.log(`     Config: ${sample.config}`);
+        }
+
+        console.log('='.repeat(60));
     }
 
     handleConfigBranchChange(branchValue) {
