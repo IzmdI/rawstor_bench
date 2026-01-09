@@ -564,7 +564,13 @@ class DashboardApp {
     }
 
     setOperations(operations) {
+        console.log('🔄 setOperations called');
+        console.log(`   Previous: ${Array.from(this.visibleOperations)}`);
+        console.log(`   New: ${operations}`);
+
         this.visibleOperations = new Set(operations);
+
+        // Просто обновляем видимость
         this.updateChartsVisibility();
         this.updateLegendAppearance();
     }
@@ -612,23 +618,47 @@ class DashboardApp {
     }
 
     updateLegendAppearance() {
-        // Обновляем кнопки переключателя
-        d3.selectAll('#legend-config .operation-toggle-btn')
-            .classed('active', (d, i, nodes) => {
-                const button = d3.select(nodes[i]);
-                const text = button.text();
-                if (text === 'Read Only') return this.visibleOperations.has('read') && !this.visibleOperations.has('write');
-                if (text === 'Write Only') return this.visibleOperations.has('write') && !this.visibleOperations.has('read');
-                if (text === 'Both') return this.visibleOperations.has('read') && this.visibleOperations.has('write');
-                return false;
-            });
+        console.log('🔄 Updating legend appearance...');
 
-        // Обновляем видимость групп
-        d3.selectAll('#legend-config .legend-group').each(function() {
-            const groupTitle = d3.select(this).select('.legend-group-title').text();
-            const legendItem = d3.select(this).select('.legend-item');
-            legendItem.classed('disabled', !this.visibleConfigGroups.has(groupTitle));
-        }.bind(this));
+        // ИСПРАВЛЕНИЕ 1: Правильный выбор кнопок переключателя операций
+        const operationButtons = d3.select('#legend-config')
+            .selectAll('.operation-toggle-btn')
+            .nodes(); // Получаем массив DOM элементов
+
+        operationButtons.forEach((buttonNode, i) => {
+            const button = d3.select(buttonNode);
+            const text = button.text();
+
+            let isActive = false;
+            if (text === 'Read Only') {
+                isActive = this.visibleOperations.has('read') && !this.visibleOperations.has('write');
+            } else if (text === 'Write Only') {
+                isActive = this.visibleOperations.has('write') && !this.visibleOperations.has('read');
+            } else if (text === 'Both') {
+                isActive = this.visibleOperations.has('read') && this.visibleOperations.has('write');
+            }
+
+            button.classed('active', isActive);
+            console.log(`   ${text}: ${isActive ? 'active' : 'inactive'}`);
+        });
+
+        // ИСПРАВЛЕНИЕ 2: Правильный выбор групп легенды
+        const legendGroups = d3.select('#legend-config')
+            .selectAll('.legend-group')
+            .nodes();
+
+        legendGroups.forEach((groupNode, i) => {
+            const group = d3.select(groupNode);
+            const groupTitle = group.select('.legend-group-title').text();
+            const legendItem = group.select('.legend-item');
+
+            const isGroupVisible = this.visibleConfigGroups.has(groupTitle);
+            legendItem.classed('disabled', !isGroupVisible);
+
+            console.log(`   Legend group "${groupTitle}": ${isGroupVisible ? 'visible' : 'disabled'}`);
+        });
+
+        console.log('✅ Legend appearance updated');
     }
 
     updateDataInfo() {

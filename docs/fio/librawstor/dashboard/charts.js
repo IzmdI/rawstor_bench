@@ -348,12 +348,16 @@ function createChart(config) {
     // Создаем объект chart
     const chartObj = {
         id: id,
-        fullGroups: fullGroups,
+        fullGroups: Array.isArray(fullGroups) ? fullGroups : [],
         updateVisibility: function(newVisibleFullGroups) {
             console.log(`👁️  Updating visibility for ${this.id}`);
-            console.log(`👁️  Visible groups:`, Array.from(newVisibleFullGroups));
 
-            fullGroups.forEach(fullGroup => {
+            if (!Array.isArray(this.fullGroups)) {
+                console.error('❌ fullGroups is not an array:', this.fullGroups);
+                return;
+            }
+
+            this.fullGroups.forEach(fullGroup => {
                 const isVisible = newVisibleFullGroups.has(fullGroup);
                 const line = svg.select(`.line-${createSafeClassName(fullGroup)}`);
                 const dots = svg.selectAll(`.dot-${createSafeClassName(fullGroup)}`);
