@@ -11,7 +11,7 @@ def import_fio(
     prefix=None, repo=None, name=None, branch=None, commit=None, date=None,
     txt_file=None, json_file=None, **kwargs
 ):
-    dest_dir = Path(prefix) / "data" / "fio" / repo / name
+    dest_dir = Path(prefix) / "data" / "fio" / repo / name / commit[:2]
     dest_dir.mkdir(parents=True, exist_ok=True)
 
     meta_filename = f"{commit}.meta"

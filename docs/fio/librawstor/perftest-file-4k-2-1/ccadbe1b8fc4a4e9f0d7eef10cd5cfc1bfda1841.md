@@ -1,0 +1,65 @@
+[&lt; back](..)
+
+# perftest-file-4k-2-1
+
+2026-07-14 21:11:59
+
+refs/heads/add/sources-test
+
+[ccadbe1](https://github.com/rawstor/librawstor/commit/ccadbe1b8fc4a4e9f0d7eef10cd5cfc1bfda1841)
+
+rw = randread, bs = 4k, iodepth = 2, numjobs = 1
+
+```
+
+randread: (groupid=0, jobs=1): err= 0: pid=11351: Tue Jul 14 21:10:45 2026
+  read: IOPS=409k, BW=1598MiB/s (1675MB/s)(15.6GiB/10001msec)
+    slat (nsec): min=0, max=0, avg= 0.00, stdev= 0.00
+    clat (msec): min=111, max=10111, avg=5277.33, stdev=2804.38
+     lat (usec): min=3, max=121, avg= 4.66, stdev= 1.43
+    clat percentiles (msec):
+     |  1.00th=[  262],  5.00th=[  927], 10.00th=[ 1418], 20.00th=[ 2400],
+     | 30.00th=[ 3339], 40.00th=[ 4329], 50.00th=[ 5269], 60.00th=[ 6275],
+     | 70.00th=[ 7215], 80.00th=[ 8154], 90.00th=[ 9194], 95.00th=[ 9597],
+     | 99.00th=[10000], 99.50th=[10000], 99.90th=[10134], 99.95th=[10134],
+     | 99.99th=[10134]
+   bw (  MiB/s): min=  945, max= 1672, per=100.00%, avg=1607.09, stdev=170.02, samples=19
+   iops        : min=241993, max=428244, avg=411415.53, stdev=43525.07, samples=19
+  lat (msec)   : 250=0.93%, 500=1.50%, 750=1.34%, 1000=1.85%, 2000=10.38%
+  lat (msec)   : >=2000=84.00%
+  cpu          : usr=26.04%, sys=73.94%, ctx=67, majf=0, minf=19
+  IO depths    : 1=0.1%, 2=100.0%, 4=0.0%, 8=0.0%, 16=0.0%, 32=0.0%, >=64=0.0%
+     submit    : 0=0.0%, 4=100.0%, 8=0.0%, 16=0.0%, 32=0.0%, 64=0.0%, >=64=0.0%
+     complete  : 0=0.0%, 4=100.0%, 8=0.0%, 16=0.0%, 32=0.0%, 64=0.0%, >=64=0.0%
+     issued rwts: total=4090631,0,0,0 short=0,0,0,0 dropped=0,0,0,0
+     latency   : target=0, window=0, percentile=100.00%, depth=2
+randwrite: (groupid=1, jobs=1): err= 0: pid=11354: Tue Jul 14 21:10:45 2026
+  write: IOPS=71.6k, BW=280MiB/s (293MB/s)(2798MiB/10001msec); 0 zone resets
+    slat (nsec): min=0, max=0, avg= 0.00, stdev= 0.00
+    clat (msec): min=10323, max=20323, avg=15343.86, stdev=2881.39
+     lat (usec): min=3, max=389, avg=27.49, stdev= 4.38
+    clat percentiles (msec):
+     |  1.00th=[10402],  5.00th=[10805], 10.00th=[11342], 20.00th=[12281],
+     | 30.00th=[13355], 40.00th=[14429], 50.00th=[15368], 60.00th=[16442],
+     | 70.00th=[17113], 80.00th=[17113], 90.00th=[17113], 95.00th=[17113],
+     | 99.00th=[17113], 99.50th=[17113], 99.90th=[17113], 99.95th=[17113],
+     | 99.99th=[17113]
+   bw (  KiB/s): min=260760, max=312704, per=100.00%, avg=287329.26, stdev=13224.56, samples=19
+   iops        : min=65190, max=78176, avg=71832.32, stdev=3306.14, samples=19
+  lat (msec)   : >=2000=100.00%
+  cpu          : usr=12.90%, sys=35.31%, ctx=354315, majf=0, minf=18
+  IO depths    : 1=0.1%, 2=100.0%, 4=0.0%, 8=0.0%, 16=0.0%, 32=0.0%, >=64=0.0%
+     submit    : 0=0.0%, 4=100.0%, 8=0.0%, 16=0.0%, 32=0.0%, 64=0.0%, >=64=0.0%
+     complete  : 0=0.0%, 4=100.0%, 8=0.0%, 16=0.0%, 32=0.0%, 64=0.0%, >=64=0.0%
+     issued rwts: total=0,716173,0,0 short=0,0,0,0 dropped=0,0,0,0
+     latency   : target=0, window=0, percentile=100.00%, depth=2
+
+Run status group 0 (all jobs):
+   READ: bw=1598MiB/s (1675MB/s), 1598MiB/s-1598MiB/s (1675MB/s-1675MB/s), io=15.6GiB (16.8GB), run=10001-10001msec
+
+Run status group 1 (all jobs):
+  WRITE: bw=280MiB/s (293MB/s), 280MiB/s-280MiB/s (293MB/s-293MB/s), io=2798MiB (2933MB), run=10001-10001msec
+
+Disk stats (read/write):
+  sda: ios=0/240, sectors=0/311192, merge=0/935, ticks=0/331, in_queue=335, util=0.17%
+```

@@ -18,14 +18,14 @@ def get_date_txt(dt):
     return dt.strftime("%Y-%m-%d %H:%M:%S")
 
 
-def read_fio_txt(prefix, meta):
-    filename = prefix / "data" / "fio" / meta["path"] / meta["data"]["txt"]
+def read_fio_txt(meta_path, meta):
+    filename = meta_path.parent / meta["data"]["txt"]
     with open(filename) as f:
         return f.read()
 
 
-def read_fio_json(prefix, meta):
-    filename = prefix / "data" / "fio" / meta["path"] / meta["data"]["json"]
+def read_fio_json(meta_path, meta):
+    filename = meta_path.parent / meta["data"]["json"]
     with open(filename) as f:
         return json.load(f)
 
@@ -37,10 +37,17 @@ def load_meta(meta_path):
     return meta
 
 
+def find_job(fio, job_name):
+    for job in fio["jobs"]:
+        if job["job options"]["name"] == job_name:
+            return job
+    return None
+
+
 def compile_commit_md(
-    prefix, dest_abspath, dest_path, repo_name, meta, fio, name,
+    dest_abspath, dest_path, repo_name, meta_path, meta, fio, name,
 ):
-    fio_txt = read_fio_txt(prefix, meta)
+    fio_txt = read_fio_txt(meta_path, meta)
 
     dest_abspath.mkdir(parents=True, exist_ok=True)
 
@@ -66,7 +73,7 @@ def compile_commit_md(
     return url
 
 
-def compile_repo_md(prefix, dest_abspath, dest_path, repo_name, repo):
+def compile_repo_md(dest_abspath, dest_path, repo_name, repo):
     dest_abspath.mkdir(parents=True, exist_ok=True)
 
     url = f"{dest_path}/README.md"
@@ -74,37 +81,56 @@ def compile_repo_md(prefix, dest_abspath, dest_path, repo_name, repo):
     with open(filename, "w") as repo_md:
         repo_md.write(f"# [&lt;](..) {repo_name} tests\n\n")
         for name, metas in repo:
+            fios = []
+            for meta_path, meta in metas[:10]:
+                fios.append((meta_path, meta, read_fio_json(meta_path, meta)))
+
+            job_names = set()
+            for meta_path, meta, fio in fios:
+                for job in fio["jobs"]:
+                    job_names.add(job["job options"]["name"])
+            job_names = sorted(list(job_names))
+
             repo_md.write(f"## {name}\n\n")
+
             repo_md.write(
                 "| "
                 "Date | "
                 "Branch | "
                 "Commit | "
-                "Read IOPS | "
-                "Read Latency | "
-                "Write IOPS | "
-                "Write Latency |"
-                "\n"
+            )
+            for job_name in job_names:
+                repo_md.write(
+                    f"{job_name}<br>Read IOPS | "
+                    f"{job_name}<br>Read Latency | "
+                    f"{job_name}<br>Write IOPS | "
+                    f"{job_name}<br>Write Latency |"
+                )
+            repo_md.write("\n")
+
+            repo_md.write(
                 "| "
                 ":--- | "
                 ":---   | "
                 ":---   | "
-                "     ---: | "
-                "        ---: | "
-                "      ---: | "
-                "         ---: |"
-                "\n"
             )
-            for meta in metas[:10]:
-                fio = read_fio_json(prefix, meta)
+            for job_name in job_names:
+                repo_md.write(
+                    "     ---: | "
+                    "        ---: | "
+                    "      ---: | "
+                    "         ---: |"
+                )
+            repo_md.write("\n")
 
+            for meta_path, meta, fio in fios:
                 commmit_md_dest_path = f"{name}"
                 commmit_md_dest_abspath = dest_abspath / commmit_md_dest_path
                 commmit_md_url = compile_commit_md(
-                    prefix,
                     commmit_md_dest_abspath,
                     commmit_md_dest_path,
                     repo_name,
+                    meta_path,
                     meta,
                     fio,
                     name,
@@ -117,18 +143,25 @@ def compile_repo_md(prefix, dest_abspath, dest_path, repo_name, repo):
                     f"[{get_date_txt(meta["date"])}]({commmit_md_url}) | "
                     f"{meta["branch"]} | "
                     f"{get_commit_txt(repo_name, commit_sha)} | "
-                    f"{fio["jobs"][0]["read"]["iops_mean"]:.2f} | "
-                    f"{fio["jobs"][0]["read"]["lat_ns"]["mean"]:.2f} | "
-                    f"{fio["jobs"][0]["write"]["iops_mean"]:.2f} | "
-                    f"{fio["jobs"][0]["write"]["lat_ns"]["mean"]:.2f} |"
-                    f"\n"
                 )
+                for job_name in job_names:
+                    job = find_job(fio, job_name)
+                    if job is None:
+                        repo_md.write(" |  |  |  |")
+                    else:
+                        repo_md.write(
+                            f"{job["read"]["iops_mean"]:.2f} | "
+                            f"{job["read"]["lat_ns"]["mean"]:.2f} | "
+                            f"{job["write"]["iops_mean"]:.2f} | "
+                            f"{job["write"]["lat_ns"]["mean"]:.2f} |"
+                        )
+                repo_md.write("\n")
             repo_md.write("\n")
 
     return url
 
 
-def compile_index_md(prefix, dest_abspath, repos):
+def compile_index_md(dest_abspath, repos):
     dest_abspath.mkdir(parents=True, exist_ok=True)
     with open(dest_abspath / "README.md", "w") as index_md:
         index_md.write("[&lt; back](..)\n\n")
@@ -137,7 +170,6 @@ def compile_index_md(prefix, dest_abspath, repos):
             repo_md_dest_path = f"{repo_name}"
             repo_md_dest_abspath = dest_abspath / repo_md_dest_path
             repo_md_url = compile_repo_md(
-                prefix,
                 repo_md_dest_abspath,
                 repo_md_dest_path,
                 repo_name,
@@ -152,19 +184,19 @@ def compile_fio(prefix=None, **kwargs):
 
     metas = []
     for meta_path in src_dir.glob("**/*.meta"):
-        metas.append(load_meta(meta_path))
+        metas.append((meta_path, load_meta(meta_path)))
 
-    metas.sort(key=lambda meta: meta["date"], reverse=True)
+    metas.sort(key=lambda meta: meta[1]["date"], reverse=True)
 
     repos = {}
-    for meta in metas:
+    for meta_path, meta in metas:
         repo = repos.setdefault(meta["repo"], {})
-        repo.setdefault(meta["name"], []).append(meta)
+        repo.setdefault(meta["name"], []).append((meta_path, meta))
     repos = sorted(list(repos.items()))
 
     dest_abspath = Path(prefix) / "docs" / "fio"
     shutil.rmtree(dest_abspath, ignore_errors=True)
-    compile_index_md(prefix, dest_abspath, repos)
+    compile_index_md(dest_abspath, repos)
 
 
 def main():
