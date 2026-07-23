@@ -185,11 +185,12 @@ export function createChart(opts: CreateChartOptions): ChartState | null {
   const clipId = `clip-${Math.random().toString(36).slice(2, 8)}`;
   svgEl.append('defs').append('clipPath')
     .attr('id', clipId)
+    .attr('clipPathUnits', 'userSpaceOnUse')
     .append('rect')
     .attr('x', 0)
-    .attr('y', -margin.top)
+    .attr('y', 0)
     .attr('width', width)
-    .attr('height', height + margin.top + margin.bottom);
+    .attr('height', height);
 
   const svg = svgEl.append('g')
     .attr('transform', `translate(${margin.left},${margin.top})`);
@@ -343,6 +344,8 @@ export function createChart(opts: CreateChartOptions): ChartState | null {
   }
 
   // ---- Event delegation on dots group ----
+  let activeDot: SVGCircleElement | null = null;
+
   dotsGroup
     .on('mouseover', function (event: MouseEvent) {
       const target = event.target as SVGCircleElement;
@@ -350,6 +353,10 @@ export function createChart(opts: CreateChartOptions): ChartState | null {
       const pt = dotDataMap.get(target);
       if (!pt) return;
       if (lineElements.get(pt.fullGroup)?.style('opacity') !== '0') {
+        if (activeDot && activeDot !== target) {
+          d3.select(activeDot).attr('r', 3.5);
+        }
+        activeDot = target;
         d3.select(target).attr('r', 6);
         tooltip.show(event, {
           group: pt.group, operation: pt.operation, value: pt.value,
@@ -361,7 +368,12 @@ export function createChart(opts: CreateChartOptions): ChartState | null {
     .on('mouseout', function (event: MouseEvent) {
       const target = event.target as SVGCircleElement;
       if (target.tagName !== 'circle') return;
-      d3.select(target).attr('r', 3.5);
+      const related = event.relatedTarget as HTMLElement | null;
+      if (related && dotsGroup.node()?.contains(related)) return;
+      if (activeDot) {
+        d3.select(activeDot).attr('r', 3.5);
+        activeDot = null;
+      }
       tooltip.hide();
     })
     .on('click', function (event: MouseEvent) {

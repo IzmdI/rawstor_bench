@@ -264,8 +264,8 @@ class DashboardApp {
     const opSet = this.operation === 'both' ? new Set(['read', 'write']) : new Set([this.operation]);
 
     const chartsToRender: { id: string; title: string; metricType: MetricType; keys: string[] }[] = [
-      { id: 'chart-iops', title: `IOPS by ${this.viewMode === 'config' ? 'Configuration' : 'Branch'}`, metricType: 'iops', keys: [keys[0], keys[1]] },
-      { id: 'chart-latency', title: `Latency by ${this.viewMode === 'config' ? 'Configuration' : 'Branch'}`, metricType: 'latency', keys: [keys[2], keys[3]] },
+      { id: 'chart-iops', title: 'IOPS', metricType: 'iops', keys: [keys[0], keys[1]] },
+      { id: 'chart-latency', title: 'Latency', metricType: 'latency', keys: [keys[2], keys[3]] },
     ];
 
     for (const cfg of chartsToRender) {
@@ -276,11 +276,9 @@ class DashboardApp {
 
       const points1 = this.data.charts[cfg.keys[0]] ?? [];
       const points2 = this.data.charts[cfg.keys[1]] ?? [];
-      const cutoff = this.timeRange > 0 ? new Date(Date.now() - this.timeRange * 86400000) : null;
-      const filterTime = (pts: typeof points1) => cutoff ? pts.filter(p => new Date(p.timestamp) >= cutoff) : pts;
       const branchFiltered = this.branch === 'all'
-        ? [...filterTime(points1), ...filterTime(points2)]
-        : [...filterTime(points1).filter(p => p.branch === this.branch), ...filterTime(points2).filter(p => p.branch === this.branch)];
+        ? [...points1, ...points2]
+        : [...points1.filter(p => p.branch === this.branch), ...points2.filter(p => p.branch === this.branch)];
 
       const chart = createChart({
         container: d3.select(container) as unknown as d3.Selection<HTMLDivElement, unknown, HTMLElement, unknown>,
