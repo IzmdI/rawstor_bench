@@ -276,14 +276,16 @@ class DashboardApp {
 
       const points1 = this.data.charts[cfg.keys[0]] ?? [];
       const points2 = this.data.charts[cfg.keys[1]] ?? [];
-      const filtered = this.branch === 'all'
-        ? [...points1, ...points2]
-        : [...points1.filter(p => p.branch === this.branch), ...points2.filter(p => p.branch === this.branch)];
+      const cutoff = this.timeRange > 0 ? new Date(Date.now() - this.timeRange * 86400000) : null;
+      const filterTime = (pts: typeof points1) => cutoff ? pts.filter(p => new Date(p.timestamp) >= cutoff) : pts;
+      const branchFiltered = this.branch === 'all'
+        ? [...filterTime(points1), ...filterTime(points2)]
+        : [...filterTime(points1).filter(p => p.branch === this.branch), ...filterTime(points2).filter(p => p.branch === this.branch)];
 
       const chart = createChart({
         container: d3.select(container) as unknown as d3.Selection<HTMLDivElement, unknown, HTMLElement, unknown>,
         title: cfg.title,
-        data: filtered,
+        data: branchFiltered,
         metricType: cfg.metricType,
         timeRangeDays: this.timeRange,
         visibleGroups: new Set(this.allGroups),
@@ -308,6 +310,13 @@ class DashboardApp {
     const title = document.createElement('h3');
     title.textContent = this.viewMode === 'branch' ? 'Branches' : 'Configurations';
     el.appendChild(title);
+
+    if (this.viewMode === 'config') {
+      const hint = document.createElement('p');
+      hint.className = 'legend-hint';
+      hint.innerHTML = 'Pattern: <code>perftest[-...]-{backend}-{size}-{threads}-{queues}</code> — <button class="btn-about-inline" id="aboutBtnLegend" type="button">?</button>';
+      el.appendChild(hint);
+    }
 
     const controls = document.createElement('div');
     controls.className = 'legend-controls';
@@ -360,6 +369,10 @@ class DashboardApp {
     }
 
     el.appendChild(grid);
+
+    document.getElementById('aboutBtnLegend')?.addEventListener('click', () => {
+      (document.getElementById('aboutDialog') as HTMLDialogElement | null)?.showModal();
+    });
   }
 
   private toggleGroup(group: string) {
@@ -466,15 +479,19 @@ class DashboardApp {
     }, { signal });
 
     // Radiogroup keyboard navigation helper
-    const setupRadiogroup = (selector: string, onSelect: (btn: HTMLElement) => void) => {
+    const setupRadiogroup = (selector: string, onSelect: (btn: HTMLElement) => void, rebuild = true) => {
       document.querySelectorAll(selector).forEach(btnEl => {
         const btn = btnEl as HTMLButtonElement;
         btn.addEventListener('click', () => {
           onSelect(btn);
           this.syncControlsFromState();
           this.writeUrlParams();
-          this.buildCharts();
-          this.renderLegend();
+          if (rebuild) {
+            this.buildCharts();
+            this.renderLegend();
+          } else {
+            this.updateChartsVisibility();
+          }
           this.updateInfo();
         }, { signal });
         btn.addEventListener('keydown', ((e: KeyboardEvent) => {
@@ -513,7 +530,7 @@ class DashboardApp {
     setupRadiogroup('.op-btn', (btn) => {
       const op = asOperationFilter(btn.dataset.op ?? '');
       if (op) this.operation = op;
-    });
+    }, false);
 
     document.getElementById('refreshBtn')?.addEventListener('click', async () => {
       this.abortController?.abort();

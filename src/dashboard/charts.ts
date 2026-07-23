@@ -180,6 +180,17 @@ export function createChart(opts: CreateChartOptions): ChartState | null {
     .attr('role', 'img')
     .attr('aria-label', `${title} chart`);
   svgEl.append('title').text(title);
+
+  // Clip path for chart area
+  const clipId = `clip-${Math.random().toString(36).slice(2, 8)}`;
+  svgEl.append('defs').append('clipPath')
+    .attr('id', clipId)
+    .append('rect')
+    .attr('x', 0)
+    .attr('y', -margin.top)
+    .attr('width', width)
+    .attr('height', height + margin.top + margin.bottom);
+
   const svg = svgEl.append('g')
     .attr('transform', `translate(${margin.left},${margin.top})`);
 
@@ -230,7 +241,7 @@ export function createChart(opts: CreateChartOptions): ChartState | null {
   controls.append('button').attr('class', 'zoom-btn').attr('aria-label', 'Zoom out').text('\u2212').on('click', () => {
     wrapper.transition().duration(300).call(zoomBehavior.scaleBy, 1 / 1.5);
   });
-  controls.append('button').attr('class', 'zoom-btn').attr('aria-label', 'Reset zoom').text('Reset').on('click', () => {
+  controls.append('button').attr('class', 'zoom-btn').attr('aria-label', 'Reset zoom').text('\u21BA').on('click', () => {
     wrapper.transition().duration(500).call(zoomBehavior.transform, d3.zoomIdentity);
   });
 
@@ -278,8 +289,8 @@ export function createChart(opts: CreateChartOptions): ChartState | null {
     .y(d => yScale(d.value))
     .curve(d3.curveMonotoneX);
 
-  const linesGroup = svg.append('g').attr('class', 'lines') as unknown as d3.Selection<SVGGElement, unknown, SVGGElement, unknown>;
-  const dotsGroup = svg.append('g').attr('class', 'dots') as unknown as d3.Selection<SVGGElement, unknown, SVGGElement, unknown>;
+  const linesGroup = svg.append('g').attr('class', 'lines').attr('clip-path', `url(#${clipId})`) as unknown as d3.Selection<SVGGElement, unknown, SVGGElement, unknown>;
+  const dotsGroup = svg.append('g').attr('class', 'dots').attr('clip-path', `url(#${clipId})`) as unknown as d3.Selection<SVGGElement, unknown, SVGGElement, unknown>;
 
   type LineSelection = d3.Selection<SVGPathElement, ProcessedPoint[], SVGGElement, undefined>;
   type DotSelection = d3.Selection<SVGCircleElement, ProcessedPoint, SVGGElement, undefined>;
@@ -333,7 +344,7 @@ export function createChart(opts: CreateChartOptions): ChartState | null {
 
   // ---- Event delegation on dots group ----
   dotsGroup
-    .on('mouseenter', function (event: MouseEvent) {
+    .on('mouseover', function (event: MouseEvent) {
       const target = event.target as SVGCircleElement;
       if (target.tagName !== 'circle') return;
       const pt = dotDataMap.get(target);
@@ -347,7 +358,7 @@ export function createChart(opts: CreateChartOptions): ChartState | null {
         }, metricType, timeRangeDays);
       }
     })
-    .on('mouseleave', function (event: MouseEvent) {
+    .on('mouseout', function (event: MouseEvent) {
       const target = event.target as SVGCircleElement;
       if (target.tagName !== 'circle') return;
       d3.select(target).attr('r', 3.5);
