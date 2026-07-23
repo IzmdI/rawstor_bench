@@ -7,6 +7,10 @@ on:
       - 'data/**'
       - 'docs/**'
       - 'tools/**'
+      - 'src/dashboard/**'
+      - 'package.json'
+      - 'tsconfig.json'
+      - 'scripts/build.js'
   workflow_dispatch:
     inputs:
       days:
@@ -30,7 +34,7 @@ permissions:
 
 concurrency:
   group: "pages"
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   build-and-deploy:
@@ -65,13 +69,27 @@ jobs:
           echo "Using time range: $DAYS days"
 
       - name: Process data
+        env:
+          DAYS: ${{ steps.time-range.outputs.days }}
         run: |
-          echo "Processing data for ${{ steps.time-range.outputs.days }} days"
-          chmod +x tools/data-processor && tools/data-processor ${{ steps.time-range.outputs.days }}
+          echo "Processing data for $DAYS days"
+          tools/data-processor "$DAYS"
           echo "Checking if data.json was created:"
           ls -la docs/fio/librawstor/dashboard/data.json || echo "File not found"
           echo "Contents of dashboard directory:"
           ls -la docs/fio/librawstor/dashboard/
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Build dashboard
+        run: |
+          npm ci
+          npm run typecheck
+          npm run build
 
       - name: Setup Pages
         uses: actions/configure-pages@v5

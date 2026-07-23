@@ -1,71 +1,19 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Rawstor Benchmark Dashboard</title>
-    
-    <link rel="stylesheet" href="styles.css">
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Rawstor Benchmark Dashboard</title>
+  <link rel="stylesheet" href="styles.css">
+  <script type="importmap">{ "imports": { "d3": "https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js" }}</script>
 </head>
 <body>
-    <div id="header">
-        <h1>Rawstor Benchmark Dashboard</h1>
-        <div id="data-info"></div>
+  <main id="app">
+    <div class="loading" role="status" aria-live="polite">
+      <div class="loading-spinner"></div>
+      <p>Loading dashboard data...</p>
     </div>
-
-    <div id="controls">
-        <div class="control-group">
-            <label for="timeRange">Time Range:</label>
-            <select id="timeRange">
-                <option value="2">Last 2 days</option>
-                <option value="7">Last 7 days</option>
-                <option value="15">Last 15 days</option>
-                <option value="30" selected>Last 30 days</option>
-                <option value="90">Last 90 days</option>
-                <option value="365">Last year</option>
-                <option value="all">All time</option>
-            </select>
-        </div>
-
-        <div class="control-group">
-            <label for="configBranch">Branch:</label>
-            <select id="configBranch">
-                <option value="all">All Branches</option>
-            </select>
-        </div>
-
-        <button id="refreshBtn">Refresh Data</button>
-        <div id="loading" class="loading" style="display: none;">
-            <span>Processing data...</span>
-        </div>
-        <button id="debugWriteBtn" style="background: #28a745; color: white; margin-left: 10px;">
-            Debug Write Data
-        </button>
-    </div>
-
-    <div id="dashboard">
-        <div class="chart-section">
-            <h2>Performance by Configuration</h2>
-            <div class="charts-grid">
-                <div class="chart-container">
-                    <div id="chart-iops-config" class="chart"></div>
-                </div>
-                <div class="chart-container">
-                    <div id="chart-latency-config" class="chart"></div>
-                </div>
-            </div>
-            <div class="section-legend">
-                <h4>Configurations & Operations (Click to toggle)</h4>
-                <div id="legend-config" class="legend-grid"></div>
-            </div>
-        </div>
-    </div>
-
-    <div id="tooltip" class="tooltip"></div>
-    <script src="data-loader.js"></script>
-    <script src="utils.js"></script>
-    <script src="charts.js"></script>
-    <script src="app.js"></script>
+  </main>
+  <script type="module" src="bundle.js"></script>
 </body>
 </html>

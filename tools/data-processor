@@ -1,371 +1,312 @@
 #!/usr/bin/env python3
 
+"""Generate dashboard data.json from raw fio benchmark results.
+
+Reads per-test JSON + .meta sidecar files, extracts IOPS/latency metrics,
+groups by config and branch, downsamples to 1 point/day/group, and writes
+a single data.json for the frontend dashboard.
+
+Usage:
+    python3 tools/data-processor [DAYS]
+
+DAYS=0 means include all available data.
+"""
+
 import json
+import re
 import sys
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Dict, List, Any, Optional
+from typing import Any, Dict, List, Optional
+
+METRICS = ['iops_read', 'iops_write', 'latency_read', 'latency_write']
+MAX_BRANCHES = 32
+TIMESTAMP_FORMATS = [
+    '%Y-%m-%dT%H:%M:%S.%f',
+    '%Y-%m-%dT%H:%M:%S',
+    '%Y-%m-%d %H:%M:%S',
+    '%Y-%m-%d',
+]
 
 
-def main():
-    print("=== Starting data processor ===")
-
-    days = 365  # default
-    if len(sys.argv) > 1:
-        try:
-            days = int(sys.argv[1])
-            if days == 0:  # "all" из workflow
-                days = 0
-        except ValueError:
-            print(f"Invalid argument: {sys.argv[1]}, using default: {days}")
-
-    print(f"Using fixed time range: last {days} days")
-
-    # Пути
+def main() -> None:
+    days = _parse_days_arg()
     script_dir = Path(__file__).parent
     repo_root = script_dir.parent
-    data_path = repo_root / 'data/fio/librawstor'
-    output_path = repo_root / 'docs/fio/librawstor/dashboard/data.json'
-
-    print(f"Data path: {data_path}")
-    print(f"Output path: {output_path}")
-    print(f"Time range: last {days} days")
+    data_path = repo_root / 'data' / 'fio' / 'librawstor'
+    output_path = repo_root / 'docs' / 'fio' / 'librawstor' / 'dashboard' / 'data.json'
 
     if not data_path.exists():
-        print("❌ Data path does not exist!")
-        return
+        print(f"Data path does not exist: {data_path}")
+        sys.exit(1)
 
-    # Рассчитываем дату 365 дней назад
-    cutoff_date = datetime.now() - timedelta(days=days)
-    print(f"📅 Collecting data since: {cutoff_date.strftime('%Y-%m-%d')}")
-
-    # Создаем директорию для выходных данных
+    cutoff_date = datetime.now(tz=timezone.utc).replace(tzinfo=None) - timedelta(days=days)
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
-    try:
-        # Обрабатываем сырые данные с фильтрацией по времени
-        all_test_results = collect_raw_data(data_path, cutoff_date)
-        print(f"✅ Collected {len(all_test_results)} test results from last {days} days")
+    results = collect_raw_data(data_path, cutoff_date)
+    if not results:
+        print(f"No results for last {days} days, falling back to all data")
+        results = collect_raw_data(data_path)
+        days = 0
 
-        if not all_test_results:
-            print("⚠️ No data found for the specified period. Using all available data.")
-            all_test_results = collect_raw_data(data_path)
-            days = 0  # Помечаем что фильтр не применен
+    top_branches = _get_top_branches(results, MAX_BRANCHES)
+    charts = prepare_charts_data(results, top_branches)
+    summary = build_summary(results, charts, cutoff_date, top_branches)
 
-        # Группируем данные для графиков
-        charts_data = prepare_charts_data(all_test_results)
+    output = {
+        'generated_at': datetime.now(tz=timezone.utc).isoformat(),
+        'filter': {
+            'days': days,
+            'cutoff_date': cutoff_date.isoformat() + 'Z',
+            'applied': days > 0 and len(results) > 0,
+        },
+        'charts': charts,
+        'summary': summary,
+    }
 
-        # Формируем итоговый JSON
-        output = {
-            "generated_at": datetime.utcnow().isoformat() + "Z",
-            "filter": {
-                "days": days,
-                "cutoff_date": cutoff_date.isoformat() + "Z",
-                "applied": days > 0 and len(all_test_results) > 0
-            },
-            "charts": charts_data,
-            "summary": get_summary(all_test_results, charts_data, cutoff_date),
-            "all_data": True  # Помечаем что это все данные
-        }
+    with output_path.open('w', encoding='utf-8') as f:
+        json.dump(output, f, indent=2, ensure_ascii=False)
 
-        # Сохраняем результат
-        with output_path.open('w', encoding='utf-8') as f:
-            json.dump(output, f, indent=2, ensure_ascii=False)
-
-        print(f"✅ data.json successfully created for {days} days")
-        print_summary(output['summary'])
-
-    except Exception as e:
-        print(f"❌ Error: {e}")
-        import traceback
-        traceback.print_exc()
+    size_mb = output_path.stat().st_size / (1024 * 1024)
+    branch_info = ''
+    if top_branches:
+        branch_info = f', {len(top_branches)} of {summary["total_branches_all"]} branches'
+    print(f"data.json: {len(results)} tests, {size_mb:.1f} MB, {days or 'all'} days{branch_info}")
 
 
-def parse_timestamp(timestamp_str: str) -> Optional[datetime]:
-    """Парсит timestamp из различных форматов"""
-    if not timestamp_str:
-        return
-
-    # Удаляем лишние пробелы
-    timestamp_str = timestamp_str.strip()
-
-    # Преобразуем формат с временной зоной в формат без временной зоны
-    if '+' in timestamp_str:
-        # Формат: 2025-08-18T21:04:40+00:00
-        timestamp_str = timestamp_str.split('+')[0]  # Берем часть до +
-    elif '-' in timestamp_str and 'T' in timestamp_str:
-        # Формат с отрицательной временной зоной: 2025-08-18T21:04:40-05:00
-        parts = timestamp_str.rsplit('-', 1)
-        if len(parts) == 2 and ':' in parts[1]:
-            timestamp_str = parts[0]  # Берем часть до временной зоны
-
-    # Убираем Z если есть
-    timestamp_str = timestamp_str.rstrip('Z')
-
-    # Попробуем разные форматы дат
-    formats = [
-        '%Y-%m-%dT%H:%M:%S.%f',  # ISO с микросекундами
-        '%Y-%m-%dT%H:%M:%S',  # ISO без микросекунд
-        '%Y-%m-%d %H:%M:%S',  # Простой формат
-        '%Y-%m-%d',  # Только дата
-    ]
-
-    for fmt in formats:
+def _parse_days_arg() -> int:
+    if len(sys.argv) > 1:
         try:
-            return datetime.strptime(timestamp_str, fmt)
+            return int(sys.argv[1])
+        except ValueError:
+            print(f"Invalid argument: {sys.argv[1]}, using default 365")
+    return 365
+
+
+def parse_timestamp(raw: str) -> Optional[datetime]:
+    """Parse a timestamp string, stripping timezone info."""
+    if not raw:
+        return None
+
+    s = raw.strip()
+
+    # Strip timezone suffix: +HH:MM, -HH:MM, +HHMM, -HHMM, or Z
+    if s.endswith('Z'):
+        s = s[:-1]
+    s = re.sub(r'[+-]\d{2}:?\d{2}$', '', s)
+
+    for fmt in TIMESTAMP_FORMATS:
+        try:
+            return datetime.strptime(s, fmt)
         except ValueError:
             continue
-
-    print(f"⚠️ Could not parse timestamp: {timestamp_str}")
-    return
+    return None
 
 
-def is_recent(timestamp: datetime, cutoff_date: datetime) -> bool:
-    """Проверяет, является ли timestamp не старше cutoff_date"""
-    if not timestamp or not cutoff_date:
-        return True  # Если нет даты, включаем в результаты
-    return timestamp >= cutoff_date
+def collect_raw_data(
+    data_path: Path,
+    cutoff_date: Optional[datetime] = None,
+) -> List[Dict[str, Any]]:
+    """Collect test results from all config directories, optionally filtered by date."""
+    results: List[Dict[str, Any]] = []
 
-
-def collect_raw_data(data_path: Path, cutoff_date: Optional[datetime] = None) -> List[Dict[str, Any]]:
-    """Собирает сырые данные с фильтрацией по времени"""
-    all_results = []
-    skipped_old = 0
-    skipped_no_date = 0
-    
-    for config_dir in data_path.iterdir():
+    for config_dir in sorted(data_path.iterdir()):
         if not config_dir.is_dir():
             continue
-            
-        config_name = config_dir.name
-        print(f"Processing configuration: {config_name}")
-        
-        for json_file in config_dir.glob('*.json'):
+
+        for json_file in config_dir.rglob('*.json'):
             try:
-                commit_sha = json_file.stem
-                meta_file = json_file.with_suffix('.meta')
-                
-                # Читаем JSON с результатами теста
-                test_data = json.loads(json_file.read_text(encoding='utf-8'))
-                
-                # Читаем META файл
-                meta_data = {}
-                if meta_file.exists():
-                    meta_data = json.loads(meta_file.read_text(encoding='utf-8'))
-                
-                # Парсим timestamp
-                timestamp_str = meta_data.get('date', '')
-                timestamp = parse_timestamp(timestamp_str)
-                
-                # Фильтруем по времени
-                if not is_recent(timestamp, cutoff_date):
-                    skipped_old += 1
-                    continue
-                
-                if not timestamp:
-                    skipped_no_date += 1
-                    # Решаем включать ли тесты без даты
-                    # Пока включаем, но помечаем
-                    timestamp_str = "Unknown date"
-                
-                # Извлекаем метрики
-                metrics = extract_fio_metrics(test_data)
-                
-                if metrics:
-                    test_result = {
-                        'config': config_name,
-                        'commit_sha': commit_sha,
-                        'timestamp': timestamp.isoformat() + 'Z' if timestamp else timestamp_str,
-                        'timestamp_obj': timestamp,  # Сохраняем объект для сортировки
-                        'branch': meta_data.get('branch', 'unknown'),
-                        'test_url': f"../{config_name}/{commit_sha}",
-                        **metrics
-                    }
-                    all_results.append(test_result)
-                    
+                result = _process_test_file(config_dir.name, json_file, cutoff_date)
+                if result:
+                    results.append(result)
             except Exception as e:
-                print(f"  ❌ Error processing {json_file.name}: {e}")
-    
-    if skipped_old > 0:
-        print(f"📅 Skipped {skipped_old} tests older than cutoff date")
-    if skipped_no_date > 0:
-        print(f"⏰ Skipped {skipped_no_date} tests without date")
-    
-    return all_results
+                print(f"  Error processing {json_file.name}: {e}")
+
+    return results
 
 
-def extract_fio_metrics(test_data: Dict) -> Dict[str, float]:
-    """Извлекает метрики IOPS и Latency из результатов FIO"""
-    metrics = {}
-    
-    try:
-        if 'jobs' in test_data and len(test_data['jobs']) > 0:
-            job = test_data['jobs'][0]
-            
-            # IOPS metrics
-            if 'read' in job and 'iops' in job['read']:
-                metrics['iops_read'] = float(job['read']['iops'])
-            if 'write' in job and 'iops' in job['write']:
-                metrics['iops_write'] = float(job['write']['iops'])
-            
-            # Latency metrics
-            if 'read' in job and 'lat_ns' in job['read'] and 'mean' in job['read']['lat_ns']:
-                metrics['latency_read'] = float(job['read']['lat_ns']['mean']) / 1_000_000
-            if 'write' in job and 'lat_ns' in job['write'] and 'mean' in job['write']['lat_ns']:
-                metrics['latency_write'] = float(job['write']['lat_ns']['mean']) / 1_000_000
-            
-            # Альтернативные пути к latency
-            if 'latency_read' not in metrics and 'read' in job and 'lat' in job['read'] and 'mean' in job['read']['lat']:
-                metrics['latency_read'] = float(job['read']['lat']['mean']) / 1000
-            if 'latency_write' not in metrics and 'write' in job and 'lat' in job['write'] and 'mean' in job['write']['lat']:
-                metrics['latency_write'] = float(job['write']['lat']['mean']) / 1000
-                
-    except Exception as e:
-        print(f"    ⚠️ Could not extract metrics: {e}")
-    
+def _process_test_file(
+    config_name: str,
+    json_file: Path,
+    cutoff_date: Optional[datetime],
+) -> Optional[Dict[str, Any]]:
+    commit_sha = json_file.stem
+    meta_file = json_file.with_suffix('.meta')
+
+    test_data = json.loads(json_file.read_text(encoding='utf-8'))
+    meta_data = {}
+    if meta_file.exists():
+        meta_data = json.loads(meta_file.read_text(encoding='utf-8'))
+
+    timestamp = parse_timestamp(meta_data.get('date', ''))
+    if cutoff_date and not _is_recent(timestamp, cutoff_date):
+        return None
+
+    metrics = extract_fio_metrics(test_data)
+    if not metrics:
+        return None
+
+    ts_str = timestamp.isoformat() + 'Z' if timestamp else 'Unknown date'
+
+    return {
+        'config': config_name,
+        'commit_sha': commit_sha,
+        'timestamp': ts_str,
+        'timestamp_obj': timestamp,
+        'branch': meta_data.get('branch', 'unknown'),
+        'test_url': f'../{config_name}/{commit_sha}.md',
+        **metrics,
+    }
+
+
+def _is_recent(timestamp: Optional[datetime], cutoff_date: datetime) -> bool:
+    return timestamp is None or timestamp >= cutoff_date
+
+
+def extract_fio_metrics(test_data: Dict[str, Any]) -> Dict[str, float]:
+    """Extract IOPS and latency metrics from fio JSON output."""
+    metrics: Dict[str, float] = {}
+
+    jobs = test_data.get('jobs', [])
+    if not jobs:
+        return metrics
+
+    job = jobs[0]
+
+    for direction in ('read', 'write'):
+        section = job.get(direction, {})
+        if not isinstance(section, dict):
+            continue
+
+        # IOPS
+        iops = section.get('iops')
+        if iops is not None:
+            metrics[f'iops_{direction}'] = float(iops)
+
+        # Latency (preferred: lat_ns.mean in nanoseconds)
+        lat_ns = section.get('lat_ns', {})
+        if isinstance(lat_ns, dict) and 'mean' in lat_ns:
+            metrics[f'latency_{direction}'] = float(lat_ns['mean']) / 1_000_000
+        else:
+            # Fallback: lat.mean in microseconds
+            lat = section.get('lat', {})
+            if isinstance(lat, dict) and 'mean' in lat:
+                metrics[f'latency_{direction}'] = float(lat['mean']) / 1000
+
     return metrics
 
 
-def prepare_charts_data(all_results: List[Dict]) -> Dict[str, List[Dict]]:
-    """Подготавливает данные для 8 графиков"""
-    charts_data = {}
-    
-    # Сортируем результаты по времени
-    sorted_results = sorted(
-        [r for r in all_results if r.get('timestamp_obj')], 
-        key=lambda x: x['timestamp_obj']
+def prepare_charts_data(results: List[Dict[str, Any]], top_branches: Optional[List[str]] = None) -> Dict[str, List[Dict]]:
+    """Build chart arrays grouped by config and branch with daily downsampling."""
+    dated = [r for r in results if r.get('timestamp_obj')]
+    undated = [r for r in results if not r.get('timestamp_obj')]
+    dated.sort(key=lambda r: r['timestamp_obj'])
+
+    charts: Dict[str, List[Dict]] = {}
+    for metric in METRICS:
+        charts[f'{metric}_by_config'] = _group_by(dated + undated, metric, 'config')
+        charts[f'{metric}_by_branch'] = _group_by(dated + undated, metric, 'branch', top_branches)
+    return charts
+
+
+def _get_top_branches(results: List[Dict[str, Any]], limit: int) -> Optional[List[str]]:
+    """Get the most recently updated branches, limited to `limit`."""
+    latest_by_branch: Dict[str, datetime] = {}
+    for r in results:
+        branch = r['branch']
+        ts = r.get('timestamp_obj')
+        if ts and (branch not in latest_by_branch or ts > latest_by_branch[branch]):
+            latest_by_branch[branch] = ts
+
+    sorted_branches = sorted(latest_by_branch.keys(), key=lambda b: latest_by_branch[b], reverse=True)
+    if len(sorted_branches) <= limit:
+        return None
+    return sorted_branches[:limit]
+
+
+def _group_by(
+    results: List[Dict[str, Any]],
+    metric: str,
+    key_field: str,
+    allowed_keys: Optional[List[str]] = None,
+) -> List[Dict]:
+    """Group results by a field, extract chart points, and downsample daily."""
+    allowed_set = set(allowed_keys) if allowed_keys else None
+    op = 'read' if metric.endswith('_read') else 'write'
+    groups: Dict[str, List[Dict]] = {}
+    for r in results:
+        if metric not in r or r[metric] is None:
+            continue
+        key = r[key_field]
+        if allowed_set and key not in allowed_set:
+            continue
+        groups.setdefault(key, []).append({
+            'group': key,
+            'timestamp': r['timestamp'],
+            'value': r[metric],
+            'commit_sha': r['commit_sha'],
+            'branch': r['branch'],
+            'config': r['config'],
+            'test_url': r['test_url'],
+            'operation': op,
+        })
+
+    chart_data: List[Dict] = []
+    for points in groups.values():
+        chart_data.extend(downsample_daily(points))
+    return chart_data
+
+
+def downsample_daily(points: List[Dict]) -> List[Dict]:
+    """Keep at most 1 point per day per group (the latest one)."""
+    if not points:
+        return points
+
+    daily: Dict[str, Dict] = {}
+    for p in points:
+        ts = p['timestamp']
+        day_key = 'Unknown date' if ts == 'Unknown date' else ts[:10]
+        if day_key not in daily or ts > daily[day_key]['timestamp']:
+            daily[day_key] = p
+
+    return sorted(
+        daily.values(),
+        key=lambda x: x['timestamp'] if x['timestamp'] != 'Unknown date' else '9999-12-31',
     )
-    
-    # Для результатов без даты добавляем в конец
-    no_date_results = [r for r in all_results if not r.get('timestamp_obj')]
-    sorted_results.extend(no_date_results)
-    
-    metrics = ['iops_read', 'iops_write', 'latency_read', 'latency_write']
-    
-    for metric in metrics:
-        charts_data[f"{metric}_by_config"] = group_by_config(sorted_results, metric)
-        charts_data[f"{metric}_by_branch"] = group_by_branch(sorted_results, metric)
-    
-    return charts_data
 
 
-def group_by_config(all_results: List[Dict], metric: str) -> List[Dict]:
-    """Группирует данные по конфигурациям тестов"""
-    valid_results = [r for r in all_results if metric in r and r[metric] is not None]
-    
-    config_groups = {}
-    for result in valid_results:
-        config = result['config']
-        if config not in config_groups:
-            config_groups[config] = []
-        
-        config_groups[config].append({
-            'group': config,
-            'timestamp': result['timestamp'],
-            'value': result[metric],
-            'commit_sha': result['commit_sha'],
-            'branch': result['branch'],
-            'test_url': result['test_url'],
-            'config': config
-        })
+def build_summary(
+    results: List[Dict[str, Any]],
+    charts: Dict[str, List[Dict]],
+    cutoff_date: datetime,
+    top_branches: Optional[List[str]] = None,
+) -> Dict[str, Any]:
+    """Build summary metadata for the dashboard."""
+    configs = sorted({r['config'] for r in results})
+    all_branches = sorted({r['branch'] for r in results})
 
-    chart_data = []
-    for config, points in config_groups.items():
-        # Сортируем по времени
-        sorted_points = sorted(
-            points, 
-            key=lambda x: x['timestamp'] if x['timestamp'] != "Unknown date" else "9999-12-31"
-        )
-        chart_data.extend(sorted_points)
-    
-    return chart_data
+    if top_branches is not None:
+        branches = sorted(set(all_branches) & set(top_branches))
+    else:
+        branches = all_branches
 
-
-def group_by_branch(all_results: List[Dict], metric: str) -> List[Dict]:
-    """Группирует данные по веткам"""
-    valid_results = [r for r in all_results if metric in r and r[metric] is not None]
-    
-    branch_groups = {}
-    for result in valid_results:
-        branch = result['branch']
-        if branch not in branch_groups:
-            branch_groups[branch] = []
-        
-        branch_groups[branch].append({
-            'group': branch,
-            'timestamp': result['timestamp'],
-            'value': result[metric],
-            'commit_sha': result['commit_sha'],
-            'config': result['config'],
-            'test_url': result['test_url'],
-            'branch': branch
-        })
-    
-    chart_data = []
-    for branch, points in branch_groups.items():
-        sorted_points = sorted(
-            points, 
-            key=lambda x: x['timestamp'] if x['timestamp'] != "Unknown date" else "9999-12-31"
-        )
-        chart_data.extend(sorted_points)
-    
-    return chart_data
-
-
-def get_summary(all_results: List[Dict], charts_data: Dict, cutoff_date: datetime) -> Dict[str, Any]:
-    """Генерирует summary информацию"""
-    configs = set(r['config'] for r in all_results)
-    branches = set(r['branch'] for r in all_results)
-    
-    # Временной диапазон
-    timestamps = [r['timestamp_obj'] for r in all_results if r.get('timestamp_obj')]
+    timestamps = [r['timestamp_obj'] for r in results if r.get('timestamp_obj')]
     time_range = {
         'start': min(timestamps).isoformat() + 'Z' if timestamps else None,
-        'end': max(timestamps).isoformat() + 'Z' if timestamps else None
+        'end': max(timestamps).isoformat() + 'Z' if timestamps else None,
     }
-    
-    # Тесты без даты
-    tests_without_date = len([r for r in all_results if not r.get('timestamp_obj')])
-    
-    chart_points = {chart: len(data) for chart, data in charts_data.items()}
-    
+
     return {
-        'total_tests': len(all_results),
-        'tests_without_date': tests_without_date,
+        'total_tests': len(results),
+        'tests_without_date': sum(1 for r in results if not r.get('timestamp_obj')),
         'total_configurations': len(configs),
+        'total_branches_all': len(all_branches),
         'total_branches': len(branches),
-        'configurations': sorted(list(configs)),
-        'branches': sorted(list(branches)),
+        'configurations': configs,
+        'branches': branches,
         'time_range': time_range,
-        'cutoff_date': cutoff_date.isoformat() + 'Z',
-        'chart_points': chart_points
     }
 
 
-def print_summary(summary: Dict):
-    """Печатает красивый summary"""
-    print("\n=== SUMMARY ===")
-    print(f"Total tests: {summary['total_tests']}")
-    if summary['tests_without_date'] > 0:
-        print(f"Tests without date: {summary['tests_without_date']}")
-    print(f"Configurations: {summary['total_configurations']}")
-    print(f"Branches: {summary['total_branches']}")
-    
-    if summary['time_range']['start']:
-        start_date = datetime.fromisoformat(summary['time_range']['start'].replace('Z', ''))
-        end_date = datetime.fromisoformat(summary['time_range']['end'].replace('Z', ''))
-        cutoff_date = datetime.fromisoformat(summary['cutoff_date'].replace('Z', ''))
-        
-        print(f"Data range: {start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')}")
-        print(f"Cutoff date: {cutoff_date.strftime('%Y-%m-%d')} (-30 days)")
-    
-    print("\nChart data points:")
-    for chart, count in summary['chart_points'].items():
-        print(f"  {chart}: {count} points")
-    
-    print(f"\nConfigurations: {', '.join(summary['configurations'])}")
-    print(f"Branches: {', '.join(summary['branches'])}")
-
-
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()

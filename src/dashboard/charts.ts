@@ -1,0 +1,411 @@
+import * as d3 from 'd3';
+import type { ChartDataPoint, ChartState, MetricType, ProcessedPoint, TooltipData } from './types';
+import { getColor, getOperationStyle, safeClassName, formatYAxis, Tooltip } from './utils';
+
+// ---- WeakMap for dot data lookup (replaces __data__ any cast) ----
+
+const dotDataMap = new WeakMap<SVGCircleElement, ProcessedPoint>();
+
+const tooltip = new Tooltip();
+
+// ---- Process raw ChartDataPoint[] into ProcessedPoint[] ----
+
+function processData(data: ChartDataPoint[]): ProcessedPoint[] {
+  const processed: ProcessedPoint[] = [];
+  for (const d of data) {
+    if (d.timestamp === 'Unknown date') continue;
+    const ts = new Date(d.timestamp);
+    if (isNaN(ts.getTime())) continue;
+
+    const base = { group: d.group, timestamp: ts, value: d.value, commit_sha: d.commit_sha, branch: d.branch, config: d.config, test_url: d.test_url };
+    const op = d.operation;
+    processed.push(
+      { ...base, operation: op, fullGroup: `${d.group} - ${op}` },
+    );
+  }
+  return processed;
+}
+
+// ---- Create scales ----
+
+interface Scales {
+  xScale: d3.ScaleTime<number, number>;
+  yScale: d3.ScaleLinear<number, number>;
+  xScaleOrig: d3.ScaleTime<number, number>;
+  yScaleOrig: d3.ScaleLinear<number, number>;
+}
+
+function createScales(filtered: ProcessedPoint[], width: number, height: number): Scales {
+  const xScale = d3.scaleTime()
+    .domain(d3.extent(filtered, d => d.timestamp) as [Date, Date])
+    .range([0, width]);
+
+  const yMax = d3.max(filtered, d => d.value) ?? 100;
+  const yScale = d3.scaleLinear()
+    .domain([0, yMax * 1.1])
+    .range([height, 0])
+    .nice();
+
+  return { xScale, yScale, xScaleOrig: xScale.copy(), yScaleOrig: yScale.copy() };
+}
+
+// ---- Grid ----
+
+function drawGrid(gridGroup: d3.Selection<SVGGElement, unknown, SVGGElement, unknown>, xScale: d3.ScaleTime<number, number>, yScale: d3.ScaleLinear<number, number>, width: number, height: number): void {
+  // X grid lines
+  const xTicks = xScale.ticks(8);
+  const xSel = gridGroup.selectAll<SVGLineElement, Date>('.grid-x-line').data(xTicks, d => +d);
+  xSel.exit().remove();
+  xSel.enter().append('line')
+    .attr('class', 'grid-x-line')
+    .attr('stroke', '#eee')
+    .attr('stroke-dasharray', '2,2')
+    .merge(xSel)
+    .attr('x1', d => xScale(d))
+    .attr('x2', d => xScale(d))
+    .attr('y1', 0)
+    .attr('y2', height);
+
+  // X axis line (bottom)
+  let xLine = gridGroup.select<SVGLineElement>('.grid-x-axis');
+  if (xLine.empty()) {
+    xLine = gridGroup.append('line')
+      .attr('class', 'grid-x-axis')
+      .attr('stroke', '#eee');
+  }
+  xLine.attr('x1', 0).attr('x2', width).attr('y1', height).attr('y2', height);
+
+  // Y grid lines
+  const yTicks = yScale.ticks(6);
+  const ySel = gridGroup.selectAll<SVGLineElement, number>('.grid-y-line').data(yTicks, d => d);
+  ySel.exit().remove();
+  ySel.enter().append('line')
+    .attr('class', 'grid-y-line')
+    .attr('stroke', '#eee')
+    .attr('stroke-dasharray', '2,2')
+    .merge(ySel)
+    .attr('x1', 0)
+    .attr('x2', width)
+    .attr('y1', d => yScale(d))
+    .attr('y2', d => yScale(d));
+
+  // Y axis line (left)
+  let yLine = gridGroup.select<SVGLineElement>('.grid-y-axis');
+  if (yLine.empty()) {
+    yLine = gridGroup.append('line')
+      .attr('class', 'grid-y-axis')
+      .attr('stroke', '#eee');
+  }
+  yLine.attr('x1', 0).attr('x2', 0).attr('y1', 0).attr('y2', height);
+}
+
+// ---- Axes ----
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function drawAxes(
+  xAxisGroup: d3.Selection<SVGGElement, unknown, any, any>,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  yAxisGroup: d3.Selection<SVGGElement, unknown, any, any>,
+  xScale: d3.ScaleTime<number, number>,
+  yScale: d3.ScaleLinear<number, number>,
+  timeRangeDays: number,
+  metricType: MetricType,
+): void {
+  const tickFormat = timeRangeDays < 15
+    ? d3.timeFormat('%H:%M %d.%m')
+    : d3.timeFormat('%d.%m');
+
+  const xAxis = d3.axisBottom(xScale).ticks(timeRangeDays < 15 ? 10 : 8).tickFormat(tickFormat as any);
+  xAxisGroup
+    .call(xAxis as any)
+    .call(g => g.select('.domain').attr('stroke', '#ddd'))
+    .call(g => g.selectAll('.tick line').attr('stroke', '#ddd'))
+    .call(g => g.selectAll('.tick text').attr('fill', '#555').attr('font-size', '11px'));
+
+  const yAxis = d3.axisLeft(yScale).ticks(6).tickFormat((d: number | { valueOf(): number }) => formatYAxis(typeof d === 'number' ? d : d.valueOf(), metricType));
+  yAxisGroup
+    .call(yAxis as any)
+    .call(g => g.select('.domain').attr('stroke', '#ddd'))
+    .call(g => g.selectAll('.tick line').attr('stroke', '#ddd'))
+    .call(g => g.selectAll('.tick text').attr('fill', '#555').attr('font-size', '11px'));
+}
+
+// ---- Main chart factory ----
+
+export interface CreateChartOptions {
+  container: d3.Selection<HTMLDivElement, unknown, HTMLElement, unknown>;
+  title: string;
+  data: ChartDataPoint[];
+  metricType: MetricType;
+  timeRangeDays: number;
+  visibleGroups: Set<string>;
+  visibleOperations: Set<string>;
+  colorMap: Map<string, number>;
+  onGroupColors?: (groups: string[], colors: Map<string, string>) => void;
+}
+
+export function createChart(opts: CreateChartOptions): ChartState | null {
+  const { container, title, data, metricType, timeRangeDays, visibleGroups, visibleOperations, colorMap } = opts;
+
+  // Cleanup old zoom behavior before clearing DOM
+  container.select('.chart-wrapper').on('.zoom', null);
+  container.html('');
+  tooltip.reset();
+
+  if (!data.length) {
+    container.append('p').attr('class', 'no-data').text('No data available');
+    return null;
+  }
+
+  const filtered = processData(data);
+
+  if (!filtered.length) {
+    container.append('p').attr('class', 'no-data').text('No data matches the current filters');
+    return null;
+  }
+
+  // ---- Dimensions ----
+  const margin = { top: 40, right: 30, bottom: 50, left: 65 };
+  const fullWidth = container.node()?.getBoundingClientRect().width || 800;
+  const width = Math.max(300, fullWidth - margin.left - margin.right);
+  const height = 380 - margin.top - margin.bottom;
+
+  // ---- SVG ----
+  const svgEl = container
+    .append('div')
+    .attr('class', 'chart-wrapper')
+    .append('svg')
+    .attr('viewBox', `0 0 ${width + margin.left + margin.right} ${height + margin.top + margin.bottom}`)
+    .attr('preserveAspectRatio', 'xMidYMid meet')
+    .attr('role', 'img')
+    .attr('aria-label', `${title} chart`);
+  svgEl.append('title').text(title);
+  const svg = svgEl.append('g')
+    .attr('transform', `translate(${margin.left},${margin.top})`);
+
+  // ---- Scales ----
+  const { xScale, yScale, xScaleOrig, yScaleOrig } = createScales(filtered, width, height);
+
+  // ---- Zoom ----
+  let rafId = 0;
+  const zoomBehavior = d3.zoom<HTMLDivElement, unknown>()
+    .scaleExtent([1, 20])
+    .translateExtent([[0, 0], [width, height]])
+    .extent([[0, 0], [width, height]])
+    .on('zoom', (event: d3.D3ZoomEvent<HTMLDivElement, unknown>) => {
+      const t = event.transform;
+      xScale.domain(t.rescaleX(xScaleOrig).domain());
+      yScale.domain(t.rescaleY(yScaleOrig).domain());
+      cancelAnimationFrame(rafId);
+      rafId = requestAnimationFrame(() => redraw());
+    });
+
+  const wrapper = container.select<HTMLDivElement>('.chart-wrapper');
+  wrapper.call(zoomBehavior);
+
+  // Keyboard zoom support
+  wrapper.attr('tabindex', '0')
+    .attr('role', 'group')
+    .attr('aria-label', `${title} chart area, use + to zoom in, - to zoom out, 0 to reset`)
+    .on('keydown', (event: KeyboardEvent) => {
+      if (event.key === '+' || event.key === '=') {
+        event.preventDefault();
+        wrapper.transition().duration(300).call(zoomBehavior.scaleBy, 1.5);
+      } else if (event.key === '-') {
+        event.preventDefault();
+        wrapper.transition().duration(300).call(zoomBehavior.scaleBy, 1 / 1.5);
+      } else if (event.key === '0') {
+        event.preventDefault();
+        wrapper.transition().duration(500).call(zoomBehavior.transform, d3.zoomIdentity);
+      }
+    });
+
+  // ---- Zoom controls ----
+  const controls = container.append('div').attr('class', 'zoom-controls')
+    .attr('role', 'group')
+    .attr('aria-label', 'Zoom controls');
+  controls.append('button').attr('class', 'zoom-btn').attr('aria-label', 'Zoom in').text('+').on('click', () => {
+    wrapper.transition().duration(300).call(zoomBehavior.scaleBy, 1.5);
+  });
+  controls.append('button').attr('class', 'zoom-btn').attr('aria-label', 'Zoom out').text('\u2212').on('click', () => {
+    wrapper.transition().duration(300).call(zoomBehavior.scaleBy, 1 / 1.5);
+  });
+  controls.append('button').attr('class', 'zoom-btn').attr('aria-label', 'Reset zoom').text('Reset').on('click', () => {
+    wrapper.transition().duration(500).call(zoomBehavior.transform, d3.zoomIdentity);
+  });
+
+  // ---- Grid & Axes ----
+  const gridGroup = svg.append('g').attr('class', 'grid');
+  const xAxisGroup = svg.append('g').attr('class', 'x-axis').attr('transform', `translate(0,${height})`);
+  const yAxisGroup = svg.append('g').attr('class', 'y-axis');
+
+  // ---- Title ----
+  svg.append('text')
+    .attr('class', 'chart-title')
+    .attr('x', width / 2)
+    .attr('y', -12)
+    .attr('text-anchor', 'middle')
+    .text(title);
+
+  // ---- Y-axis label ----
+  svg.append('text')
+    .attr('class', 'chart-y-label')
+    .attr('transform', 'rotate(-90)')
+    .attr('x', -height / 2)
+    .attr('y', -50)
+    .attr('text-anchor', 'middle')
+    .text(metricType === 'iops' ? 'IOPS' : 'Latency (ms)');
+
+  // ---- Group data ----
+  const dataByGroup = d3.group(filtered, d => d.fullGroup);
+  const allFullGroups = Array.from(dataByGroup.keys()).sort();
+
+  const groupColors = new Map<string, string>();
+  const baseGroups = [...new Set(filtered.map(d => d.group))].sort();
+  baseGroups.forEach((g, i) => groupColors.set(g, getColor(colorMap.get(g) ?? i)));
+  opts.onGroupColors?.(baseGroups, groupColors);
+
+  // Pre-sort points per group (used by lines, dots, and redraw)
+  const sortedByGroup = new Map<string, ProcessedPoint[]>();
+  for (const fullGroup of allFullGroups) {
+    const pts = (dataByGroup.get(fullGroup) ?? []).sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
+    sortedByGroup.set(fullGroup, pts);
+  }
+
+  // ---- Lines ----
+  const line = d3.line<ProcessedPoint>()
+    .x(d => xScale(d.timestamp))
+    .y(d => yScale(d.value))
+    .curve(d3.curveMonotoneX);
+
+  const linesGroup = svg.append('g').attr('class', 'lines');
+  const dotsGroup = svg.append('g').attr('class', 'dots');
+
+  type LineSelection = d3.Selection<SVGPathElement, ProcessedPoint[], SVGGElement | HTMLElement, undefined>;
+  type DotSelection = d3.Selection<SVGCircleElement, ProcessedPoint, SVGGElement | HTMLElement, undefined>;
+
+  const lineElements = new Map<string, LineSelection>();
+  const dotElements = new Map<string, DotSelection>();
+
+  for (const fullGroup of allFullGroups) {
+    const pts = sortedByGroup.get(fullGroup)!;
+    if (!pts.length) continue;
+
+    const operation = pts[0].operation;
+    const baseGroup = pts[0].group;
+    const color = groupColors.get(baseGroup) ?? '#999';
+    const style = getOperationStyle(operation);
+    const isVisible = visibleGroups.has(baseGroup) && visibleOperations.has(operation);
+
+    const path = linesGroup.append('path')
+      .datum(pts)
+      .attr('class', `line line-${safeClassName(fullGroup)}`)
+      .attr('d', line)
+      .attr('fill', 'none')
+      .attr('stroke', color)
+      .attr('stroke-width', style.strokeWidth)
+      .attr('stroke-dasharray', style.strokeDasharray)
+      .attr('stroke-linecap', 'round')
+      .style('opacity', isVisible ? '1' : '0')
+      .style('transition', 'opacity 0.3s ease');
+
+    lineElements.set(fullGroup, path);
+
+    const dots = dotsGroup.selectAll('.dot-' + safeClassName(fullGroup))
+      .data(pts)
+      .enter()
+      .append('circle')
+      .attr('class', `dot dot-${safeClassName(fullGroup)}`)
+      .attr('cx', (d: ProcessedPoint) => xScale(d.timestamp))
+      .attr('cy', (d: ProcessedPoint) => yScale(d.value))
+      .attr('r', 3.5)
+      .attr('fill', color)
+      .attr('stroke', '#fff')
+      .attr('stroke-width', 1.5)
+      .style('cursor', 'pointer')
+      .style('opacity', isVisible ? '1' : '0')
+      .style('transition', 'opacity 0.3s ease');
+
+    dots.each(function(d) { dotDataMap.set(this, d); });
+    dotElements.set(fullGroup, dots);
+
+  }
+
+  // ---- Event delegation on dots group ----
+  dotsGroup
+    .on('mouseenter', function (event: MouseEvent) {
+      const target = event.target as SVGCircleElement;
+      if (target.tagName !== 'circle') return;
+      const pt = dotDataMap.get(target);
+      if (!pt) return;
+      if (lineElements.get(pt.fullGroup)?.style('opacity') !== '0') {
+        d3.select(target).attr('r', 6);
+        tooltip.show(event, {
+          group: pt.group, operation: pt.operation, value: pt.value,
+          timestamp: pt.timestamp, branch: pt.branch, config: pt.config,
+          commit_sha: pt.commit_sha,
+        }, metricType, timeRangeDays);
+      }
+    })
+    .on('mouseleave', function (event: MouseEvent) {
+      const target = event.target as SVGCircleElement;
+      if (target.tagName !== 'circle') return;
+      d3.select(target).attr('r', 3.5);
+      tooltip.hide();
+    })
+    .on('click', function (event: MouseEvent) {
+      const target = event.target as SVGCircleElement;
+      if (target.tagName !== 'circle') return;
+      const pt = dotDataMap.get(target);
+      if (!pt) return;
+      const url = pt.test_url;
+      if (/^\.\.?\//.test(url)) {
+        window.open(url, '_blank', 'noopener,noreferrer');
+      }
+    });
+
+  // ---- Redraw (for zoom) — updates axes, lines, dots without recreating DOM elements ----
+  function redraw() {
+    drawAxes(xAxisGroup, yAxisGroup, xScale, yScale, timeRangeDays, metricType);
+    drawGrid(gridGroup, xScale, yScale, width, height);
+
+    const [x0, x1] = xScale.domain();
+
+    for (const fullGroup of allFullGroups) {
+      const pts = sortedByGroup.get(fullGroup)!;
+      const path = lineElements.get(fullGroup);
+      if (path) path.attr('d', line(pts));
+
+      const dots = dotElements.get(fullGroup);
+      if (dots) {
+        dots.style('display', (d: ProcessedPoint) => d.timestamp < x0 || d.timestamp > x1 ? 'none' : null);
+        dots.filter((d: ProcessedPoint) => d.timestamp >= x0 && d.timestamp <= x1)
+          .attr('cx', (d: ProcessedPoint) => xScale(d.timestamp))
+          .attr('cy', (d: ProcessedPoint) => yScale(d.value));
+      }
+    }
+  }
+
+  // Initial draw
+  drawAxes(xAxisGroup, yAxisGroup, xScale, yScale, timeRangeDays, metricType);
+  drawGrid(gridGroup, xScale, yScale, width, height);
+
+  // ---- State ----
+  const state: ChartState = {
+    data: filtered,
+    fullGroups: allFullGroups,
+    lines: lineElements,
+    dots: dotElements,
+    updateVisibility(visibleGroups: Set<string>) {
+      for (const fullGroup of allFullGroups) {
+        const isVisible = visibleGroups.has(fullGroup);
+        const el = lineElements.get(fullGroup);
+        if (el) el.style('opacity', isVisible ? '1' : '0');
+        const dots = dotElements.get(fullGroup);
+        if (dots) dots.style('opacity', isVisible ? '1' : '0');
+      }
+    },
+  };
+
+  return state;
+}
