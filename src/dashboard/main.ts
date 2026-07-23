@@ -60,7 +60,8 @@ class DashboardApp {
 
   private readUrlParams() {
     const p = new URLSearchParams(window.location.search);
-    this.timeRange = parseInt(p.get('days') ?? '30', 10) || 30;
+    this.timeRange = parseInt(p.get('days') ?? '30', 10);
+    if (isNaN(this.timeRange)) this.timeRange = 30;
     this.branch = p.get('branch') ?? 'all';
 
     const view = p.get('view');
@@ -276,9 +277,11 @@ class DashboardApp {
 
       const points1 = this.data.charts[cfg.keys[0]] ?? [];
       const points2 = this.data.charts[cfg.keys[1]] ?? [];
+      const cutoff = this.timeRange > 0 ? new Date(Date.now() - this.timeRange * 86400000) : null;
+      const filterByTime = (pts: typeof points1) => cutoff ? pts.filter(p => new Date(p.timestamp) >= cutoff) : pts;
       const branchFiltered = this.branch === 'all'
-        ? [...points1, ...points2]
-        : [...points1.filter(p => p.branch === this.branch), ...points2.filter(p => p.branch === this.branch)];
+        ? [...filterByTime(points1), ...filterByTime(points2)]
+        : [...filterByTime(points1).filter(p => p.branch === this.branch), ...filterByTime(points2).filter(p => p.branch === this.branch)];
 
       const chart = createChart({
         container: d3.select(container) as unknown as d3.Selection<HTMLDivElement, unknown, HTMLElement, unknown>,
@@ -461,7 +464,8 @@ class DashboardApp {
     const signal = this.listenerAbort.signal;
 
     document.getElementById('timeRange')?.addEventListener('change', (e) => {
-      this.timeRange = parseInt((e.target as HTMLSelectElement).value, 10) || 30;
+      this.timeRange = parseInt((e.target as HTMLSelectElement).value, 10);
+      if (isNaN(this.timeRange)) this.timeRange = 30;
       this.writeUrlParams();
       this.buildCharts();
       this.renderLegend();
