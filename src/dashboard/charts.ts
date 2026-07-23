@@ -235,7 +235,7 @@ export function createChart(opts: CreateChartOptions): ChartState | null {
   });
 
   // ---- Grid & Axes ----
-  const gridGroup = svg.append('g').attr('class', 'grid');
+  const gridGroup = svg.append('g').attr('class', 'grid') as unknown as d3.Selection<SVGGElement, unknown, SVGGElement, unknown>;
   const xAxisGroup = svg.append('g').attr('class', 'x-axis').attr('transform', `translate(0,${height})`);
   const yAxisGroup = svg.append('g').attr('class', 'y-axis');
 
@@ -278,11 +278,11 @@ export function createChart(opts: CreateChartOptions): ChartState | null {
     .y(d => yScale(d.value))
     .curve(d3.curveMonotoneX);
 
-  const linesGroup = svg.append('g').attr('class', 'lines');
-  const dotsGroup = svg.append('g').attr('class', 'dots');
+  const linesGroup = svg.append('g').attr('class', 'lines') as unknown as d3.Selection<SVGGElement, unknown, SVGGElement, unknown>;
+  const dotsGroup = svg.append('g').attr('class', 'dots') as unknown as d3.Selection<SVGGElement, unknown, SVGGElement, unknown>;
 
-  type LineSelection = d3.Selection<SVGPathElement, ProcessedPoint[], SVGGElement | HTMLElement, undefined>;
-  type DotSelection = d3.Selection<SVGCircleElement, ProcessedPoint, SVGGElement | HTMLElement, undefined>;
+  type LineSelection = d3.Selection<SVGPathElement, ProcessedPoint[], SVGGElement, undefined>;
+  type DotSelection = d3.Selection<SVGCircleElement, ProcessedPoint, SVGGElement, undefined>;
 
   const lineElements = new Map<string, LineSelection>();
   const dotElements = new Map<string, DotSelection>();
