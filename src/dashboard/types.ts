@@ -15,7 +15,7 @@ export interface ChartDataPoint {
 
 export interface DashboardFilter {
   days: number;
-  cutoff_date: string;
+  cutoff_date: string | null;
   applied: boolean;
 }
 

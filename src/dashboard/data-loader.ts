@@ -19,7 +19,7 @@ function validate(data: unknown): asserts data is DashboardData {
   if (!d.filter || typeof d.filter !== 'object') throw new Error('Missing filter');
   const f = d.filter as Record<string, unknown>;
   if (typeof f.days !== 'number') throw new Error('Missing filter.days');
-  if (typeof f.cutoff_date !== 'string') throw new Error('Missing filter.cutoff_date');
+  if (f.cutoff_date !== null && typeof f.cutoff_date !== 'string') throw new Error('Invalid filter.cutoff_date');
 
   // summary
   if (!d.summary || typeof d.summary !== 'object') throw new Error('Missing summary');
