@@ -22,10 +22,14 @@ class DashboardApp {
   private abortController: AbortController | null = null;
   private listenerAbort: AbortController = new AbortController();
   private loading = false;
+  private generation = 0;
+
+  private static readonly ALLOWED_DAYS = new Set([2, 7, 15, 30, 90, 365, 0]);
 
   async init() {
     if (this.loading) return;
     this.loading = true;
+    const gen = ++this.generation;
     this.destroy();
     this.readUrlParams();
     this.syncControlsFromState();
@@ -41,7 +45,10 @@ class DashboardApp {
       this.loading = false;
     }
 
+    if (gen !== this.generation) return; // superseded by a newer load
+
     this.extractMeta();
+    this.normalizeBranch();
     this.renderCharts();
     this.renderLegend();
     this.updateInfo();
@@ -60,15 +67,25 @@ class DashboardApp {
 
   private readUrlParams() {
     const p = new URLSearchParams(window.location.search);
-    this.timeRange = parseInt(p.get('days') ?? '30', 10);
-    if (isNaN(this.timeRange)) this.timeRange = 30;
+    const daysRaw = parseInt(p.get('days') ?? '30', 10);
+    this.timeRange = DashboardApp.ALLOWED_DAYS.has(daysRaw) ? daysRaw : 30;
     this.branch = p.get('branch') ?? 'all';
 
-    const view = p.get('view');
-    this.viewMode = view === 'branch' ? 'branch' : 'config';
+    const viewMode = asViewMode(p.get('view') ?? '');
+    this.viewMode = viewMode ?? 'config';
 
-    const op = p.get('op');
-    this.operation = op === 'read' || op === 'write' ? op : 'both';
+    const op = p.get('op') ?? '';
+    this.operation = asOperationFilter(op) ?? 'both';
+  }
+
+  /** Drop branch if it is not present (or normalizes to) one of the loaded branches. */
+  private normalizeBranch() {
+    if (this.branch === 'all') return;
+    if (!this.allBranches.length) return;
+    const matches = (b: string) => b === this.branch || formatBranchName(b) === formatBranchName(this.branch);
+    if (!this.allBranches.some(matches)) {
+      this.branch = 'all';
+    }
   }
 
   private writeUrlParams() {
@@ -78,7 +95,11 @@ class DashboardApp {
     if (this.viewMode !== 'config') p.set('view', this.viewMode);
     if (this.operation !== 'both') p.set('op', this.operation);
     const qs = p.toString();
-    history.replaceState(null, '', qs ? `?${qs}` : window.location.pathname);
+    try {
+      history.replaceState(null, '', qs ? `?${qs}` : window.location.pathname);
+    } catch (e) {
+      // SecurityError on file:// — silently fall back without URL update.
+    }
   }
 
   private syncControlsFromState() {
@@ -147,7 +168,6 @@ class DashboardApp {
     if (!app || !this.data) return;
 
     app.innerHTML = '';
-    document.getElementById('d3-error')?.remove();
 
     // Header
     const header = document.createElement('header');
@@ -257,8 +277,11 @@ class DashboardApp {
   private buildCharts() {
     const grid = document.getElementById('chartsGrid');
     if (!grid || !this.data) return;
-    grid.innerHTML = '';
+    // Tear down previous chart instances (cancel pending RAFs, unbind zoom)
+    // before the DOM nodes are removed.
+    for (const chart of this.charts.values()) chart?.destroy?.();
     this.charts.clear();
+    grid.innerHTML = '';
 
     const keys = this.viewMode === 'config' ? CHART_KEYS_BY_CONFIG : CHART_KEYS_BY_BRANCH;
 
@@ -354,16 +377,13 @@ class DashboardApp {
       item.append(dot, label);
       item.addEventListener('click', () => this.toggleGroup(group));
       item.addEventListener('keydown', (e: KeyboardEvent) => {
-        if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); this.toggleGroup(group); }
+        // Space/Enter handled natively by <button>; only handle arrows.
         if (e.key === 'ArrowDown' || e.key === 'ArrowRight') {
           e.preventDefault();
-          const next = item.nextElementSibling as HTMLElement | null;
-          if (next) next.focus();
-        }
-        if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') {
+          (item.nextElementSibling as HTMLElement | null)?.focus();
+        } else if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') {
           e.preventDefault();
-          const prev = item.previousElementSibling as HTMLElement | null;
-          if (prev) prev.focus();
+          (item.previousElementSibling as HTMLElement | null)?.focus();
         }
       });
       grid.appendChild(item);
@@ -416,11 +436,13 @@ class DashboardApp {
 
     for (const chart of this.charts.values()) {
       if (!chart) continue;
+      // Derive visible fullGroups from per-chart point data (avoids fragile
+      // split of fullGroup back into base/op; preserves group names containing ' - ').
       const fg = new Set<string>();
-      for (const fullGroup of chart.fullGroups) {
-        const base = fullGroup.split(' - ')[0];
-        const op = fullGroup.split(' - ')[1];
-        if (visibleGroups.has(base) && opSet.has(op)) fg.add(fullGroup);
+      for (const p of chart.data) {
+        if (visibleGroups.has(p.group) && opSet.has(p.operation)) {
+          fg.add(p.fullGroup);
+        }
       }
       chart.updateVisibility(fg);
     }
@@ -480,54 +502,61 @@ class DashboardApp {
       this.updateInfo();
     }, { signal });
 
-    // Radiogroup keyboard navigation helper
+// Radiogroup keyboard navigation helper
     const setupRadiogroup = (selector: string, onSelect: (btn: HTMLElement) => void, rebuild = true) => {
-      document.querySelectorAll(selector).forEach(btnEl => {
-        const btn = btnEl as HTMLButtonElement;
-        btn.addEventListener('click', () => {
-          onSelect(btn);
-          this.syncControlsFromState();
-          this.writeUrlParams();
-          if (rebuild) {
-            this.buildCharts();
-            this.renderLegend();
-          } else {
-            this.updateChartsVisibility();
-          }
-          this.updateInfo();
-        }, { signal });
-        btn.addEventListener('keydown', ((e: KeyboardEvent) => {
-          const container = btn.closest('.toggle-group');
-          if (!container) return;
-          const radios = Array.from(container.querySelectorAll('[role="radio"]')) as HTMLElement[];
-          const idx = radios.indexOf(btn);
-          let next: HTMLElement | null = null;
-          if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
-            e.preventDefault();
-            next = radios[(idx + 1) % radios.length];
-          } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
-            e.preventDefault();
-            next = radios[(idx - 1 + radios.length) % radios.length];
-          } else if (e.key === 'Home') {
-            e.preventDefault();
-            next = radios[0];
-          } else if (e.key === 'End') {
-            e.preventDefault();
-            next = radios[radios.length - 1];
-          }
-          if (next) {
-            next.focus();
-            next.click();
-          }
-        }) as EventListener, { signal });
-      });
-    };
+      const selectRadio = (btn: HTMLElement) => {
+        onSelect(btn);
+        this.syncControlsFromState();
+        this.writeUrlParams();
+        if (rebuild) {
+          this.buildCharts();
+          this.renderLegend();
+        } else {
+          this.updateChartsVisibility();
+        }
+        this.updateInfo();
+      };
 
-    setupRadiogroup('.view-btn', (btn) => {
-      const v = asViewMode(btn.dataset.view ?? '');
-      if (v) this.viewMode = v;
-      this.extractMeta();
+    document.querySelectorAll(selector).forEach(btnEl => {
+      const btn = btnEl as HTMLButtonElement;
+      btn.addEventListener('click', () => selectRadio(btn), { signal });
+      btn.addEventListener('keydown', ((e: KeyboardEvent) => {
+        const container = btn.closest('.toggle-group');
+        if (!container) return;
+        const radios = Array.from(container.querySelectorAll('[role="radio"]')) as HTMLElement[];
+        const idx = radios.indexOf(btn);
+        let next: HTMLElement | null = null;
+        if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+          e.preventDefault();
+          next = radios[(idx + 1) % radios.length];
+        } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+          e.preventDefault();
+          next = radios[(idx - 1 + radios.length) % radios.length];
+        } else if (e.key === 'Home') {
+          e.preventDefault();
+          next = radios[0];
+        } else if (e.key === 'End') {
+          e.preventDefault();
+          next = radios[radios.length - 1];
+        }
+        if (next) {
+          next.focus();
+          selectRadio(next);
+        }
+      }) as EventListener, { signal });
     });
+  };
+
+  setupRadiogroup('.view-btn', (btn) => {
+    const v = asViewMode(btn.dataset.view ?? '');
+    if (v && v !== this.viewMode) {
+      this.viewMode = v;
+      // Switching view mode invalidates per-group visibility state — old
+      // group names no longer apply to the new grouping.
+      this.hiddenGroups.clear();
+    }
+    this.extractMeta();
+  });
 
     setupRadiogroup('.op-btn', (btn) => {
       const op = asOperationFilter(btn.dataset.op ?? '');
@@ -535,37 +564,31 @@ class DashboardApp {
     }, false);
 
     document.getElementById('refreshBtn')?.addEventListener('click', async () => {
+      const gen = ++this.generation;
       this.abortController?.abort();
       const btn = document.getElementById('refreshBtn') as HTMLButtonElement | null;
       if (btn) { btn.disabled = true; btn.textContent = 'Loading...'; }
       this.updateInfo('Refreshing data...');
       try {
         this.abortController = new AbortController();
-        this.data = await loadData('./data.json', this.abortController.signal);
+        const data = await loadData('./data.json', this.abortController.signal);
+        if (gen !== this.generation) return; // superseded
+        this.data = data;
         this.extractMeta();
+        this.normalizeBranch();
         this.populateBranchSelector();
+        this.syncControlsFromState();
         this.buildCharts();
         this.renderLegend();
         this.updateInfo('Data refreshed');
         document.getElementById('refresh-error')?.remove();
       } catch (e) {
+        if (gen !== this.generation) return; // superseded
         if (e instanceof DOMException && e.name === 'AbortError') return;
-        let banner = document.getElementById('refresh-error');
-        if (!banner) {
-          banner = document.createElement('div');
-          banner.id = 'refresh-error';
-          banner.className = 'error';
-          banner.setAttribute('role', 'alert');
-          banner.style.margin = '12px 24px';
-          document.getElementById('app')?.prepend(banner);
-        }
-        banner.textContent = '';
-        const p = document.createElement('p');
-        p.textContent = `Refresh failed: ${e instanceof Error ? e.message : String(e)}`;
-        banner.appendChild(p);
+        this.showRefreshError(e instanceof Error ? e.message : String(e));
         this.updateInfo('Refresh failed');
       } finally {
-        if (btn) { btn.disabled = false; btn.textContent = 'Refresh'; }
+        if (gen === this.generation && btn) { btn.disabled = false; btn.textContent = 'Refresh'; }
       }
     }, { signal });
 
@@ -575,6 +598,21 @@ class DashboardApp {
     document.getElementById('closeAbout')?.addEventListener('click', () => {
       (document.getElementById('aboutDialog') as HTMLDialogElement | null)?.close();
     }, { signal });
+  }
+
+  private showRefreshError(msg: string) {
+    // Insert banner below the controls bar (not above spinner/controls).
+    let banner = document.getElementById('refresh-error');
+    if (!banner) {
+      banner = document.createElement('div');
+      banner.id = 'refresh-error';
+      banner.className = 'error';
+      banner.setAttribute('role', 'alert');
+      banner.style.margin = '12px 24px';
+      const legend = document.getElementById('legend') ?? document.querySelector('.charts-grid');
+      legend?.insertAdjacentElement('beforebegin', banner);
+    }
+    banner.textContent = `Refresh failed: ${msg}`;
   }
 
   private showError(msg: string) {

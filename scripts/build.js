@@ -21,7 +21,9 @@ buildSync({
   platform: 'browser',
   target: 'es2020',
   minify: true,
-  sourcemap: false,
+  // External sourcemap (separate bundle.js.map) to aid runtime debugging
+  // without affecting the served payload size meaningfully.
+  sourcemap: true,
   external: ['d3'],
 });
 

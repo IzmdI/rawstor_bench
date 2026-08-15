@@ -13,7 +13,6 @@ DAYS=0 means include all available data.
 """
 
 import json
-import re
 import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -40,25 +39,32 @@ def main() -> None:
         print(f"Data path does not exist: {data_path}")
         sys.exit(1)
 
-    cutoff_date = datetime.now(tz=timezone.utc).replace(tzinfo=None) - timedelta(days=days)
+    # days=0 (or missing) means no cutoff — include all available data.
+    if days and days > 0:
+        cutoff_date = datetime.now(tz=timezone.utc).replace(tzinfo=None) \
+            - timedelta(days=days)
+    else:
+        cutoff_date = None
+        days = 0
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
     results = collect_raw_data(data_path, cutoff_date)
+    applied = days > 0 and bool(results)
     if not results:
         print(f"No results for last {days} days, falling back to all data")
         results = collect_raw_data(data_path)
-        days = 0
+        applied = False
 
     top_branches = _get_top_branches(results, MAX_BRANCHES)
     charts = prepare_charts_data(results, top_branches)
     summary = build_summary(results, charts, cutoff_date, top_branches)
 
     output = {
-        'generated_at': datetime.now(tz=timezone.utc).isoformat(),
+        'generated_at': _utc_iso(datetime.now(tz=timezone.utc)),
         'filter': {
             'days': days,
-            'cutoff_date': cutoff_date.isoformat() + 'Z',
-            'applied': days > 0 and len(results) > 0,
+            'cutoff_date': _utc_iso(cutoff_date),
+            'applied': applied,
         },
         'charts': charts,
         'summary': summary,
@@ -74,33 +80,53 @@ def main() -> None:
     print(f"data.json: {len(results)} tests, {size_mb:.1f} MB, {days or 'all'} days{branch_info}")
 
 
-def _parse_days_arg() -> int:
+def _parse_days_arg() -> Optional[int]:
+    """Return number of days from CLI arg, or None (= all data) if absent/0."""
     if len(sys.argv) > 1:
         try:
-            return int(sys.argv[1])
+            value = int(sys.argv[1])
+            return value if value > 0 else None
         except ValueError:
-            print(f"Invalid argument: {sys.argv[1]}, using default 365")
-    return 365
+            print(f"Invalid argument: {sys.argv[1]}, using all data")
+    return None
 
 
 def parse_timestamp(raw: str) -> Optional[datetime]:
-    """Parse a timestamp string, stripping timezone info."""
+    """Parse a timestamp string to a naive-UTC datetime.
+
+    Accepts ISO 8601 with optional timezone offset (Z, +HH:MM, +HHMM, +HH).
+    Timezone-aware inputs are converted to UTC and stripped to naive so all
+    downstream comparisons and emissions share one convention.
+    """
     if not raw:
         return None
-
     s = raw.strip()
-
-    # Strip timezone suffix: +HH:MM, -HH:MM, +HHMM, -HHMM, or Z
+    # Normalize trailing 'Z' to '+00:00' so fromisoformat handles pre-3.11.
     if s.endswith('Z'):
-        s = s[:-1]
-    s = re.sub(r'[+-]\d{2}:?\d{2}$', '', s)
-
+        s = s[:-1] + '+00:00'
+    try:
+        dt = datetime.fromisoformat(s)
+        if dt.tzinfo is not None:
+            dt = dt.astimezone(timezone.utc).replace(tzinfo=None)
+        return dt
+    except ValueError:
+        pass
+    # Fall back to space-separated / date-only formats (treated as UTC).
     for fmt in TIMESTAMP_FORMATS:
         try:
             return datetime.strptime(s, fmt)
         except ValueError:
             continue
     return None
+
+
+def _utc_iso(dt: Optional[datetime]) -> Optional[str]:
+    """Emit a datetime as ISO 8601 UTC 'Z' string (naive UTC -> ...Z)."""
+    if dt is None:
+        return None
+    if dt.tzinfo is not None:
+        dt = dt.astimezone(timezone.utc).replace(tzinfo=None)
+    return dt.isoformat() + 'Z'
 
 
 def collect_raw_data(
@@ -119,8 +145,10 @@ def collect_raw_data(
                 result = _process_test_file(config_dir.name, json_file, cutoff_date)
                 if result:
                     results.append(result)
-            except Exception as e:
-                print(f"  Error processing {json_file.name}: {e}")
+            except (OSError, UnicodeDecodeError) as e:
+                print(f"  I/O error reading {json_file.name}: {e}")
+            except (json.JSONDecodeError, KeyError, TypeError, ValueError) as e:
+                print(f"  Bad data in {json_file.name}: {e}")
 
     return results
 
@@ -146,7 +174,7 @@ def _process_test_file(
     if not metrics:
         return None
 
-    ts_str = timestamp.isoformat() + 'Z' if timestamp else 'Unknown date'
+    ts_str = _utc_iso(timestamp) or 'Unknown date'
 
     return {
         'config': config_name,
@@ -252,13 +280,18 @@ def _group_by(
         })
 
     chart_data: List[Dict] = []
-    for points in groups.values():
-        chart_data.extend(downsample_daily(points))
+    for key in sorted(groups.keys()):
+        chart_data.extend(downsample_daily(groups[key]))
     return chart_data
 
 
 def downsample_daily(points: List[Dict]) -> List[Dict]:
-    """Keep at most 1 point per day per group (the latest one)."""
+    """Keep at most 1 point per day per group (the latest one).
+
+    For undated points (timestamp == 'Unknown date') all share the day key
+    'Unknown date'; the first encountered wins (we have no ordering signal —
+    intentionally not the latest, since 'latest' has no meaning here).
+    """
     if not points:
         return points
 
@@ -292,8 +325,8 @@ def build_summary(
 
     timestamps = [r['timestamp_obj'] for r in results if r.get('timestamp_obj')]
     time_range = {
-        'start': min(timestamps).isoformat() + 'Z' if timestamps else None,
-        'end': max(timestamps).isoformat() + 'Z' if timestamps else None,
+        'start': _utc_iso(min(timestamps)) if timestamps else None,
+        'end': _utc_iso(max(timestamps)) if timestamps else None,
     }
 
     return {

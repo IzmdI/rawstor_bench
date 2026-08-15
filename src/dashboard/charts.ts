@@ -4,9 +4,9 @@ import { getColor, getOperationStyle, safeClassName, formatYAxis, Tooltip } from
 
 // ---- WeakMap for dot data lookup (replaces __data__ any cast) ----
 
-const dotDataMap = new WeakMap<SVGCircleElement, ProcessedPoint>();
-
 const tooltip = new Tooltip();
+
+let CLIP_SEQ = 0;
 
 // ---- Process raw ChartDataPoint[] into ProcessedPoint[] ----
 
@@ -111,11 +111,13 @@ function drawAxes(
   timeRangeDays: number,
   metricType: MetricType,
 ): void {
-  const tickFormat = timeRangeDays < 15
+  // timeRangeDays === 0 means "All time" — multi-year span, skip HH:MM.
+  const shortRange = timeRangeDays > 0 && timeRangeDays < 15;
+  const tickFormat = shortRange
     ? d3.timeFormat('%H:%M %d.%m')
-    : d3.timeFormat('%d.%m');
+    : d3.timeFormat('%d.%m.%y');
 
-  const xAxis = d3.axisBottom(xScale).ticks(timeRangeDays < 15 ? 10 : 8).tickFormat(tickFormat as any);
+  const xAxis = d3.axisBottom(xScale).ticks(shortRange ? 10 : 8).tickFormat(tickFormat as any);
   xAxisGroup
     .call(xAxis as any)
     .call(g => g.select('.domain').attr('stroke', '#ddd'))
@@ -147,10 +149,16 @@ export interface CreateChartOptions {
 export function createChart(opts: CreateChartOptions): ChartState | null {
   const { container, title, data, metricType, timeRangeDays, visibleGroups, visibleOperations, colorMap } = opts;
 
+  // Per-chart dot lookup map (scoped to this chart instance; released when
+  // the chart DOM is replaced).
+  const dotDataMap = new WeakMap<SVGCircleElement, ProcessedPoint>();
+
   // Cleanup old zoom behavior before clearing DOM
   container.select('.chart-wrapper').on('.zoom', null);
   container.html('');
   tooltip.reset();
+  // Note: ordered-before-clear teardown (RAF cancel, zoom unbind) for the
+  // previous chart in this container is handled by the caller via state.destroy().
 
   if (!data.length) {
     container.append('p').attr('class', 'no-data').text('No data available');
@@ -179,10 +187,9 @@ export function createChart(opts: CreateChartOptions): ChartState | null {
     .attr('preserveAspectRatio', 'xMidYMid meet')
     .attr('role', 'img')
     .attr('aria-label', `${title} chart`);
-  svgEl.append('title').text(title);
 
   // Clip path for chart area
-  const clipId = `clip-${Math.random().toString(36).slice(2, 8)}`;
+  const clipId = `clip-${CLIP_SEQ++}`;
   svgEl.append('defs').append('clipPath')
     .attr('id', clipId)
     .attr('clipPathUnits', 'userSpaceOnUse')
@@ -336,6 +343,7 @@ export function createChart(opts: CreateChartOptions): ChartState | null {
       .attr('stroke-width', 1.5)
       .style('cursor', 'pointer')
       .style('opacity', isVisible ? '1' : '0')
+      .style('pointer-events', isVisible ? 'auto' : 'none')
       .style('transition', 'opacity 0.3s ease');
 
     dots.each(function(d) { dotDataMap.set(this, d); });
@@ -423,10 +431,20 @@ export function createChart(opts: CreateChartOptions): ChartState | null {
       for (const fullGroup of allFullGroups) {
         const isVisible = visibleGroups.has(fullGroup);
         const el = lineElements.get(fullGroup);
-        if (el) el.style('opacity', isVisible ? '1' : '0');
+        if (el) {
+          el.style('opacity', isVisible ? '1' : '0')
+            .style('pointer-events', isVisible ? 'auto' : 'none');
+        }
         const dots = dotElements.get(fullGroup);
-        if (dots) dots.style('opacity', isVisible ? '1' : '0');
+        if (dots) {
+          dots.style('opacity', isVisible ? '1' : '0')
+            .style('pointer-events', isVisible ? 'auto' : 'none');
+        }
       }
+    },
+    destroy() {
+      cancelAnimationFrame(rafId);
+      wrapper.on('.zoom', null);
     },
   };
 

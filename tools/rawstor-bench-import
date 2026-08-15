@@ -3,23 +3,110 @@
 import argparse
 import datetime
 import json
-from pathlib import Path
+import os
+import re
 import shutil
+import sys
+import tempfile
+from pathlib import Path
+
+
+_NAME_RE = re.compile(r'^[A-Za-z0-9._-]+$')
+_COMMIT_RE = re.compile(r'^[0-9a-f]{4,40}$')
+
+
+def _validate_name(value, field):
+    if not value or not _NAME_RE.fullmatch(value):
+        raise ValueError(
+            f"invalid {field}: {value!r} (allowed: letters, digits, '.', '_', '-', non-empty)"
+        )
+    return value
+
+
+def _validate_commit(value):
+    if not value or not _COMMIT_RE.fullmatch(value):
+        raise ValueError(
+            f"invalid --commit: {value!r} (expected 4-40 hex chars)"
+        )
+    return value
+
+
+def _validate_inputs(prefix, repo, name, branch, commit):
+    _validate_name(repo, '--repo')
+    _validate_name(name, '--name')
+    _validate_name(branch, '--branch')
+    _validate_commit(commit)
+
+
+def _atomic_copy(src, dest):
+    """Copy src to dest via temp file + atomic rename inside dest's dir."""
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.NamedTemporaryFile(
+        prefix=f".{dest.name}.",
+        dir=str(dest.parent),
+        delete=False,
+    ) as tmp:
+        tmp_name = Path(tmp.name)
+    try:
+        shutil.copyfile(src, tmp_name)
+        os.replace(tmp_name, dest)
+    finally:
+        if tmp_name.exists():
+            tmp_name.unlink(missing_ok=True)
+
+
+def _atomic_write_text(dest, text):
+    """Write string to dest via temp file + atomic rename."""
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.NamedTemporaryFile(
+        prefix=f".{dest.name}.",
+        dir=str(dest.parent),
+        delete=False,
+        mode='w',
+        encoding='utf-8',
+    ) as tmp:
+        tmp.write(text)
+        tmp_name = Path(tmp.name)
+    try:
+        os.replace(tmp_name, dest)
+    finally:
+        if tmp_name.exists():
+            tmp_name.unlink(missing_ok=True)
 
 
 def import_fio(
     prefix=None, repo=None, name=None, branch=None, commit=None, date=None,
     txt_file=None, json_file=None, **kwargs
 ):
-    dest_dir = Path(prefix) / "data" / "fio" / repo / name / commit[:2]
-    dest_dir.mkdir(parents=True, exist_ok=True)
+    _validate_inputs(prefix, repo, name, branch, commit)
 
-    meta_filename = f"{commit}.meta"
+    root = Path(prefix).resolve()
+    dest_dir = (root / "data" / "fio" / repo / name / commit[:2]).resolve()
+    try:
+        dest_dir.relative_to(root / "data" / "fio")
+    except ValueError:
+        raise ValueError(
+            f"resolved destination escapes data/fio/: {dest_dir}"
+        )
+
+    src_txt = Path(txt_file)
+    src_json = Path(json_file)
+    if not src_txt.is_file():
+        raise FileNotFoundError(f"txt file not found: {src_txt}")
+    if not src_json.is_file():
+        raise FileNotFoundError(f"json file not found: {src_json}")
+
+    # Match data-processor/compile convention: commit_sha = json stem.
+    # importer is invoked with --commit which must equal json stem.
+    json_stem = src_json.stem
+    if json_stem != commit:
+        raise ValueError(
+            f"--commit {commit!r} does not match json file stem {json_stem!r}"
+        )
+
     txt_filename = f"{commit}.txt"
     json_filename = f"{commit}.json"
-    meta_dest = dest_dir / meta_filename
-    txt_dest = dest_dir / txt_filename
-    json_dest = dest_dir / json_filename
+    meta_filename = f"{commit}.meta"
 
     meta = {
         "repo": repo,
@@ -33,10 +120,16 @@ def import_fio(
             "json": json_filename,
         },
     }
-    with open(meta_dest, "w") as f:
-        json.dump(meta, f, indent=4)
-    shutil.copy(txt_file, txt_dest)
-    shutil.copy(json_file, json_dest)
+
+    # Write data files first; .meta last so a partial import never leaves
+    # compile/data-processor with a .meta pointing at missing siblings.
+    txt_dest = dest_dir / txt_filename
+    json_dest = dest_dir / json_filename
+    meta_dest = dest_dir / meta_filename
+
+    _atomic_copy(src_txt, txt_dest)
+    _atomic_copy(src_json, json_dest)
+    _atomic_write_text(meta_dest, json.dumps(meta, indent=4))
 
 
 def main():
@@ -56,8 +149,12 @@ def main():
     import_parser.add_argument("json_file", help="fio json output file")
     args = parser.parse_args()
 
-    if args.format == "fio":
-        import_fio(**vars(args))
+    try:
+        if args.format == "fio":
+            import_fio(**vars(args))
+    except (ValueError, FileNotFoundError) as e:
+        print(f"Import failed: {e}", file=sys.stderr)
+        sys.exit(1)
 
     print("Imported successfully")
 

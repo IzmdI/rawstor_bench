@@ -7,6 +7,10 @@ from pathlib import Path
 import shutil
 
 
+# Maximum commits shown per test name in the repo README summary table.
+REPO_TABLE_COMMIT_LIMIT = 10
+
+
 def get_commit_txt(repo_name, commit_sha):
     commit_url = \
         f"https://github.com/rawstor/{repo_name}/commit/" \
@@ -33,15 +37,31 @@ def read_fio_json(meta_path, meta):
 def load_meta(meta_path):
     with open(meta_path, 'r') as f:
         meta = json.load(f)
-        meta["date"] = datetime.datetime.fromisoformat(meta["date"])
+        date_raw = meta.get("date")
+        if not date_raw:
+            raise ValueError(f"missing 'date' in {meta_path}")
+        data_block = meta.get("data") or {}
+        if not data_block.get("txt") or not data_block.get("json"):
+            raise ValueError(f"missing/invalid 'data.{txt,json}' in {meta_path}")
+        meta["date"] = datetime.datetime.fromisoformat(date_raw)
     return meta
 
 
 def find_job(fio, job_name):
-    for job in fio["jobs"]:
-        if job["job options"]["name"] == job_name:
+    jobs = fio.get("jobs") or []
+    for job in jobs:
+        opts = job.get("job options") or {}
+        if opts.get("name") == job_name:
             return job
     return None
+
+
+def _job_options(fio):
+    """Return first job's options dict, or empty dict if missing."""
+    jobs = fio.get("jobs") or []
+    if not jobs:
+        return {}
+    return jobs[0].get("job options") or {}
 
 
 def compile_commit_md(
@@ -51,26 +71,61 @@ def compile_commit_md(
 
     dest_abspath.mkdir(parents=True, exist_ok=True)
 
-    commit_sha = meta["commit"]
+    commit_sha = meta_path.stem
 
     url = f"{dest_path}/{commit_sha}.md"
     filename = dest_abspath / f"{commit_sha}.md"
-    job = fio["jobs"][0]["job options"]
+    job = _job_options(fio)
     with open(filename, "w") as commit_md:
         commit_md.write("[&lt; back](..)\n\n")
         commit_md.write(f"# {name}\n\n")
-        commit_md.write(f"{get_date_txt(meta["date"])}\n\n")
-        commit_md.write(f"{meta["branch"]}\n\n")
+        commit_md.write(f"{get_date_txt(meta['date'])}\n\n")
+        commit_md.write(f"{meta['branch']}\n\n")
         commit_md.write(f"{get_commit_txt(repo_name, commit_sha)}\n\n")
-        commit_md.write(f"rw = {job["rw"]}, ")
-        commit_md.write(f"bs = {job["bs"]}, ")
-        commit_md.write(f"iodepth = {job["iodepth"]}, ")
-        commit_md.write(f"numjobs = {job["numjobs"]}\n\n")
+        commit_md.write(f"rw = {job.get('rw', '?')}, ")
+        commit_md.write(f"bs = {job.get('bs', '?')}, ")
+        commit_md.write(f"iodepth = {job.get('iodepth', '?')}, ")
+        commit_md.write(f"numjobs = {job.get('numjobs', '?')}\n\n")
         commit_md.write("```\n")
         commit_md.write(fio_txt)
         commit_md.write("```\n")
 
     return url
+
+
+def _fmt_metric(value):
+    """Format a numeric metric, '-' for None."""
+    if value is None:
+        return "-"
+    try:
+        return f"{float(value):.2f}"
+    except (TypeError, ValueError):
+        return "-"
+
+
+def _job_section(job, direction):
+    """Return read/write section dict, or None."""
+    section = job.get(direction) if job else None
+    return section if isinstance(section, dict) else None
+
+
+def _job_iops(job, direction):
+    section = _job_section(job, direction)
+    return section.get('iops') if section else None
+
+
+def _job_lat_mean(job, direction):
+    """Latency mean in ms (matches data-processor convention)."""
+    section = _job_section(job, direction)
+    if not section:
+        return None
+    lat_ns = section.get('lat_ns')
+    if isinstance(lat_ns, dict):
+        mean = lat_ns.get('mean')
+        if mean is None:
+            return None
+        return float(mean) / 1_000_000
+    return None
 
 
 def compile_repo_md(dest_abspath, dest_path, repo_name, repo):
@@ -82,14 +137,20 @@ def compile_repo_md(dest_abspath, dest_path, repo_name, repo):
         repo_md.write(f"# [&lt;](..) {repo_name} tests\n\n")
         for name, metas in repo:
             fios = []
-            for meta_path, meta in metas[:10]:
-                fios.append((meta_path, meta, read_fio_json(meta_path, meta)))
+            for meta_path, meta in metas[:REPO_TABLE_COMMIT_LIMIT]:
+                try:
+                    fios.append((meta_path, meta, read_fio_json(meta_path, meta)))
+                except (OSError, json.JSONDecodeError, KeyError) as e:
+                    print(f"  Skipping {meta_path}: {e}")
+                    continue
 
             job_names = set()
             for meta_path, meta, fio in fios:
-                for job in fio["jobs"]:
-                    job_names.add(job["job options"]["name"])
-            job_names = sorted(list(job_names))
+                for job in fio.get("jobs", []):
+                    opts = job.get("job options") or {}
+                    if opts.get("name"):
+                        job_names.add(opts["name"])
+            job_names = sorted(job_names)
 
             repo_md.write(f"## {name}\n\n")
 
@@ -126,22 +187,26 @@ def compile_repo_md(dest_abspath, dest_path, repo_name, repo):
             for meta_path, meta, fio in fios:
                 commmit_md_dest_path = f"{name}"
                 commmit_md_dest_abspath = dest_abspath / commmit_md_dest_path
-                commmit_md_url = compile_commit_md(
-                    commmit_md_dest_abspath,
-                    commmit_md_dest_path,
-                    repo_name,
-                    meta_path,
-                    meta,
-                    fio,
-                    name,
-                )
+                try:
+                    commmit_md_url = compile_commit_md(
+                        commmit_md_dest_abspath,
+                        commmit_md_dest_path,
+                        repo_name,
+                        meta_path,
+                        meta,
+                        fio,
+                        name,
+                    )
+                except (OSError, KeyError, json.JSONDecodeError) as e:
+                    print(f"  Skipping commit md {meta_path}: {e}")
+                    continue
 
-                commit_sha = meta["commit"]
+                commit_sha = meta_path.stem
 
                 repo_md.write(
                     f"| "
-                    f"[{get_date_txt(meta["date"])}]({commmit_md_url}) | "
-                    f"{meta["branch"]} | "
+                    f"[{get_date_txt(meta['date'])}]({commmit_md_url}) | "
+                    f"{meta['branch']} | "
                     f"{get_commit_txt(repo_name, commit_sha)} | "
                 )
                 for job_name in job_names:
@@ -150,10 +215,10 @@ def compile_repo_md(dest_abspath, dest_path, repo_name, repo):
                         repo_md.write(" |  |  |  |")
                     else:
                         repo_md.write(
-                            f"{job["read"]["iops_mean"]:.2f} | "
-                            f"{job["read"]["lat_ns"]["mean"]:.2f} | "
-                            f"{job["write"]["iops_mean"]:.2f} | "
-                            f"{job["write"]["lat_ns"]["mean"]:.2f} |"
+                            f"{_fmt_metric(_job_iops(job, 'read'))} | "
+                            f"{_fmt_metric(_job_lat_mean(job, 'read'))} | "
+                            f"{_fmt_metric(_job_iops(job, 'write'))} | "
+                            f"{_fmt_metric(_job_lat_mean(job, 'write'))} |"
                         )
                 repo_md.write("\n")
             repo_md.write("\n")
@@ -178,13 +243,37 @@ def compile_index_md(dest_abspath, repos):
             index_md.write(f"[{repo_name} tests]({repo_md_url})\n")
 
 
+def _clean_compiled(dest_abspath):
+    """Remove previously compiled markdown while preserving dashboard assets
+    and hand-maintained files (e.g. index.md). Does not nuke dest_abspath."""
+    if not dest_abspath.exists():
+        return
+    for entry in dest_abspath.iterdir():
+        if entry.is_dir():
+            for child in entry.iterdir():
+                if child.is_dir() and child.name == "dashboard":
+                    continue
+                if child.is_dir():
+                    # Test-name subdir: regenerated below.
+                    shutil.rmtree(child, ignore_errors=True)
+                elif child.is_file() and child.suffix == ".md" \
+                        and child.name != "index.md":
+                    child.unlink()
+        elif entry.is_file() and entry.suffix == ".md":
+            entry.unlink()
+
+
 def compile_fio(prefix=None, **kwargs):
     prefix = Path(prefix)
     src_dir = prefix / "data" / "fio"
 
     metas = []
     for meta_path in src_dir.glob("**/*.meta"):
-        metas.append((meta_path, load_meta(meta_path)))
+        try:
+            metas.append((meta_path, load_meta(meta_path)))
+        except (OSError, json.JSONDecodeError, ValueError, KeyError) as e:
+            print(f"  Skipping {meta_path}: {e}")
+            continue
 
     metas.sort(key=lambda meta: meta[1]["date"], reverse=True)
 
@@ -195,7 +284,7 @@ def compile_fio(prefix=None, **kwargs):
     repos = sorted(list(repos.items()))
 
     dest_abspath = Path(prefix) / "docs" / "fio"
-    shutil.rmtree(dest_abspath, ignore_errors=True)
+    _clean_compiled(dest_abspath)
     compile_index_md(dest_abspath, repos)
 
 

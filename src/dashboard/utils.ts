@@ -49,14 +49,15 @@ export function safeClassName(name: string): string {
 // ---- Date formatting ----
 
 export function formatDate(date: Date, timeRangeDays: number): string {
-  if (timeRangeDays < 15) {
+  // timeRangeDays === 0 means "All time" — multi-year span, skip HH:MM.
+  if (timeRangeDays > 0 && timeRangeDays < 15) {
     return (
       date.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false }) +
       ' ' +
       date.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit' })
     );
   }
-  return date.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit' });
+  return date.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: '2-digit' });
 }
 
 // ---- Metric value formatting ----
@@ -81,6 +82,8 @@ export function formatYAxis(value: number, metricType: MetricType): string {
     if (value >= 1_000) return (value / 1_000).toFixed(1) + 'k';
     return value.toFixed(0);
   }
+  // latency in ms — match formatMetricValue convention (>=1000 -> seconds)
+  if (value >= 1000) return (value / 1000).toFixed(1) + 's';
   return value >= 1 ? value.toFixed(1) : value.toFixed(3);
 }
 
@@ -105,7 +108,7 @@ export class Tooltip {
 
     const valueStr = formatMetricValue(data.value, metricType);
     const dateStr = formatDate(data.timestamp, timeRangeDays);
-    const branchShort = data.branch.replace('refs/heads/', '');
+    const branchShort = formatBranchName(data.branch);
     const commitShort = data.commit_sha.substring(0, 8);
 
     el.innerHTML =

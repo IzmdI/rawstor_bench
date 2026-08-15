@@ -9,14 +9,28 @@ on:
       - 'tools/**'
       - 'src/dashboard/**'
       - 'package.json'
+      - 'package-lock.json'
       - 'tsconfig.json'
-      - 'scripts/build.js'
+      - 'scripts/**'
+      - '.github/workflows/**'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'data/**'
+      - 'docs/**'
+      - 'tools/**'
+      - 'src/dashboard/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'tsconfig.json'
+      - 'scripts/**'
+      - '.github/workflows/**'
   workflow_dispatch:
     inputs:
       days:
         description: 'Time range in days'
         required: false
-        default: '30'
+        default: 'all'
         type: choice
         options:
           - '2'
@@ -37,7 +51,43 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # PR-only validation (no deploy).
+  validate:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'npm'
+      - name: Typecheck + build
+        run: |
+          npm ci
+          npm run typecheck
+          npm run build
+
+  # Smoke-test rawstor-bench-compile (Python 3.10 — catches syntax/regression
+  # errors that would otherwise never surface in CI because the deploy job does
+  # not run compile).
+  smoke-compile:
+    runs-on: ubuntu-latest
+    if: github.event_name != 'workflow_dispatch'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - name: Smoke-test rawstor-bench-compile
+        run: python3 tools/rawstor-bench-compile --prefix . fio
+
   build-and-deploy:
+    needs: [smoke-compile]
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     environment:
       name: github-pages
@@ -48,7 +98,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Setup Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: '3.10'
 
@@ -58,14 +108,14 @@ jobs:
           if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
             DAYS="${{ github.event.inputs.days }}"
           else
-            DAYS="30"
+            DAYS="all"
           fi
-          
+
           if [ "$DAYS" == "all" ]; then
             DAYS="0"
           fi
-          
-          echo "days=$DAYS" >> $GITHUB_OUTPUT
+
+          echo "days=$DAYS" >> "$GITHUB_OUTPUT"
           echo "Using time range: $DAYS days"
 
       - name: Process data
@@ -74,10 +124,11 @@ jobs:
         run: |
           echo "Processing data for $DAYS days"
           python3 tools/data-processor "$DAYS"
-          echo "Checking if data.json was created:"
-          ls -la docs/fio/librawstor/dashboard/data.json || echo "File not found"
-          echo "Contents of dashboard directory:"
-          ls -la docs/fio/librawstor/dashboard/
+          if [ ! -f docs/fio/librawstor/dashboard/data.json ]; then
+            echo "ERROR: data.json was not produced" >&2
+            exit 1
+          fi
+          ls -la docs/fio/librawstor/dashboard/data.json
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
