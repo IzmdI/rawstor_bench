@@ -10,7 +10,7 @@ class DashboardApp {
   private charts = new Map<string, ReturnType<typeof createChart>>();
 
   private timeRange = 30;
-  private branch = 'all';
+  private branch = DashboardApp.DEFAULT_BRANCH;
   private operation: OperationFilter = 'both';
   private colorMap = new Map<string, number>();
   private groupColorMap = new Map<string, string>();
@@ -24,6 +24,7 @@ class DashboardApp {
   private generation = 0;
 
   private static readonly ALLOWED_DAYS = new Set([2, 7, 15, 30, 90, 365, 0]);
+  private static readonly DEFAULT_BRANCH = 'refs/heads/main';
 
   async init() {
     if (this.loading) return;
@@ -68,7 +69,7 @@ class DashboardApp {
     const p = new URLSearchParams(window.location.search);
     const daysRaw = parseInt(p.get('days') ?? '30', 10);
     this.timeRange = DashboardApp.ALLOWED_DAYS.has(daysRaw) ? daysRaw : 30;
-    this.branch = p.get('branch') ?? 'all';
+    this.branch = p.get('branch') ?? DashboardApp.DEFAULT_BRANCH;
 
     const op = p.get('op') ?? '';
     this.operation = asOperationFilter(op) ?? 'both';
@@ -76,18 +77,19 @@ class DashboardApp {
 
   /** Drop branch if it is not present (or normalizes to) one of the loaded branches. */
   private normalizeBranch() {
-    if (this.branch === 'all') return;
     if (!this.allBranches.length) return;
     const matches = (b: string) => b === this.branch || formatBranchName(b) === formatBranchName(this.branch);
     if (!this.allBranches.some(matches)) {
-      this.branch = 'all';
+      this.branch = this.allBranches.includes(DashboardApp.DEFAULT_BRANCH)
+        ? DashboardApp.DEFAULT_BRANCH
+        : this.allBranches[0];
     }
   }
 
   private writeUrlParams() {
     const p = new URLSearchParams();
     if (this.timeRange !== 30) p.set('days', String(this.timeRange));
-    if (this.branch !== 'all') p.set('branch', this.branch);
+    if (this.branch !== DashboardApp.DEFAULT_BRANCH) p.set('branch', this.branch);
     if (this.operation !== 'both') p.set('op', this.operation);
     const qs = p.toString();
     try {
@@ -139,15 +141,12 @@ class DashboardApp {
     const list = document.getElementById('branchList') as HTMLDataListElement | null;
     if (!input || !list) return;
     list.innerHTML = '';
-    const all = document.createElement('option');
-    all.value = 'All Branches';
-    list.appendChild(all);
     for (const b of this.allBranches) {
       const opt = document.createElement('option');
       opt.value = b;
       list.appendChild(opt);
     }
-    input.value = this.branch === 'all' ? '' : this.branch;
+    input.value = this.branch;
   }
 
   // ---- Charts ----
@@ -189,7 +188,7 @@ class DashboardApp {
       </div>
       <div class="control-group">
         <label for="branchInput">Branch</label>
-        <input id="branchInput" list="branchList" placeholder="All Branches" autocomplete="off" spellcheck="false">
+        <input id="branchInput" list="branchList" autocomplete="off" spellcheck="false">
         <datalist id="branchList"></datalist>
       </div>
       <fieldset class="control-group">
@@ -285,9 +284,7 @@ class DashboardApp {
       const points2 = this.data.charts[cfg.keys[1]] ?? [];
       const cutoff = this.timeRange > 0 ? new Date(Date.now() - this.timeRange * 86400000) : null;
       const filterByTime = (pts: typeof points1) => cutoff ? pts.filter(p => new Date(p.timestamp) >= cutoff) : pts;
-      const branchFiltered = this.branch === 'all'
-        ? [...filterByTime(points1), ...filterByTime(points2)]
-        : [...filterByTime(points1).filter(p => p.branch === this.branch), ...filterByTime(points2).filter(p => p.branch === this.branch)];
+      const branchFiltered = [...filterByTime(points1).filter(p => p.branch === this.branch), ...filterByTime(points2).filter(p => p.branch === this.branch)];
 
       const chart = createChart({
         container: d3.select(container) as unknown as d3.Selection<HTMLDivElement, unknown, HTMLElement, unknown>,
@@ -443,7 +440,7 @@ class DashboardApp {
 
     const s = this.data.summary;
     const tr = this.timeRange === 0 ? 'All time' : `Last ${this.timeRange} days`;
-    const br = this.branch === 'all' ? 'All branches' : formatBranchName(this.branch);
+    const br = formatBranchName(this.branch);
     const branchCount = `${s.total_branches} branches`;
     const generated = this.data.generated_at
       ? `Updated: ${new Date(this.data.generated_at).toLocaleDateString()}`
@@ -475,8 +472,8 @@ class DashboardApp {
     document.getElementById('branchInput')?.addEventListener('change', (e) => {
       const input = e.target as HTMLInputElement;
       const raw = input.value.trim();
-      this.branch = raw !== '' && raw !== 'All Branches' && this.allBranches.includes(raw) ? raw : 'all';
-      input.value = this.branch === 'all' ? '' : this.branch;
+      this.branch = this.allBranches.includes(raw) ? raw : DashboardApp.DEFAULT_BRANCH;
+      input.value = this.branch;
       this.writeUrlParams();
       this.buildCharts();
       this.renderLegend();

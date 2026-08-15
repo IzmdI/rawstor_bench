@@ -1,8 +1,23 @@
 import type { DashboardData } from './types';
 import { CHART_KEYS_BY_CONFIG } from './types';
 
+declare global {
+  interface Window {
+    /** In-flight data.json fetch started by the inline preload script in index.html. */
+    __rawstorDataPreload?: Promise<Response>;
+  }
+}
+
 export async function loadData(url = './data.json', signal?: AbortSignal): Promise<DashboardData> {
-  const res = await fetch(url, { signal });
+  let res: Response;
+  const preloaded = window.__rawstorDataPreload;
+  if (preloaded) {
+    // Consume once: subsequent calls (Refresh) do their own abortable fetch.
+    window.__rawstorDataPreload = undefined;
+    res = await preloaded;
+  } else {
+    res = await fetch(url, { signal });
+  }
   if (!res.ok) throw new Error(`Failed to load data: ${res.status}`);
   const data: DashboardData = await res.json();
   validate(data);
