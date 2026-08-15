@@ -23,7 +23,6 @@ export interface DashboardSummary {
   total_tests: number;
   tests_without_date: number;
   total_configurations: number;
-  total_branches_all?: number;
   total_branches: number;
   configurations: string[];
   branches: string[];
@@ -113,11 +112,4 @@ export const CHART_KEYS_BY_CONFIG: string[] = [
   'iops_write_by_config',
   'latency_read_by_config',
   'latency_write_by_config',
-];
-
-export const CHART_KEYS_BY_BRANCH: string[] = [
-  'iops_read_by_branch',
-  'iops_write_by_branch',
-  'latency_read_by_branch',
-  'latency_write_by_branch',
 ];

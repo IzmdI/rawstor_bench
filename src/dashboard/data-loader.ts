@@ -1,5 +1,5 @@
 import type { DashboardData } from './types';
-import { CHART_KEYS_BY_CONFIG, CHART_KEYS_BY_BRANCH } from './types';
+import { CHART_KEYS_BY_CONFIG } from './types';
 
 export async function loadData(url = './data.json', signal?: AbortSignal): Promise<DashboardData> {
   const res = await fetch(url, { signal });
@@ -32,7 +32,7 @@ function validate(data: unknown): asserts data is DashboardData {
   if (!d.charts || typeof d.charts !== 'object') throw new Error('Missing charts');
 
   const charts = d.charts as Record<string, unknown[]>;
-  const expectedKeys = new Set([...CHART_KEYS_BY_CONFIG, ...CHART_KEYS_BY_BRANCH]);
+  const expectedKeys = new Set(CHART_KEYS_BY_CONFIG);
   const actualKeys = new Set(Object.keys(charts));
   const hasExpected = [...expectedKeys].some(k => actualKeys.has(k));
   if (!hasExpected) throw new Error('No expected chart keys found in data');

@@ -1,6 +1,6 @@
 import * as d3 from 'd3';
-import type { DashboardData, ViewMode, OperationFilter, MetricType } from './types';
-import { CHART_KEYS_BY_CONFIG, CHART_KEYS_BY_BRANCH, asViewMode, asOperationFilter } from './types';
+import type { DashboardData, ViewMode, OperationFilter, MetricType, ChartDataPoint } from './types';
+import { CHART_KEYS_BY_CONFIG, asViewMode, asOperationFilter } from './types';
 import { loadData } from './data-loader';
 import { createChart, type CreateChartOptions } from './charts';
 import { formatBranchName, getColor } from './utils';
@@ -128,14 +128,16 @@ class DashboardApp {
   private extractMeta() {
     if (!this.data) return;
 
-    // Derive branches from current view mode's charts for consistency
-    const keys = this.viewMode === 'config' ? CHART_KEYS_BY_CONFIG : CHART_KEYS_BY_BRANCH;
+    // Derive groups/branches from the single config-grouped chart set.
+    // For branch-view the group key is taken from each point's `branch`
+    // field (not its stored `group`, which is always the config).
+    const keys = CHART_KEYS_BY_CONFIG;
     const branchSet = new Set<string>();
     const groupSet = new Set<string>();
     for (const key of keys) {
       for (const pt of this.data.charts[key] ?? []) {
         branchSet.add(pt.branch);
-        groupSet.add(pt.group);
+        groupSet.add(this.viewMode === 'config' ? pt.config : pt.branch);
       }
     }
     this.allBranches = [...branchSet].sort((a, b) => {
@@ -283,7 +285,7 @@ class DashboardApp {
     this.charts.clear();
     grid.innerHTML = '';
 
-    const keys = this.viewMode === 'config' ? CHART_KEYS_BY_CONFIG : CHART_KEYS_BY_BRANCH;
+    const keys = CHART_KEYS_BY_CONFIG;
 
     const opSet = this.operation === 'both' ? new Set(['read', 'write']) : new Set([this.operation]);
 
@@ -306,10 +308,16 @@ class DashboardApp {
         ? [...filterByTime(points1), ...filterByTime(points2)]
         : [...filterByTime(points1).filter(p => p.branch === this.branch), ...filterByTime(points2).filter(p => p.branch === this.branch)];
 
+      // Points stored in data.json are grouped by config (`group === config`).
+      // For branch-view rebind the group key to each point's `branch` field.
+      const remap = (p: ChartDataPoint): ChartDataPoint =>
+        this.viewMode === 'config' ? p : { ...p, group: p.branch };
+      const chartData = branchFiltered.map(remap);
+
       const chart = createChart({
         container: d3.select(container) as unknown as d3.Selection<HTMLDivElement, unknown, HTMLElement, unknown>,
         title: cfg.title,
-        data: branchFiltered,
+        data: chartData,
         metricType: cfg.metricType,
         timeRangeDays: this.timeRange,
         visibleGroups: new Set(this.allGroups),
@@ -463,9 +471,7 @@ class DashboardApp {
     const s = this.data.summary;
     const tr = this.timeRange === 0 ? 'All time' : `Last ${this.timeRange} days`;
     const br = this.branch === 'all' ? 'All branches' : formatBranchName(this.branch);
-    const branchCount = s.total_branches_all && s.total_branches_all > s.total_branches
-      ? `${s.total_branches} of ${s.total_branches_all} branches`
-      : `${s.total_branches} branches`;
+    const branchCount = `${s.total_branches} branches`;
     const viewLabel = this.viewMode === 'branch' ? 'View: Branches' : 'View: Configs';
     const generated = this.data.generated_at
       ? `Updated: ${new Date(this.data.generated_at).toLocaleDateString()}`

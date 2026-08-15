@@ -16,10 +16,9 @@ import json
 import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 METRICS = ['iops_read', 'iops_write', 'latency_read', 'latency_write']
-MAX_BRANCHES = 32
 TIMESTAMP_FORMATS = [
     '%Y-%m-%dT%H:%M:%S.%f',
     '%Y-%m-%dT%H:%M:%S',
@@ -55,9 +54,8 @@ def main() -> None:
         results = collect_raw_data(data_path)
         applied = False
 
-    top_branches = _get_top_branches(results, MAX_BRANCHES)
-    charts = prepare_charts_data(results, top_branches)
-    summary = build_summary(results, charts, cutoff_date, top_branches)
+    charts = prepare_charts_data(results)
+    summary = build_summary(results, charts, cutoff_date)
 
     output = {
         'generated_at': _utc_iso(datetime.now(tz=timezone.utc)),
@@ -74,10 +72,7 @@ def main() -> None:
         json.dump(output, f, indent=2, ensure_ascii=False)
 
     size_mb = output_path.stat().st_size / (1024 * 1024)
-    branch_info = ''
-    if top_branches:
-        branch_info = f', {len(top_branches)} of {summary["total_branches_all"]} branches'
-    print(f"data.json: {len(results)} tests, {size_mb:.1f} MB, {days or 'all'} days{branch_info}")
+    print(f"data.json: {len(results)} tests, {size_mb:.1f} MB, {days or 'all'} days")
 
 
 def _parse_days_arg() -> Optional[int]:
@@ -224,8 +219,12 @@ def extract_fio_metrics(test_data: Dict[str, Any]) -> Dict[str, float]:
     return metrics
 
 
-def prepare_charts_data(results: List[Dict[str, Any]], top_branches: Optional[List[str]] = None) -> Dict[str, List[Dict]]:
-    """Build chart arrays grouped by config and branch with daily downsampling."""
+def prepare_charts_data(results: List[Dict[str, Any]]) -> Dict[str, List[Dict]]:
+    """Build chart arrays grouped by config with daily downsampling.
+
+    Each point carries both ``branch`` and ``config``; the dashboard derives
+    branch-view grouping client-side, so only one chart set is needed.
+    """
     dated = [r for r in results if r.get('timestamp_obj')]
     undated = [r for r in results if not r.get('timestamp_obj')]
     dated.sort(key=lambda r: r['timestamp_obj'])
@@ -233,41 +232,21 @@ def prepare_charts_data(results: List[Dict[str, Any]], top_branches: Optional[Li
     charts: Dict[str, List[Dict]] = {}
     for metric in METRICS:
         charts[f'{metric}_by_config'] = _group_by(dated + undated, metric, 'config')
-        charts[f'{metric}_by_branch'] = _group_by(dated + undated, metric, 'branch', top_branches)
     return charts
-
-
-def _get_top_branches(results: List[Dict[str, Any]], limit: int) -> Optional[List[str]]:
-    """Get the most recently updated branches, limited to `limit`."""
-    latest_by_branch: Dict[str, datetime] = {}
-    for r in results:
-        branch = r['branch']
-        ts = r.get('timestamp_obj')
-        if ts and (branch not in latest_by_branch or ts > latest_by_branch[branch]):
-            latest_by_branch[branch] = ts
-
-    sorted_branches = sorted(latest_by_branch.keys(), key=lambda b: latest_by_branch[b], reverse=True)
-    if len(sorted_branches) <= limit:
-        return None
-    return sorted_branches[:limit]
 
 
 def _group_by(
     results: List[Dict[str, Any]],
     metric: str,
     key_field: str,
-    allowed_keys: Optional[List[str]] = None,
 ) -> List[Dict]:
     """Group results by a field, extract chart points, and downsample daily."""
-    allowed_set = set(allowed_keys) if allowed_keys else None
     op = 'read' if metric.endswith('_read') else 'write'
     groups: Dict[str, List[Dict]] = {}
     for r in results:
         if metric not in r or r[metric] is None:
             continue
         key = r[key_field]
-        if allowed_set and key not in allowed_set:
-            continue
         groups.setdefault(key, []).append({
             'group': key,
             'timestamp': r['timestamp'],
@@ -286,21 +265,28 @@ def _group_by(
 
 
 def downsample_daily(points: List[Dict]) -> List[Dict]:
-    """Keep at most 1 point per day per group (the latest one).
+    """Keep at most 1 point per (day, branch) per group (the latest one).
+
+    Bucketing by branch too is necessary so that ``_by_config`` charts retain
+    each branch's run on a given config-day. Without it, runs of different
+    branches sharing a config on the same day compete and only the
+    latest-timestamp branch survives — filtering the chart to a single branch
+    (e.g. ``main``) then yields zero points even though that branch ran.
 
     For undated points (timestamp == 'Unknown date') all share the day key
-    'Unknown date'; the first encountered wins (we have no ordering signal —
-    intentionally not the latest, since 'latest' has no meaning here).
+    'Unknown date'; the first encountered wins per branch (we have no ordering
+    signal — intentionally not the latest, since 'latest' has no meaning here).
     """
     if not points:
         return points
 
-    daily: Dict[str, Dict] = {}
+    daily: Dict[Tuple[str, str], Dict] = {}
     for p in points:
         ts = p['timestamp']
         day_key = 'Unknown date' if ts == 'Unknown date' else ts[:10]
-        if day_key not in daily or ts > daily[day_key]['timestamp']:
-            daily[day_key] = p
+        bucket = (day_key, p.get('branch', ''))
+        if bucket not in daily or ts > daily[bucket]['timestamp']:
+            daily[bucket] = p
 
     return sorted(
         daily.values(),
@@ -312,16 +298,10 @@ def build_summary(
     results: List[Dict[str, Any]],
     charts: Dict[str, List[Dict]],
     cutoff_date: datetime,
-    top_branches: Optional[List[str]] = None,
 ) -> Dict[str, Any]:
     """Build summary metadata for the dashboard."""
     configs = sorted({r['config'] for r in results})
-    all_branches = sorted({r['branch'] for r in results})
-
-    if top_branches is not None:
-        branches = sorted(set(all_branches) & set(top_branches))
-    else:
-        branches = all_branches
+    branches = sorted({r['branch'] for r in results})
 
     timestamps = [r['timestamp_obj'] for r in results if r.get('timestamp_obj')]
     time_range = {
@@ -333,7 +313,6 @@ def build_summary(
         'total_tests': len(results),
         'tests_without_date': sum(1 for r in results if not r.get('timestamp_obj')),
         'total_configurations': len(configs),
-        'total_branches_all': len(all_branches),
         'total_branches': len(branches),
         'configurations': configs,
         'branches': branches,
