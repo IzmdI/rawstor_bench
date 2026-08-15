@@ -1,6 +1,6 @@
 import * as d3 from 'd3';
-import type { DashboardData, ViewMode, OperationFilter, MetricType, ChartDataPoint } from './types';
-import { CHART_KEYS_BY_CONFIG, asViewMode, asOperationFilter } from './types';
+import type { DashboardData, OperationFilter, MetricType } from './types';
+import { CHART_KEYS_BY_CONFIG, asOperationFilter } from './types';
 import { loadData } from './data-loader';
 import { createChart, type CreateChartOptions } from './charts';
 import { formatBranchName, getColor } from './utils';
@@ -9,7 +9,6 @@ class DashboardApp {
   private data: DashboardData | null = null;
   private charts = new Map<string, ReturnType<typeof createChart>>();
 
-  private viewMode: ViewMode = 'config';
   private timeRange = 30;
   private branch = 'all';
   private operation: OperationFilter = 'both';
@@ -71,9 +70,6 @@ class DashboardApp {
     this.timeRange = DashboardApp.ALLOWED_DAYS.has(daysRaw) ? daysRaw : 30;
     this.branch = p.get('branch') ?? 'all';
 
-    const viewMode = asViewMode(p.get('view') ?? '');
-    this.viewMode = viewMode ?? 'config';
-
     const op = p.get('op') ?? '';
     this.operation = asOperationFilter(op) ?? 'both';
   }
@@ -92,7 +88,6 @@ class DashboardApp {
     const p = new URLSearchParams();
     if (this.timeRange !== 30) p.set('days', String(this.timeRange));
     if (this.branch !== 'all') p.set('branch', this.branch);
-    if (this.viewMode !== 'config') p.set('view', this.viewMode);
     if (this.operation !== 'both') p.set('op', this.operation);
     const qs = p.toString();
     try {
@@ -105,14 +100,6 @@ class DashboardApp {
   private syncControlsFromState() {
     const timeEl = document.getElementById('timeRange') as HTMLSelectElement | null;
     if (timeEl) timeEl.value = String(this.timeRange);
-
-    const viewBtns = document.querySelectorAll('.view-btn');
-    viewBtns.forEach(btn => {
-      const isActive = (btn as HTMLElement).dataset.view === this.viewMode;
-      btn.classList.toggle('active', isActive);
-      btn.setAttribute('aria-checked', String(isActive));
-      btn.setAttribute('tabindex', isActive ? '0' : '-1');
-    });
 
     const opBtns = document.querySelectorAll('.op-btn');
     opBtns.forEach(btn => {
@@ -128,16 +115,13 @@ class DashboardApp {
   private extractMeta() {
     if (!this.data) return;
 
-    // Derive groups/branches from the single config-grouped chart set.
-    // For branch-view the group key is taken from each point's `branch`
-    // field (not its stored `group`, which is always the config).
-    const keys = CHART_KEYS_BY_CONFIG;
+    // Derive groups/branches from the config-grouped chart set.
     const branchSet = new Set<string>();
     const groupSet = new Set<string>();
-    for (const key of keys) {
+    for (const key of CHART_KEYS_BY_CONFIG) {
       for (const pt of this.data.charts[key] ?? []) {
         branchSet.add(pt.branch);
-        groupSet.add(this.viewMode === 'config' ? pt.config : pt.branch);
+        groupSet.add(pt.config);
       }
     }
     this.allBranches = [...branchSet].sort((a, b) => {
@@ -151,16 +135,19 @@ class DashboardApp {
   }
 
   private populateBranchSelector() {
-    const sel = document.getElementById('branchSelect') as HTMLSelectElement | null;
-    if (!sel) return;
-    sel.innerHTML = '<option value="all">All Branches</option>';
+    const input = document.getElementById('branchInput') as HTMLInputElement | null;
+    const list = document.getElementById('branchList') as HTMLDataListElement | null;
+    if (!input || !list) return;
+    list.innerHTML = '';
+    const all = document.createElement('option');
+    all.value = 'All Branches';
+    list.appendChild(all);
     for (const b of this.allBranches) {
       const opt = document.createElement('option');
       opt.value = b;
-      opt.textContent = formatBranchName(b);
-      if (b === this.branch) opt.selected = true;
-      sel.appendChild(opt);
+      list.appendChild(opt);
     }
+    input.value = this.branch === 'all' ? '' : this.branch;
   }
 
   // ---- Charts ----
@@ -201,16 +188,10 @@ class DashboardApp {
         </select>
       </div>
       <div class="control-group">
-        <label for="branchSelect">Branch</label>
-        <select id="branchSelect"><option value="all">All Branches</option></select>
+        <label for="branchInput">Branch</label>
+        <input id="branchInput" list="branchList" placeholder="All Branches" autocomplete="off" spellcheck="false">
+        <datalist id="branchList"></datalist>
       </div>
-      <fieldset class="control-group">
-        <legend>View</legend>
-        <div class="toggle-group" role="radiogroup" aria-label="View mode">
-          <button class="view-btn active" data-view="config" role="radio" aria-checked="true">Config</button>
-          <button class="view-btn" data-view="branch" role="radio" aria-checked="false">Branch</button>
-        </div>
-      </fieldset>
       <fieldset class="control-group">
         <legend>Operations</legend>
         <div class="toggle-group" role="radiogroup" aria-label="Operation filter">
@@ -308,16 +289,10 @@ class DashboardApp {
         ? [...filterByTime(points1), ...filterByTime(points2)]
         : [...filterByTime(points1).filter(p => p.branch === this.branch), ...filterByTime(points2).filter(p => p.branch === this.branch)];
 
-      // Points stored in data.json are grouped by config (`group === config`).
-      // For branch-view rebind the group key to each point's `branch` field.
-      const remap = (p: ChartDataPoint): ChartDataPoint =>
-        this.viewMode === 'config' ? p : { ...p, group: p.branch };
-      const chartData = branchFiltered.map(remap);
-
       const chart = createChart({
         container: d3.select(container) as unknown as d3.Selection<HTMLDivElement, unknown, HTMLElement, unknown>,
         title: cfg.title,
-        data: chartData,
+        data: branchFiltered,
         metricType: cfg.metricType,
         timeRangeDays: this.timeRange,
         visibleGroups: new Set(this.allGroups),
@@ -340,15 +315,13 @@ class DashboardApp {
     el.innerHTML = '';
 
     const title = document.createElement('h3');
-    title.textContent = this.viewMode === 'branch' ? 'Branches' : 'Configurations';
+    title.textContent = 'Configurations';
     el.appendChild(title);
 
-    if (this.viewMode === 'config') {
-      const hint = document.createElement('p');
-      hint.className = 'legend-hint';
-      hint.innerHTML = 'Pattern: <code>perftest[-...]-{backend}-{size}-{threads}-{queues}</code> — <button class="btn-about-inline" id="aboutBtnLegend" type="button">?</button>';
-      el.appendChild(hint);
-    }
+    const hint = document.createElement('p');
+    hint.className = 'legend-hint';
+    hint.innerHTML = 'Pattern: <code>perftest[-...]-{backend}-{size}-{threads}-{queues}</code> — <button class="btn-about-inline" id="aboutBtnLegend" type="button">?</button>';
+    el.appendChild(hint);
 
     const controls = document.createElement('div');
     controls.className = 'legend-controls';
@@ -366,7 +339,7 @@ class DashboardApp {
     const grid = document.createElement('div');
     grid.className = 'legend-items';
     grid.setAttribute('role', 'group');
-    grid.setAttribute('aria-label', this.viewMode === 'branch' ? 'Toggle branch visibility' : 'Toggle configuration visibility');
+    grid.setAttribute('aria-label', 'Toggle configuration visibility');
 
     for (const group of this.allGroups) {
       const color = this.groupColorMap.get(group) ?? getColor(this.colorMap.get(group) ?? 0);
@@ -472,13 +445,12 @@ class DashboardApp {
     const tr = this.timeRange === 0 ? 'All time' : `Last ${this.timeRange} days`;
     const br = this.branch === 'all' ? 'All branches' : formatBranchName(this.branch);
     const branchCount = `${s.total_branches} branches`;
-    const viewLabel = this.viewMode === 'branch' ? 'View: Branches' : 'View: Configs';
     const generated = this.data.generated_at
       ? `Updated: ${new Date(this.data.generated_at).toLocaleDateString()}`
       : '';
 
     el.textContent = '';
-    for (const text of [`${s.total_tests} tests`, `${s.total_configurations} configs`, branchCount, br, tr, viewLabel, generated]) {
+    for (const text of [`${s.total_tests} tests`, `${s.total_configurations} configs`, branchCount, br, tr, generated]) {
       if (!text) continue;
       const span = document.createElement('span');
       span.textContent = text;
@@ -500,8 +472,11 @@ class DashboardApp {
       this.updateInfo();
     }, { signal });
 
-    document.getElementById('branchSelect')?.addEventListener('change', (e) => {
-      this.branch = (e.target as HTMLSelectElement).value;
+    document.getElementById('branchInput')?.addEventListener('change', (e) => {
+      const input = e.target as HTMLInputElement;
+      const raw = input.value.trim();
+      this.branch = raw !== '' && raw !== 'All Branches' && this.allBranches.includes(raw) ? raw : 'all';
+      input.value = this.branch === 'all' ? '' : this.branch;
       this.writeUrlParams();
       this.buildCharts();
       this.renderLegend();
@@ -552,17 +527,6 @@ class DashboardApp {
       }) as EventListener, { signal });
     });
   };
-
-  setupRadiogroup('.view-btn', (btn) => {
-    const v = asViewMode(btn.dataset.view ?? '');
-    if (v && v !== this.viewMode) {
-      this.viewMode = v;
-      // Switching view mode invalidates per-group visibility state — old
-      // group names no longer apply to the new grouping.
-      this.hiddenGroups.clear();
-    }
-    this.extractMeta();
-  });
 
     setupRadiogroup('.op-btn', (btn) => {
       const op = asOperationFilter(btn.dataset.op ?? '');

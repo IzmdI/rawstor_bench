@@ -41,30 +41,13 @@ export interface DashboardData {
 
 // ---- Dashboard state ----
 
-export type ViewMode = 'config' | 'branch';
 export type OperationFilter = 'read' | 'write' | 'both';
 export type MetricType = 'iops' | 'latency';
 
-const VIEW_MODES: ViewMode[] = ['config', 'branch'];
 const OPERATION_FILTERS: OperationFilter[] = ['read', 'write', 'both'];
-
-export function asViewMode(value: string): ViewMode | null {
-  return VIEW_MODES.includes(value as ViewMode) ? (value as ViewMode) : null;
-}
 
 export function asOperationFilter(value: string): OperationFilter | null {
   return OPERATION_FILTERS.includes(value as OperationFilter) ? (value as OperationFilter) : null;
-}
-
-// ---- Chart configuration ----
-
-export interface ChartConfig {
-  id: string;
-  title: string;
-  yLabel: string;
-  metricType: MetricType;
-  groupBy: ViewMode;
-  sourceChartKeys: string[];
 }
 
 // ---- Processed point for D3 rendering ----

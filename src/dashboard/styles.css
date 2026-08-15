@@ -213,26 +213,38 @@ body {
   padding: 0;
 }
 
-.control-group select {
-  appearance: none;
+.control-group select,
+.control-group input {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
-  padding: 6px 28px 6px 10px;
+  padding: 6px 10px;
   font-size: 0.85rem;
   color: var(--text);
-  cursor: pointer;
   transition: border-color var(--transition);
+}
+
+.control-group select {
+  appearance: none;
+  cursor: pointer;
+  padding-right: 28px;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23555'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
   background-position: right 8px center;
 }
 
-.control-group select:hover {
+.control-group input {
+  width: 20rem;
+  max-width: 100%;
+}
+
+.control-group select:hover,
+.control-group input:hover {
   border-color: var(--accent);
 }
 
-.control-group select:focus {
+.control-group select:focus,
+.control-group input:focus {
   outline: 2px solid var(--accent);
   outline-offset: 1px;
   border-color: var(--accent);
