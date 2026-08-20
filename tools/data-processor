@@ -187,18 +187,28 @@ def _is_recent(timestamp: Optional[datetime], cutoff_date: datetime) -> bool:
 
 
 def extract_fio_metrics(test_data: Dict[str, Any]) -> Dict[str, float]:
-    """Extract IOPS and latency metrics from fio JSON output."""
+    """Extract IOPS and latency metrics from fio JSON output.
+
+    A test file may contain a single mixed ``randrw`` job or a pair of pure
+    ``randread``/``randwrite`` jobs. For each direction, pick the job that
+    actually performed IO there (``io_bytes > 0``): pure jobs report zero for
+    the opposite direction, so blindly reading ``jobs[0]`` would emit zeros
+    and drop the second job's real numbers.
+    """
     metrics: Dict[str, float] = {}
 
     jobs = test_data.get('jobs', [])
     if not jobs:
         return metrics
 
-    job = jobs[0]
-
     for direction in ('read', 'write'):
-        section = job.get(direction, {})
-        if not isinstance(section, dict):
+        section = None
+        for job in jobs:
+            s = job.get(direction, {})
+            if isinstance(s, dict) and s.get('io_bytes', 0) > 0:
+                section = s
+                break
+        if section is None:
             continue
 
         # IOPS
