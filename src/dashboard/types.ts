@@ -96,3 +96,47 @@ export const CHART_KEYS_BY_CONFIG: string[] = [
   'latency_read_by_config',
   'latency_write_by_config',
 ];
+
+// ---- Compare view ----
+
+export type ViewMode = 'overview' | 'compare';
+const VIEW_MODES: ViewMode[] = ['overview', 'compare'];
+export function asViewMode(v: string): ViewMode | null {
+  return VIEW_MODES.includes(v as ViewMode) ? (v as ViewMode) : null;
+}
+
+export type MetricKey = 'iops_read' | 'iops_write' | 'latency_read' | 'latency_write';
+
+export interface MetricSpec {
+  key: MetricKey;
+  chartKey: string;        // data.charts key, e.g. 'iops_read_by_config'
+  metricType: MetricType;  // 'iops' | 'latency'
+  operation: 'read' | 'write';
+  label: string;           // e.g. 'IOPS read'
+}
+
+export const METRIC_SPECS: MetricSpec[] = [
+  { key: 'iops_read',    chartKey: 'iops_read_by_config',    metricType: 'iops',    operation: 'read',  label: 'IOPS read' },
+  { key: 'iops_write',   chartKey: 'iops_write_by_config',   metricType: 'iops',    operation: 'write', label: 'IOPS write' },
+  { key: 'latency_read', chartKey: 'latency_read_by_config', metricType: 'latency', operation: 'read',  label: 'Latency read' },
+  { key: 'latency_write',chartKey: 'latency_write_by_config',metricType: 'latency', operation: 'write', label: 'Latency write' },
+];
+
+export type CompareSort = 'cfg' | 'delta' | 'abs';
+const COMPARE_SORTS: CompareSort[] = ['cfg', 'delta', 'abs'];
+export function asCompareSort(v: string): CompareSort | null {
+  return COMPARE_SORTS.includes(v as CompareSort) ? (v as CompareSort) : null;
+}
+
+export interface CompareSample { value: number; n: number; }
+
+export interface CompareRow {
+  config: string;
+  metric: MetricKey;
+  metricType: MetricType;
+  operation: 'read' | 'write';
+  a: CompareSample;
+  b: CompareSample;
+  deltaPct: number | null;  // null if A==0
+  better: boolean;          // true if B improves over A wrt metric direction
+}

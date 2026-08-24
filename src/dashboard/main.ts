@@ -1,8 +1,9 @@
 import * as d3 from 'd3';
-import type { DashboardData, OperationFilter, MetricType } from './types';
-import { CHART_KEYS_BY_CONFIG, asOperationFilter } from './types';
+import type { DashboardData, OperationFilter, MetricType, ViewMode, CompareSort } from './types';
+import { CHART_KEYS_BY_CONFIG, asOperationFilter, asViewMode, asCompareSort } from './types';
 import { loadData } from './data-loader';
 import { createChart, type CreateChartOptions } from './charts';
+import { computeCompareRows, renderCompareTable as renderCompareTableDom } from './compare';
 import { stripBranchPrefix, getColor } from './utils';
 
 class DashboardApp {
@@ -12,6 +13,11 @@ class DashboardApp {
   private timeRange = 30;
   private branch = DashboardApp.DEFAULT_BRANCH;
   private operation: OperationFilter = 'both';
+  private viewMode: ViewMode = 'overview';
+  private compareB1 = 'main';
+  private compareB2 = DashboardApp.DEFAULT_BRANCH;
+  private compareN = 5;
+  private compareSort: CompareSort = 'cfg';
   private colorMap = new Map<string, number>();
   private groupColorMap = new Map<string, string>();
   private hiddenGroups = new Set<string>();
@@ -49,9 +55,8 @@ class DashboardApp {
 
     this.extractMeta();
     this.normalizeBranch();
-    this.renderCharts();
-    this.renderLegend();
-    this.updateInfo();
+    this.normalizeCompareBranches();
+    this.render();
     this.bindEvents();
   }
 
@@ -73,6 +78,13 @@ class DashboardApp {
 
     const op = p.get('op') ?? '';
     this.operation = asOperationFilter(op) ?? 'both';
+
+    this.viewMode = asViewMode(p.get('view') ?? '') ?? 'overview';
+    this.compareB1 = p.get('b1') ?? 'main';
+    this.compareB2 = p.get('b2') ?? '';
+    const nRaw = parseInt(p.get('n') ?? '5', 10);
+    this.compareN = Number.isFinite(nRaw) && nRaw >= 1 && nRaw <= 50 ? nRaw : 5;
+    this.compareSort = asCompareSort(p.get('sort') ?? '') ?? 'cfg';
   }
 
   /** Normalize branch to short form and drop if not present in loaded branches. */
@@ -89,11 +101,50 @@ class DashboardApp {
     }
   }
 
+  /** Resolve b1/b2 to branches that exist in data; default b2 to most-recent non-b1. */
+  private normalizeCompareBranches() {
+    if (!this.allBranches.length) return;
+    const resolve = (b: string, fallback: string): string => {
+      const s = stripBranchPrefix(b);
+      return this.allBranches.includes(s) ? s : fallback;
+    };
+    this.compareB1 = resolve(this.compareB1, 'main');
+    if (!this.compareB2 || stripBranchPrefix(this.compareB2) === this.compareB1) {
+      this.compareB2 = this.defaultCompareBranch(this.compareB1);
+    } else {
+      this.compareB2 = resolve(this.compareB2, this.defaultCompareBranch(this.compareB1));
+    }
+  }
+
+  /** Most recent non-b1 branch by max point timestamp. */
+  private defaultCompareBranch(b1: string): string {
+    const maxTs = new Map<string, number>();
+    for (const key of CHART_KEYS_BY_CONFIG) {
+      for (const p of this.data?.charts[key] ?? []) {
+        const b = stripBranchPrefix(p.branch);
+        if (b === b1) continue;
+        const t = new Date(p.timestamp).getTime();
+        if (!isNaN(t)) maxTs.set(b, Math.max(maxTs.get(b) ?? 0, t));
+      }
+    }
+    let best = b1, bestT = -1;
+    for (const [b, t] of maxTs) if (t > bestT) { best = b; bestT = t; }
+    return best;
+  }
+
   private writeUrlParams() {
     const p = new URLSearchParams();
-    if (this.timeRange !== 30) p.set('days', String(this.timeRange));
-    if (this.branch !== DashboardApp.DEFAULT_BRANCH) p.set('branch', this.branch);
-    if (this.operation !== 'both') p.set('op', this.operation);
+    p.set('view', this.viewMode);
+    if (this.viewMode === 'overview') {
+      if (this.timeRange !== 30) p.set('days', String(this.timeRange));
+      if (this.branch !== DashboardApp.DEFAULT_BRANCH) p.set('branch', this.branch);
+      if (this.operation !== 'both') p.set('op', this.operation);
+    } else {
+      if (this.compareB1 !== 'main') p.set('b1', this.compareB1);
+      if (this.compareB2) p.set('b2', this.compareB2);
+      if (this.compareN !== 5) p.set('n', String(this.compareN));
+      if (this.compareSort !== 'cfg') p.set('sort', this.compareSort);
+    }
     const qs = p.toString();
     try {
       history.replaceState(null, '', qs ? `?${qs}` : window.location.pathname);
@@ -103,6 +154,15 @@ class DashboardApp {
   }
 
   private syncControlsFromState() {
+    // Mode toggle
+    document.getElementById('modeOverview')?.setAttribute('aria-selected', String(this.viewMode === 'overview'));
+    document.getElementById('modeCompare')?.setAttribute('aria-selected', String(this.viewMode === 'compare'));
+    document.querySelectorAll('.mode-toggle button').forEach(btn => {
+      const el = btn as HTMLElement;
+      el.classList.toggle('active', el.id === (this.viewMode === 'overview' ? 'modeOverview' : 'modeCompare'));
+    });
+
+    // Overview controls
     const timeEl = document.getElementById('timeRange') as HTMLSelectElement | null;
     if (timeEl) timeEl.value = String(this.timeRange);
 
@@ -113,6 +173,16 @@ class DashboardApp {
       btn.setAttribute('aria-checked', String(isActive));
       btn.setAttribute('tabindex', isActive ? '0' : '-1');
     });
+
+    // Compare controls
+    const b1El = document.getElementById('compareB1') as HTMLInputElement | null;
+    if (b1El) b1El.value = this.compareB1;
+    const b2El = document.getElementById('compareB2') as HTMLInputElement | null;
+    if (b2El) b2El.value = this.compareB2;
+    const nEl = document.getElementById('compareN') as HTMLInputElement | null;
+    if (nEl) nEl.value = String(this.compareN);
+    const sortEl = document.getElementById('compareSort') as HTMLSelectElement | null;
+    if (sortEl) sortEl.value = this.compareSort;
   }
 
   // ---- Meta extraction ----
@@ -165,25 +235,74 @@ class DashboardApp {
 
   // ---- Charts ----
 
-  private renderCharts() {
+  // ---- Render dispatch ----
+
+  private render() {
     const app = document.getElementById('app');
     if (!app || !this.data) return;
-
+    // Tear down previous overview charts (cancel pending RAFs, unbind zoom)
+    // before their DOM nodes are removed by `app.innerHTML = ''`.
+    for (const chart of this.charts.values()) chart?.destroy?.();
+    this.charts.clear();
     app.innerHTML = '';
+    this.renderHeader(app);
+    if (this.viewMode === 'compare') this.renderCompare(app);
+    else this.renderOverview(app);
+    this.renderAboutDialog(app);
+    this.updateInfo();
+  }
 
-    // Header
+  private renderHeader(app: HTMLElement) {
     const header = document.createElement('header');
     header.className = 'dashboard-header';
     header.innerHTML = `
       <div class="header-top">
         <h1>Rawstor Benchmark Dashboard</h1>
+        <div class="mode-toggle" role="tablist" aria-label="View mode">
+          <button id="modeOverview" role="tab" aria-selected="${this.viewMode === 'overview'}">Overview</button>
+          <button id="modeCompare" role="tab" aria-selected="${this.viewMode === 'compare'}">Compare</button>
+        </div>
         <button class="btn-about" id="aboutBtn" aria-label="About test configurations">?</button>
       </div>
       <p class="header-subtitle">Interactive dashboard for tracking librawstor fio benchmark results across commits and configurations.</p>
       <div class="info-bar" id="infoBar" role="status" aria-live="polite"></div>
     `;
     app.appendChild(header);
+  }
 
+  private renderAboutDialog(app: HTMLElement) {
+    const aboutDialog = document.createElement('dialog');
+    aboutDialog.className = 'about-dialog';
+    aboutDialog.id = 'aboutDialog';
+    aboutDialog.setAttribute('aria-labelledby', 'aboutDialogTitle');
+    aboutDialog.innerHTML = `
+      <div class="about-content">
+        <h2 id="aboutDialogTitle">About Test Configurations</h2>
+        <p>Configuration names follow the pattern:</p>
+        <code>perftest[-without-liburing][-legacy]-{backend}-{blocksize}-{threads}-{queues}</code>
+        <dl>
+          <dt>backend</dt>
+          <dd><code>file</code> — regular file I/O, <code>ost</code> — object storage target</dd>
+          <dt>blocksize</dt>
+          <dd>Block size for I/O operations (e.g. <code>4k</code> = 4 KB)</dd>
+          <dt>threads</dt>
+          <dd>Number of concurrent I/O threads</dd>
+          <dt>queues</dt>
+          <dd>Queue depth per thread</dd>
+          <dt>without-liburing</dt>
+          <dd>Built without io_uring support (legacy AIO backend)</dd>
+          <dt>legacy</dt>
+          <dd>Legacy configuration mode</dd>
+        </dl>
+        <p>Example: <code>perftest-ost-4k-2-1</code> = object storage, 4 KB blocks, 2 threads, queue depth 1.</p>
+        <p><strong>Compare view:</strong> A (Base) vs B (Compare). Median of last N daily points per branch. Δ% positive = B larger than A; green when B improves (IOPS↑, latency↓), red otherwise.</p>
+        <button class="btn-close-about" id="closeAbout">Close</button>
+      </div>
+    `;
+    app.appendChild(aboutDialog);
+  }
+
+  private renderOverview(app: HTMLElement) {
     // Controls
     const controls = document.createElement('div');
     controls.className = 'controls-bar';
@@ -235,39 +354,62 @@ class DashboardApp {
     tooltip.id = 'tooltip';
     app.appendChild(tooltip);
 
-    // About dialog
-    const aboutDialog = document.createElement('dialog');
-    aboutDialog.className = 'about-dialog';
-    aboutDialog.id = 'aboutDialog';
-    aboutDialog.setAttribute('aria-labelledby', 'aboutDialogTitle');
-    aboutDialog.innerHTML = `
-      <div class="about-content">
-        <h2 id="aboutDialogTitle">About Test Configurations</h2>
-        <p>Configuration names follow the pattern:</p>
-        <code>perftest[-without-liburing][-legacy]-{backend}-{blocksize}-{threads}-{queues}</code>
-        <dl>
-          <dt>backend</dt>
-          <dd><code>file</code> — regular file I/O, <code>ost</code> — object storage target</dd>
-          <dt>blocksize</dt>
-          <dd>Block size for I/O operations (e.g. <code>4k</code> = 4 KB)</dd>
-          <dt>threads</dt>
-          <dd>Number of concurrent I/O threads</dd>
-          <dt>queues</dt>
-          <dd>Queue depth per thread</dd>
-          <dt>without-liburing</dt>
-          <dd>Built without io_uring support (legacy AIO backend)</dd>
-          <dt>legacy</dt>
-          <dd>Legacy configuration mode</dd>
-        </dl>
-        <p>Example: <code>perftest-ost-4k-2-1</code> = object storage, 4 KB blocks, 2 threads, queue depth 1.</p>
-        <button class="btn-close-about" id="closeAbout">Close</button>
-      </div>
-    `;
-    app.appendChild(aboutDialog);
-
     this.populateBranchSelector();
     this.syncControlsFromState();
     this.buildCharts();
+    this.renderLegend();
+  }
+
+  private renderCompare(app: HTMLElement) {
+    const controls = document.createElement('div');
+    controls.className = 'compare-controls';
+    controls.innerHTML = `
+      <div class="control-group">
+        <label for="compareB1">Base (A)</label>
+        <input id="compareB1" list="branchList" autocomplete="off" spellcheck="false">
+      </div>
+      <div class="control-group">
+        <label for="compareB2">Compare (B)</label>
+        <input id="compareB2" list="branchList" autocomplete="off" spellcheck="false">
+      </div>
+      <div class="control-group">
+        <label for="compareN">Last N runs</label>
+        <input id="compareN" class="n-input" type="number" min="1" max="50">
+      </div>
+      <div class="control-group">
+        <label for="compareSort">Sort by</label>
+        <select id="compareSort">
+          <option value="cfg">Config name</option>
+          <option value="delta">Improvement (Δ%)</option>
+          <option value="abs">Magnitude |Δ|</option>
+        </select>
+      </div>
+    `;
+    app.appendChild(controls);
+
+    // Branch datalist shared by compare inputs
+    const list = document.createElement('datalist');
+    list.id = 'branchList';
+    for (const b of this.allBranches) {
+      const opt = document.createElement('option');
+      opt.value = b;
+      list.appendChild(opt);
+    }
+    app.appendChild(list);
+
+    const panel = document.createElement('div');
+    panel.id = 'comparePanel';
+    app.appendChild(panel);
+
+    this.syncControlsFromState();
+    this.renderCompareTable();
+  }
+
+  private renderCompareTable() {
+    const panel = document.getElementById('comparePanel');
+    if (!panel || !this.data) return;
+    const rows = computeCompareRows(this.data, this.compareB1, this.compareB2, this.compareN);
+    renderCompareTableDom(panel, rows, { b1: this.compareB1, b2: this.compareB2, sort: this.compareSort });
   }
 
   private buildCharts() {
@@ -450,6 +592,15 @@ class DashboardApp {
       el.textContent = override;
       return;
     }
+    if (this.viewMode === 'compare') {
+      el.textContent = '';
+      for (const text of [`A: ${this.compareB1}`, `B: ${this.compareB2}`, `N=${this.compareN}`, `sort: ${this.compareSort}`]) {
+        const span = document.createElement('span');
+        span.textContent = text;
+        el.appendChild(span);
+      }
+      return;
+    }
     if (!this.data) return;
 
     const s = this.data.summary;
@@ -473,6 +624,60 @@ class DashboardApp {
 
   private bindEvents() {
     const signal = this.listenerAbort.signal;
+
+    // Mode toggle
+    document.getElementById('modeOverview')?.addEventListener('click', () => {
+      if (this.viewMode !== 'overview') {
+        this.viewMode = 'overview';
+        this.writeUrlParams();
+        this.render();
+        this.bindEvents();
+      }
+    }, { signal });
+    document.getElementById('modeCompare')?.addEventListener('click', () => {
+      if (this.viewMode !== 'compare') {
+        this.viewMode = 'compare';
+        this.writeUrlParams();
+        this.render();
+        this.bindEvents();
+      }
+    }, { signal });
+
+    // Compare controls
+    document.getElementById('compareB1')?.addEventListener('change', (e) => {
+      const v = (e.target as HTMLInputElement).value.trim();
+      this.compareB1 = this.allBranches.includes(stripBranchPrefix(v)) ? stripBranchPrefix(v) : 'main';
+      this.normalizeCompareBranches();
+      this.writeUrlParams();
+      this.syncControlsFromState();
+      this.renderCompareTable();
+      this.updateInfo();
+    }, { signal });
+
+    document.getElementById('compareB2')?.addEventListener('change', (e) => {
+      const v = (e.target as HTMLInputElement).value.trim();
+      if (this.allBranches.includes(stripBranchPrefix(v))) this.compareB2 = stripBranchPrefix(v);
+      this.normalizeCompareBranches();
+      this.writeUrlParams();
+      this.syncControlsFromState();
+      this.renderCompareTable();
+      this.updateInfo();
+    }, { signal });
+
+    document.getElementById('compareN')?.addEventListener('change', (e) => {
+      const v = parseInt((e.target as HTMLInputElement).value, 10);
+      if (Number.isFinite(v) && v >= 1 && v <= 50) this.compareN = v;
+      this.writeUrlParams();
+      this.syncControlsFromState();
+      this.renderCompareTable();
+    }, { signal });
+
+    document.getElementById('compareSort')?.addEventListener('change', (e) => {
+      const s = asCompareSort((e.target as HTMLSelectElement).value);
+      if (s) this.compareSort = s;
+      this.writeUrlParams();
+      this.renderCompareTable();
+    }, { signal });
 
     document.getElementById('timeRange')?.addEventListener('change', (e) => {
       this.timeRange = parseInt((e.target as HTMLSelectElement).value, 10);
@@ -557,10 +762,9 @@ class DashboardApp {
         this.data = data;
         this.extractMeta();
         this.normalizeBranch();
-        this.populateBranchSelector();
-        this.syncControlsFromState();
-        this.buildCharts();
-        this.renderLegend();
+        this.normalizeCompareBranches();
+        this.render();
+        this.bindEvents();
         this.updateInfo('Data refreshed');
         document.getElementById('refresh-error')?.remove();
       } catch (e) {
