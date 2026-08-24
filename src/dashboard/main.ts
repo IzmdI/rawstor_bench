@@ -3,7 +3,7 @@ import type { DashboardData, OperationFilter, MetricType } from './types';
 import { CHART_KEYS_BY_CONFIG, asOperationFilter } from './types';
 import { loadData } from './data-loader';
 import { createChart, type CreateChartOptions } from './charts';
-import { formatBranchName, getColor } from './utils';
+import { stripBranchPrefix, getColor } from './utils';
 
 class DashboardApp {
   private data: DashboardData | null = null;
@@ -24,7 +24,7 @@ class DashboardApp {
   private generation = 0;
 
   private static readonly ALLOWED_DAYS = new Set([2, 7, 15, 30, 90, 365, 0]);
-  private static readonly DEFAULT_BRANCH = 'refs/heads/main';
+  private static readonly DEFAULT_BRANCH = 'main';
 
   async init() {
     if (this.loading) return;
@@ -75,11 +75,14 @@ class DashboardApp {
     this.operation = asOperationFilter(op) ?? 'both';
   }
 
-  /** Drop branch if it is not present (or normalizes to) one of the loaded branches. */
+  /** Normalize branch to short form and drop if not present in loaded branches. */
   private normalizeBranch() {
     if (!this.allBranches.length) return;
-    const matches = (b: string) => b === this.branch || formatBranchName(b) === formatBranchName(this.branch);
-    if (!this.allBranches.some(matches)) {
+    // Convert to short form if needed (handles old URLs with full refs)
+    const shortBranch = stripBranchPrefix(this.branch);
+    if (this.allBranches.includes(shortBranch)) {
+      this.branch = shortBranch;
+    } else {
       this.branch = this.allBranches.includes(DashboardApp.DEFAULT_BRANCH)
         ? DashboardApp.DEFAULT_BRANCH
         : this.allBranches[0];
@@ -118,17 +121,18 @@ class DashboardApp {
     if (!this.data) return;
 
     // Derive groups/branches from the config-grouped chart set.
+    // Branches are stored in short form (without refs/heads/ and refs/tags/ prefixes).
     const branchSet = new Set<string>();
     const groupSet = new Set<string>();
     for (const key of CHART_KEYS_BY_CONFIG) {
       for (const pt of this.data.charts[key] ?? []) {
-        branchSet.add(pt.branch);
+        branchSet.add(stripBranchPrefix(pt.branch));
         groupSet.add(pt.config);
       }
     }
     this.allBranches = [...branchSet].sort((a, b) => {
-      if (a === 'main' || a === 'refs/heads/main') return -1;
-      if (b === 'main' || b === 'refs/heads/main') return 1;
+      if (a === 'main') return -1;
+      if (b === 'main') return 1;
       return a.localeCompare(b);
     });
 
@@ -147,6 +151,16 @@ class DashboardApp {
       list.appendChild(opt);
     }
     input.value = this.branch;
+
+    // Fix datalist arrow: clear input on focus to show all options, restore on blur if empty
+    input.addEventListener('focus', () => {
+      input.value = '';
+    });
+    input.addEventListener('blur', () => {
+      if (!input.value) {
+        input.value = this.branch;
+      }
+    });
   }
 
   // ---- Charts ----
@@ -284,7 +298,7 @@ class DashboardApp {
       const points2 = this.data.charts[cfg.keys[1]] ?? [];
       const cutoff = this.timeRange > 0 ? new Date(Date.now() - this.timeRange * 86400000) : null;
       const filterByTime = (pts: typeof points1) => cutoff ? pts.filter(p => new Date(p.timestamp) >= cutoff) : pts;
-      const branchFiltered = [...filterByTime(points1).filter(p => p.branch === this.branch), ...filterByTime(points2).filter(p => p.branch === this.branch)];
+      const branchFiltered = [...filterByTime(points1).filter(p => stripBranchPrefix(p.branch) === this.branch), ...filterByTime(points2).filter(p => stripBranchPrefix(p.branch) === this.branch)];
 
       const chart = createChart({
         container: d3.select(container) as unknown as d3.Selection<HTMLDivElement, unknown, HTMLElement, unknown>,
@@ -440,7 +454,7 @@ class DashboardApp {
 
     const s = this.data.summary;
     const tr = this.timeRange === 0 ? 'All time' : `Last ${this.timeRange} days`;
-    const br = formatBranchName(this.branch);
+    const br = stripBranchPrefix(this.branch);
     const branchCount = `${s.total_branches} branches`;
     const generated = this.data.generated_at
       ? `Updated: ${new Date(this.data.generated_at).toLocaleDateString()}`

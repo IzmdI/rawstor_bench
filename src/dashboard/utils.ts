@@ -108,7 +108,7 @@ export class Tooltip {
 
     const valueStr = formatMetricValue(data.value, metricType);
     const dateStr = formatDate(data.timestamp, timeRangeDays);
-    const branchShort = formatBranchName(data.branch);
+    const branchShort = stripBranchPrefix(data.branch);
     const commitShort = data.commit_sha.substring(0, 8);
 
     el.innerHTML =
@@ -139,7 +139,7 @@ export class Tooltip {
 
 // ---- Branch display name ----
 
-export function formatBranchName(branch: string): string {
+export function stripBranchPrefix(branch: string): string {
   if (!branch) return 'Unknown';
-  return branch.replace(/^refs\/heads\//, '').replace(/^refs\/tags\//, 'Tag: ');
+  return branch.replace(/^refs\/heads\//, '').replace(/^refs\/tags\//, '');
 }
