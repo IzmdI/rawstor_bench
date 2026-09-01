@@ -1,4 +1,7 @@
-import type { ChartDataPoint, DashboardData, CompareRow, CompareSort, MetricType } from './types';
+import type {
+  ChartDataPoint, DashboardData, CompareRow, CompareSort, MetricType,
+  SnapshotSection, SnapshotRow, SnapshotCell,
+} from './types';
 import { METRIC_SPECS } from './types';
 import { stripBranchPrefix, escapeHtml, formatMetricValue } from './utils';
 
@@ -17,6 +20,55 @@ export function lastN(points: ChartDataPoint[], n: number): ChartDataPoint[] {
   return [...points]
     .sort((a, b) => (a.timestamp < b.timestamp ? 1 : a.timestamp > b.timestamp ? -1 : 0))
     .slice(0, Math.max(1, n));
+}
+
+/** Snapshot sections for the compare view: per (config, metric) medians of the
+ *  last n points per branch, with delta vs branches[0] (base). A metric row is
+ *  included only when the base branch has a non-zero median for it; a section
+ *  only when it has at least one such row. Returns [] for < 2 branches. */
+export function computeSnapshotSections(
+  data: DashboardData,
+  branches: string[],
+  configs: string[],
+  n: number,
+): SnapshotSection[] {
+  if (branches.length < 2) return [];
+  const sections: SnapshotSection[] = [];
+
+  for (const config of configs) {
+    const rows: SnapshotRow[] = [];
+
+    for (const spec of METRIC_SPECS) {
+      const points = data.charts[spec.chartKey] ?? [];
+      const medians: (number | null)[] = [];
+      const counts: number[] = [];
+
+      for (const b of branches) {
+        const pts = points.filter(p => p.config === config && stripBranchPrefix(p.branch) === b);
+        const recent = lastN(pts, n);
+        counts.push(recent.length);
+        medians.push(recent.length ? computeMedian(recent.map(p => p.value)) : null);
+      }
+
+      const baseValue = medians[0];
+      if (baseValue === null || baseValue === 0) continue; // base must have data
+
+      const cells: SnapshotCell[] = branches.map((_, i) => {
+        const v = medians[i];
+        const deltaPct = v !== null ? ((v - baseValue) / baseValue) * 100 : null;
+        const better = deltaPct === null ? null
+          : spec.metricType === 'iops' ? deltaPct > 0 : deltaPct < 0;
+        return { value: v, n: counts[i], deltaPct, better };
+      });
+      rows.push({
+        metric: spec.key, metricType: spec.metricType,
+        operation: spec.operation, label: spec.label, cells,
+      });
+    }
+
+    if (rows.length) sections.push({ config, branches: [...branches], rows });
+  }
+  return sections;
 }
 
 /** Build one CompareRow per (config, metric) where BOTH branches have ≥1 point. */
