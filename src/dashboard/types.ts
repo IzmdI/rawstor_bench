@@ -140,3 +140,74 @@ export interface CompareRow {
   deltaPct: number | null;  // null if A==0
   better: boolean;          // true if B improves over A wrt metric direction
 }
+
+// ---- Compare view v2 (multi-branch) ----
+
+export type SnapMode = 'dots' | 'bars' | 'table';
+const SNAP_MODES: SnapMode[] = ['dots', 'bars', 'table'];
+
+/** Runtime guard for the snapshot view-mode URL param. */
+export function asSnapMode(v: string): SnapMode | null {
+  return SNAP_MODES.includes(v as SnapMode) ? (v as SnapMode) : null;
+}
+
+/** Max branches selectable in compare mode (readability of lines). */
+export const MAX_COMPARE_BRANCHES = 8;
+
+/** Default configs preselected in compare mode (user's priority configs). */
+export const DEFAULT_COMPARE_CONFIGS: string[] = [
+  'perftest-ost-4k-1-1',
+  'perftest-ost-4k-2-1',
+];
+
+/** One branch's result in one (config, metric) snapshot row. */
+export interface SnapshotCell {
+  value: number | null;   // median of last N; null = no data
+  n: number;              // samples behind the median (0 when value null)
+  deltaPct: number | null; // vs base; null when base/self missing or base == 0
+  better: boolean | null;  // green/red direction; null when deltaPct null
+}
+
+/** One metric row of a snapshot section; cells align with SnapshotSection.branches. */
+export interface SnapshotRow {
+  metric: MetricKey;
+  metricType: MetricType;
+  operation: 'read' | 'write';
+  label: string;
+  cells: SnapshotCell[];
+}
+
+/** Snapshot block for one config: branches[0] is the base. */
+export interface SnapshotSection {
+  config: string;
+  branches: string[]; // short branch names, order = selection order
+  rows: SnapshotRow[];
+}
+
+/** Current compare-mode control values, consumed by renderCompareControls. */
+export interface CompareControlState {
+  allBranches: string[];
+  selectedBranches: string[];
+  hiddenBranches: Set<string>;
+  allConfigs: string[];
+  selectedConfigs: string[];
+  operation: OperationFilter;
+  timeRange: number;
+  n: number;
+  snapMode: SnapMode;
+}
+
+/** Callbacks wired by main.ts to compare-control interactions. */
+export interface CompareControlHandlers {
+  onAddBranch(branch: string): void;
+  onRemoveBranch(branch: string): void;
+  onToggleBranchVisibility(branch: string): void;
+  onSetBase(branch: string): void;
+  onToggleConfig(config: string): void;
+  onAllConfigs(): void;
+  onNoConfigs(): void;
+  onOperation(op: OperationFilter): void;
+  onTimeRange(days: number): void;
+  onN(n: number): void;
+  onSnapMode(mode: SnapMode): void;
+}
