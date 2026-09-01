@@ -1,9 +1,10 @@
 import type {
   ChartDataPoint, DashboardData, CompareRow, CompareSort, MetricType,
-  SnapshotSection, SnapshotRow, SnapshotCell,
+  SnapshotSection, SnapshotRow, SnapshotCell, SnapMode,
+  CompareControlState, CompareControlHandlers,
 } from './types';
-import { METRIC_SPECS } from './types';
-import { stripBranchPrefix, escapeHtml, formatMetricValue } from './utils';
+import { METRIC_SPECS, asSnapMode, asOperationFilter, MAX_COMPARE_BRANCHES } from './types';
+import { stripBranchPrefix, escapeHtml, formatMetricValue, getColor } from './utils';
 
 // ---- Pure helpers ----
 
@@ -69,6 +70,434 @@ export function computeSnapshotSections(
     if (rows.length) sections.push({ config, branches: [...branches], rows });
   }
   return sections;
+}
+
+// ---- DOM helpers (compare v2) ----
+
+function el<K extends keyof HTMLElementTagNameMap>(tag: K, className?: string): HTMLElementTagNameMap[K] {
+  const e = document.createElement(tag);
+  if (className) e.className = className;
+  return e;
+}
+
+function pct(value: number, max: number): string {
+  return Math.max(0, Math.min(100, (value / max) * 100)) + '%';
+}
+
+function deltaText(c: SnapshotCell, isBase: boolean): string {
+  if (isBase) return 'base';
+  if (c.value === null) return '—';
+  if (c.deltaPct === null) return '—';
+  return (c.deltaPct >= 0 ? '+' : '') + c.deltaPct.toFixed(1) + '%';
+}
+
+function deltaClass(c: SnapshotCell): string {
+  if (c.better === null) return 'na';
+  return c.better ? 'good' : 'bad';
+}
+
+/** Radiogroup behavior: click + arrows/Home/End + roving tabindex (WCAG 2.1.1). */
+function bindRadiogroup(
+  buttons: HTMLButtonElement[],
+  initial: number,
+  onSelect: (btn: HTMLButtonElement) => void,
+  signal?: AbortSignal,
+): void {
+  const select = (btn: HTMLButtonElement) => {
+    buttons.forEach(b => {
+      const active = b === btn;
+      b.classList.toggle('active', active);
+      b.setAttribute('aria-checked', String(active));
+      b.setAttribute('tabindex', active ? '0' : '-1');
+    });
+    onSelect(btn);
+  };
+  buttons.forEach((btn, i) => {
+    btn.setAttribute('role', 'radio');
+    btn.setAttribute('aria-checked', String(i === initial));
+    btn.setAttribute('tabindex', i === initial ? '0' : '-1');
+    if (i === initial) btn.classList.add('active');
+    btn.addEventListener('click', () => select(btn), { signal });
+    btn.addEventListener('keydown', (e: KeyboardEvent) => {
+      let next: HTMLButtonElement | null = null;
+      if (e.key === 'ArrowRight' || e.key === 'ArrowDown') next = buttons[(i + 1) % buttons.length];
+      else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') next = buttons[(i - 1 + buttons.length) % buttons.length];
+      else if (e.key === 'Home') next = buttons[0];
+      else if (e.key === 'End') next = buttons[buttons.length - 1];
+      if (next) { e.preventDefault(); next.focus(); select(next); }
+    }, { signal });
+  });
+}
+
+// ---- Snapshot renderers (pure DOM, colors = getColor(branch index)) ----
+
+function snapshotSectionHeader(config: string): HTMLElement {
+  const h = el('h4', 'snapshot-config');
+  h.textContent = config;
+  return h;
+}
+
+function renderSnapshotDots(container: HTMLElement, sections: SnapshotSection[]): void {
+  for (const sec of sections) {
+    const secEl = el('div', 'snapshot-section');
+    secEl.appendChild(snapshotSectionHeader(sec.config));
+
+    for (const row of sec.rows) {
+      const values = row.cells.map(c => c.value).filter((v): v is number => v !== null);
+      const blockMax = values.length ? Math.max(...values) : 1;
+      const baseValue = row.cells[0]?.value ?? null;
+
+      const block = el('div', 'snap-block');
+      const mh = el('div', 'snap-metric');
+      mh.textContent = row.label;
+      block.appendChild(mh);
+
+      row.cells.forEach((c, i) => {
+        const isBase = i === 0;
+        const r = el('div', 'snap-row' + (isBase ? ' snap-row-base' : ''));
+        const name = el('span', 'snap-branch');
+        name.textContent = sec.branches[i];
+        name.title = sec.branches[i];
+        r.appendChild(name);
+
+        const track = el('div', 'snap-track');
+        if (baseValue !== null && blockMax > 0) {
+          const ref = el('div', 'snap-refline');
+          ref.style.left = pct(baseValue, blockMax);
+          track.appendChild(ref);
+        }
+        if (c.value !== null) {
+          const dot = el('div', 'snap-dot');
+          dot.style.left = pct(c.value, blockMax);
+          dot.style.background = getColor(i);
+          dot.title = `${sec.branches[i]}: ${formatMetricValue(c.value, row.metricType)} (n=${c.n})`;
+          track.appendChild(dot);
+        }
+        r.appendChild(track);
+
+        const d = el('span', 'snap-delta ' + deltaClass(c));
+        d.textContent = deltaText(c, isBase);
+        r.appendChild(d);
+        block.appendChild(r);
+      });
+      secEl.appendChild(block);
+    }
+    container.appendChild(secEl);
+  }
+}
+
+function renderSnapshotBars(container: HTMLElement, sections: SnapshotSection[]): void {
+  for (const sec of sections) {
+    const secEl = el('div', 'snapshot-section');
+    secEl.appendChild(snapshotSectionHeader(sec.config));
+
+    for (const row of sec.rows) {
+      const values = row.cells.map(c => c.value).filter((v): v is number => v !== null);
+      const blockMax = values.length ? Math.max(...values) : 1;
+
+      const block = el('div', 'snap-block');
+      const mh = el('div', 'snap-metric');
+      mh.textContent = row.label;
+      block.appendChild(mh);
+
+      const plot = el('div', 'snap-bars');
+      row.cells.forEach((c, i) => {
+        const isBase = i === 0;
+        const col = el('div', 'snap-bar-col');
+        const d = el('span', 'snap-bar-delta ' + deltaClass(c));
+        d.textContent = deltaText(c, isBase);
+        const bar = el('div', 'snap-bar' + (isBase ? ' snap-bar-base' : ''));
+        if (c.value !== null) {
+          bar.style.height = pct(c.value, blockMax);
+          bar.style.background = getColor(i);
+          bar.title = `${sec.branches[i]}: ${formatMetricValue(c.value, row.metricType)} (n=${c.n})`;
+        }
+        const lab = el('span', 'snap-bar-label');
+        lab.textContent = sec.branches[i];
+        lab.title = sec.branches[i];
+        col.append(d, bar, lab);
+        plot.appendChild(col);
+      });
+      block.appendChild(plot);
+      secEl.appendChild(block);
+    }
+    container.appendChild(secEl);
+  }
+}
+
+function renderSnapshotTable(container: HTMLElement, sections: SnapshotSection[]): void {
+  for (const sec of sections) {
+    const secEl = el('div', 'snapshot-section');
+    secEl.appendChild(snapshotSectionHeader(sec.config));
+
+    const table = el('table', 'snap-table');
+    const thead = el('thead');
+    const headRow = el('tr');
+    const corner = el('th');
+    corner.scope = 'col';
+    headRow.appendChild(corner);
+    sec.branches.forEach((b, i) => {
+      const th = el('th');
+      th.scope = 'col';
+      if (i === 0) th.className = 'snap-col-base';
+      th.style.color = getColor(i);
+      th.textContent = b;
+      th.title = b;
+      headRow.appendChild(th);
+    });
+    thead.appendChild(headRow);
+    table.appendChild(thead);
+
+    const tbody = el('tbody');
+    for (const row of sec.rows) {
+      const tr = el('tr');
+      const labelTd = el('td');
+      labelTd.textContent = row.label;
+      tr.appendChild(labelTd);
+      row.cells.forEach((c, i) => {
+        const td = el('td');
+        if (i === 0) td.className = 'snap-col-base';
+        td.textContent = c.value === null ? '—' : formatMetricValue(c.value, row.metricType);
+        if (i > 0 && c.deltaPct !== null) {
+          const badge = el('span', 'snap-badge ' + deltaClass(c));
+          badge.textContent = deltaText(c, false);
+          td.appendChild(badge);
+        }
+        tr.appendChild(td);
+      });
+      tbody.appendChild(tr);
+    }
+    table.appendChild(tbody);
+    secEl.appendChild(table);
+    container.appendChild(secEl);
+  }
+}
+
+/** Render the snapshot block: header with view toggle + sections in `mode`. */
+export function renderSnapshot(
+  container: HTMLElement,
+  sections: SnapshotSection[],
+  mode: SnapMode,
+  onModeChange: (mode: SnapMode) => void,
+  emptyMessage?: string,
+  signal?: AbortSignal,
+): void {
+  container.innerHTML = '';
+  container.className = 'snapshot-panel';
+
+  const header = el('div', 'snapshot-header');
+  const title = el('h3', 'snapshot-title');
+  title.textContent = 'Snapshot · median of last N runs · Δ% vs base';
+  header.appendChild(title);
+
+  const toggle = el('div', 'snap-toggle');
+  toggle.setAttribute('aria-label', 'Snapshot view mode');
+  const buttons: HTMLButtonElement[] = [];
+  const modes: SnapMode[] = ['dots', 'bars', 'table'];
+  modes.forEach(m => {
+    const btn = el('button');
+    btn.type = 'button';
+    btn.dataset.snap = m;
+    btn.textContent = m === 'dots' ? 'Dots' : m === 'bars' ? 'Bars' : 'Table';
+    buttons.push(btn);
+    toggle.appendChild(btn);
+  });
+  header.appendChild(toggle);
+  container.appendChild(header);
+
+  const body = el('div', 'snapshot-body');
+  container.appendChild(body);
+
+  bindRadiogroup(buttons, modes.indexOf(mode), btn => {
+    const m = asSnapMode(btn.dataset.snap ?? '');
+    if (m) onModeChange(m);
+  }, signal);
+
+  if (!sections.length) {
+    const p = el('p', 'no-data');
+    p.textContent = emptyMessage ?? 'No snapshot data for the selected branches and configs';
+    body.appendChild(p);
+    return;
+  }
+  if (mode === 'dots') renderSnapshotDots(body, sections);
+  else if (mode === 'bars') renderSnapshotBars(body, sections);
+  else renderSnapshotTable(body, sections);
+}
+
+/** Render the compare-mode controls bar (branch chips + search, config chips,
+ *  operation radiogroup, time range, N). Listeners are wired to `handlers`;
+ *  pass `signal` so main.ts can tear them down. */
+export function renderCompareControls(
+  container: HTMLElement,
+  state: CompareControlState,
+  handlers: CompareControlHandlers,
+  signal?: AbortSignal,
+): void {
+  container.innerHTML = '';
+  container.className = 'compare-controls';
+
+  // --- Branches ---
+  const bGroup = el('div', 'control-group');
+  const bLabel = el('label');
+  bLabel.htmlFor = 'compareBranchInput';
+  bLabel.textContent = `Branches (first = base, max ${MAX_COMPARE_BRANCHES})`;
+  bGroup.appendChild(bLabel);
+
+  const bRow = el('div', 'chip-row');
+  const input = el('input');
+  input.id = 'compareBranchInput';
+  input.type = 'text';
+  input.placeholder = 'add branch…';
+  input.autocomplete = 'off';
+  input.spellcheck = false;
+  input.setAttribute('list', 'compareBranchList');
+  input.addEventListener('change', () => {
+    const v = stripBranchPrefix(input.value.trim());
+    input.value = '';
+    if (v) handlers.onAddBranch(v);
+  }, { signal });
+  bRow.appendChild(input);
+
+  const dl = el('datalist');
+  dl.id = 'compareBranchList';
+  for (const b of state.allBranches.filter(b => !state.selectedBranches.includes(b))) {
+    const opt = el('option');
+    opt.value = b;
+    dl.appendChild(opt);
+  }
+  bRow.appendChild(dl);
+
+  state.selectedBranches.forEach((b, i) => {
+    const isBase = i === 0;
+    const chip = el('span', 'branch-chip'
+      + (isBase ? ' chip-base' : '')
+      + (state.hiddenBranches.has(b) ? ' chip-hidden' : ''));
+    chip.title = 'Click to toggle chart line visibility';
+    const dot = el('span', 'chip-dot');
+    dot.style.background = getColor(i);
+    const name = el('span', 'chip-name');
+    name.textContent = b;
+    chip.append(dot, name);
+
+    if (isBase) {
+      const badge = el('span', 'chip-base-badge');
+      badge.textContent = 'A';
+      badge.title = 'Base branch — Δ% is computed against it';
+      chip.appendChild(badge);
+    } else {
+      const baseBtn = el('button', 'chip-base-btn');
+      baseBtn.type = 'button';
+      baseBtn.textContent = '⌃';
+      baseBtn.title = `Make ${b} the base`;
+      baseBtn.setAttribute('aria-label', `Make ${b} the base branch`);
+      baseBtn.addEventListener('click', e => { e.stopPropagation(); handlers.onSetBase(b); }, { signal });
+      chip.appendChild(baseBtn);
+    }
+    const x = el('button', 'chip-remove');
+    x.type = 'button';
+    x.textContent = '×';
+    x.title = `Remove ${b}`;
+    x.setAttribute('aria-label', `Remove branch ${b}`);
+    x.addEventListener('click', e => { e.stopPropagation(); handlers.onRemoveBranch(b); }, { signal });
+    chip.appendChild(x);
+
+    chip.addEventListener('click', () => handlers.onToggleBranchVisibility(b), { signal });
+    bRow.appendChild(chip);
+  });
+  bGroup.appendChild(bRow);
+  container.appendChild(bGroup);
+
+  // --- Configs ---
+  const cGroup = el('div', 'control-group');
+  const cLabel = el('span', 'control-label');
+  cLabel.textContent = 'Configs';
+  cGroup.appendChild(cLabel);
+
+  const cRow = el('div', 'chip-row');
+  const allBtn = el('button', 'chip-mini-btn');
+  allBtn.type = 'button';
+  allBtn.textContent = 'All';
+  allBtn.addEventListener('click', () => handlers.onAllConfigs(), { signal });
+  const noneBtn = el('button', 'chip-mini-btn');
+  noneBtn.type = 'button';
+  noneBtn.textContent = 'None';
+  noneBtn.addEventListener('click', () => handlers.onNoConfigs(), { signal });
+  cRow.append(allBtn, noneBtn);
+
+  for (const cfg of state.allConfigs) {
+    const chip = el('span', 'config-chip '
+      + (state.selectedConfigs.includes(cfg) ? 'on' : 'off'));
+    chip.textContent = cfg;
+    chip.title = 'Click to toggle this config';
+    chip.addEventListener('click', () => handlers.onToggleConfig(cfg), { signal });
+    cRow.appendChild(chip);
+  }
+  cGroup.appendChild(cRow);
+  container.appendChild(cGroup);
+
+  // --- Operations (radiogroup) ---
+  const oGroup = el('fieldset', 'control-group');
+  const oLegend = el('legend');
+  oLegend.textContent = 'Operations';
+  oGroup.appendChild(oLegend);
+  const oRow = el('div', 'toggle-group');
+  const opButtons: HTMLButtonElement[] = [];
+  for (const op of ['read', 'write', 'both'] as const) {
+    const btn = el('button', 'cmp-op-btn');
+    btn.type = 'button';
+    btn.dataset.op = op;
+    btn.textContent = op === 'read' ? 'Read' : op === 'write' ? 'Write' : 'Both';
+    opButtons.push(btn);
+    oRow.appendChild(btn);
+  }
+  oGroup.appendChild(oRow);
+  container.appendChild(oGroup);
+  bindRadiogroup(opButtons, ['read', 'write', 'both'].indexOf(state.operation), btn => {
+    const op = asOperationFilter(btn.dataset.op ?? '');
+    if (op) handlers.onOperation(op);
+  }, signal);
+
+  // --- Time Range ---
+  const tGroup = el('div', 'control-group');
+  const tLabel = el('label');
+  tLabel.htmlFor = 'compareTimeRange';
+  tLabel.textContent = 'Time Range';
+  tGroup.appendChild(tLabel);
+  const tSelect = el('select');
+  tSelect.id = 'compareTimeRange';
+  for (const [value, label] of [['2', 'Last 2 days'], ['7', 'Last 7 days'], ['15', 'Last 15 days'],
+    ['30', 'Last 30 days'], ['90', 'Last 90 days'], ['365', 'Last year'], ['0', 'All time']] as const) {
+    const opt = el('option');
+    opt.value = value;
+    opt.textContent = label;
+    tSelect.appendChild(opt);
+  }
+  tSelect.value = String(state.timeRange);
+  tSelect.addEventListener('change', () => {
+    const d = parseInt(tSelect.value, 10);
+    if (Number.isFinite(d)) handlers.onTimeRange(d);
+  }, { signal });
+  tGroup.appendChild(tSelect);
+  container.appendChild(tGroup);
+
+  // --- Snapshot N ---
+  const nGroup = el('div', 'control-group');
+  const nLabel = el('label');
+  nLabel.htmlFor = 'compareN';
+  nLabel.textContent = 'Snapshot: last N';
+  nGroup.appendChild(nLabel);
+  const nInput = el('input', 'n-input');
+  nInput.id = 'compareN';
+  nInput.type = 'number';
+  nInput.min = '1';
+  nInput.max = '50';
+  nInput.value = String(state.n);
+  nInput.addEventListener('change', () => {
+    const v = parseInt(nInput.value, 10);
+    if (Number.isFinite(v)) handlers.onN(v);
+  }, { signal });
+  nGroup.appendChild(nInput);
+  container.appendChild(nGroup);
 }
 
 /** Build one CompareRow per (config, metric) where BOTH branches have ≥1 point. */
