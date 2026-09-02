@@ -122,25 +122,6 @@ export const METRIC_SPECS: MetricSpec[] = [
   { key: 'latency_write',chartKey: 'latency_write_by_config',metricType: 'latency', operation: 'write', label: 'Latency write' },
 ];
 
-export type CompareSort = 'cfg' | 'delta' | 'abs';
-const COMPARE_SORTS: CompareSort[] = ['cfg', 'delta', 'abs'];
-export function asCompareSort(v: string): CompareSort | null {
-  return COMPARE_SORTS.includes(v as CompareSort) ? (v as CompareSort) : null;
-}
-
-export interface CompareSample { value: number; n: number; }
-
-export interface CompareRow {
-  config: string;
-  metric: MetricKey;
-  metricType: MetricType;
-  operation: 'read' | 'write';
-  a: CompareSample;
-  b: CompareSample;
-  deltaPct: number | null;  // null if A==0
-  better: boolean;          // true if B improves over A wrt metric direction
-}
-
 // ---- Compare view v2 (multi-branch) ----
 
 export type SnapMode = 'dots' | 'bars' | 'table';
