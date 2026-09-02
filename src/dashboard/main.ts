@@ -1,9 +1,10 @@
 import * as d3 from 'd3';
-import type { DashboardData, OperationFilter, MetricType, ViewMode, CompareSort } from './types';
-import { CHART_KEYS_BY_CONFIG, asOperationFilter, asViewMode, asCompareSort } from './types';
+import type { DashboardData, OperationFilter, MetricType, ViewMode, SnapMode, ChartDataPoint } from './types';
+import { CHART_KEYS_BY_CONFIG, asOperationFilter, asViewMode, asSnapMode,
+         MAX_COMPARE_BRANCHES, DEFAULT_COMPARE_CONFIGS } from './types';
 import { loadData } from './data-loader';
-import { createChart, type CreateChartOptions } from './charts';
-import { computeCompareRows, renderCompareTable as renderCompareTableDom } from './compare';
+import { createChart } from './charts';
+import { computeSnapshotSections, renderSnapshot, renderCompareControls } from './compare';
 import { stripBranchPrefix, getColor } from './utils';
 
 class DashboardApp {
@@ -14,10 +15,12 @@ class DashboardApp {
   private branch = DashboardApp.DEFAULT_BRANCH;
   private operation: OperationFilter = 'both';
   private viewMode: ViewMode = 'overview';
-  private compareB1 = 'main';
-  private compareB2 = DashboardApp.DEFAULT_BRANCH;
+  private compareBranches: string[] = ['main'];
+  private compareConfigs: string[] = [...DEFAULT_COMPARE_CONFIGS];
+  private compareHidden = new Set<string>();
+  private compareDays = 0;   // compare default = All time (overview: 30)
   private compareN = 5;
-  private compareSort: CompareSort = 'cfg';
+  private snapMode: SnapMode = 'dots';
   private colorMap = new Map<string, number>();
   private groupColorMap = new Map<string, string>();
   private hiddenGroups = new Set<string>();
@@ -55,7 +58,7 @@ class DashboardApp {
 
     this.extractMeta();
     this.normalizeBranch();
-    this.normalizeCompareBranches();
+    this.normalizeCompareState();
     this.render();
     this.bindEvents();
   }
@@ -72,19 +75,32 @@ class DashboardApp {
 
   private readUrlParams() {
     const p = new URLSearchParams(window.location.search);
-    const daysRaw = parseInt(p.get('days') ?? '30', 10);
-    this.timeRange = DashboardApp.ALLOWED_DAYS.has(daysRaw) ? daysRaw : 30;
+    const daysParam = p.get('days');
+    const days = daysParam !== null && DashboardApp.ALLOWED_DAYS.has(parseInt(daysParam, 10))
+      ? parseInt(daysParam, 10) : null;
+    this.timeRange = days ?? 30;
     this.branch = p.get('branch') ?? DashboardApp.DEFAULT_BRANCH;
-
-    const op = p.get('op') ?? '';
-    this.operation = asOperationFilter(op) ?? 'both';
-
+    this.operation = asOperationFilter(p.get('op') ?? '') ?? 'both';
     this.viewMode = asViewMode(p.get('view') ?? '') ?? 'overview';
-    this.compareB1 = p.get('b1') ?? 'main';
-    this.compareB2 = p.get('b2') ?? '';
-    const nRaw = parseInt(p.get('n') ?? '5', 10);
-    this.compareN = Number.isFinite(nRaw) && nRaw >= 1 && nRaw <= 50 ? nRaw : 5;
-    this.compareSort = asCompareSort(p.get('sort') ?? '') ?? 'cfg';
+
+    if (this.viewMode === 'compare') {
+      let raw = p.get('branches');
+      if (raw === null) {
+        // legacy v1 compare URLs: ?b1=&b2=
+        const b1 = p.get('b1'), b2 = p.get('b2');
+        if (b1 || b2) raw = [b1, b2].filter(Boolean).join(',');
+      }
+      this.compareBranches = raw
+        ? [...new Set(raw.split(',').map(s => stripBranchPrefix(s.trim())).filter(Boolean))]
+            .slice(0, MAX_COMPARE_BRANCHES)
+        : [];
+      this.compareConfigs = (p.get('configs') ?? '')
+        .split(',').map(s => s.trim()).filter(Boolean);
+      this.compareDays = days ?? 0;
+      const nRaw = parseInt(p.get('n') ?? '5', 10);
+      this.compareN = Number.isFinite(nRaw) && nRaw >= 1 && nRaw <= 50 ? nRaw : 5;
+      this.snapMode = asSnapMode(p.get('snap') ?? '') ?? 'dots';
+    }
   }
 
   /** Normalize branch to short form and drop if not present in loaded branches. */
@@ -101,19 +117,28 @@ class DashboardApp {
     }
   }
 
-  /** Resolve b1/b2 to branches that exist in data; default b2 to most-recent non-b1. */
-  private normalizeCompareBranches() {
-    if (!this.allBranches.length) return;
-    const resolve = (b: string, fallback: string): string => {
-      const s = stripBranchPrefix(b);
-      return this.allBranches.includes(s) ? s : fallback;
-    };
-    this.compareB1 = resolve(this.compareB1, 'main');
-    if (!this.compareB2 || stripBranchPrefix(this.compareB2) === this.compareB1) {
-      this.compareB2 = this.defaultCompareBranch(this.compareB1);
+  /** Validate compare selections against loaded data; fall back to defaults. */
+  private normalizeCompareState() {
+    if (!this.allBranches.length || !this.data) return;
+    const validBranches = this.compareBranches.filter(b => this.allBranches.includes(b));
+    this.compareBranches = validBranches.length ? validBranches : this.defaultCompareBranches();
+    this.compareHidden = new Set([...this.compareHidden].filter(b => this.compareBranches.includes(b)));
+
+    const validConfigs = this.compareConfigs.filter(c => this.allGroups.includes(c));
+    if (validConfigs.length) {
+      this.compareConfigs = validConfigs;
     } else {
-      this.compareB2 = resolve(this.compareB2, this.defaultCompareBranch(this.compareB1));
+      const def = DEFAULT_COMPARE_CONFIGS.filter(c => this.allGroups.includes(c));
+      this.compareConfigs = def.length ? def : this.allGroups.slice(0, 2);
     }
+  }
+
+  /** Default compare selection: main + most recent non-main branch. */
+  private defaultCompareBranches(): string[] {
+    const main = this.allBranches.includes(DashboardApp.DEFAULT_BRANCH)
+      ? DashboardApp.DEFAULT_BRANCH : this.allBranches[0];
+    const other = this.defaultCompareBranch(main);
+    return other && other !== main ? [main, other] : [main];
   }
 
   /** Most recent non-b1 branch by max point timestamp. */
@@ -140,10 +165,14 @@ class DashboardApp {
       if (this.branch !== DashboardApp.DEFAULT_BRANCH) p.set('branch', this.branch);
       if (this.operation !== 'both') p.set('op', this.operation);
     } else {
-      if (this.compareB1 !== 'main') p.set('b1', this.compareB1);
-      if (this.compareB2) p.set('b2', this.compareB2);
+      p.set('branches', this.compareBranches.join(','));
+      if (this.compareConfigs.join(',') !== DEFAULT_COMPARE_CONFIGS.join(',')) {
+        p.set('configs', this.compareConfigs.join(','));
+      }
+      if (this.operation !== 'both') p.set('op', this.operation);
+      if (this.compareDays !== 0) p.set('days', String(this.compareDays));
       if (this.compareN !== 5) p.set('n', String(this.compareN));
-      if (this.compareSort !== 'cfg') p.set('sort', this.compareSort);
+      if (this.snapMode !== 'dots') p.set('snap', this.snapMode);
     }
     const qs = p.toString();
     try {
@@ -173,16 +202,6 @@ class DashboardApp {
       btn.setAttribute('aria-checked', String(isActive));
       btn.setAttribute('tabindex', isActive ? '0' : '-1');
     });
-
-    // Compare controls
-    const b1El = document.getElementById('compareB1') as HTMLInputElement | null;
-    if (b1El) b1El.value = this.compareB1;
-    const b2El = document.getElementById('compareB2') as HTMLInputElement | null;
-    if (b2El) b2El.value = this.compareB2;
-    const nEl = document.getElementById('compareN') as HTMLInputElement | null;
-    if (nEl) nEl.value = String(this.compareN);
-    const sortEl = document.getElementById('compareSort') as HTMLSelectElement | null;
-    if (sortEl) sortEl.value = this.compareSort;
   }
 
   // ---- Meta extraction ----
@@ -295,7 +314,7 @@ class DashboardApp {
           <dd>Legacy configuration mode</dd>
         </dl>
         <p>Example: <code>perftest-ost-4k-2-1</code> = object storage, 4 KB blocks, 2 threads, queue depth 1.</p>
-        <p><strong>Compare view:</strong> A (Base) vs B (Compare). Median of last N daily points per branch. Δ% positive = B larger than A; green when B improves (IOPS↑, latency↓), red otherwise.</p>
+        <p><strong>Compare view:</strong> pick up to 8 branches — the first is the base (A). Each selected config gets a card with IOPS and Latency time-series: lines = branches (dashed = write when Both is on). The snapshot block shows the median of the last N runs per (config, metric, branch) with Δ% vs base: green = improvement (IOPS up, latency down). Click a branch chip to hide its lines; × removes the branch; ⌃ makes it the base.</p>
         <button class="btn-close-about" id="closeAbout">Close</button>
       </div>
     `;
@@ -361,55 +380,125 @@ class DashboardApp {
   }
 
   private renderCompare(app: HTMLElement) {
-    const controls = document.createElement('div');
-    controls.className = 'compare-controls';
-    controls.innerHTML = `
-      <div class="control-group">
-        <label for="compareB1">Base (A)</label>
-        <input id="compareB1" list="branchList" autocomplete="off" spellcheck="false">
-      </div>
-      <div class="control-group">
-        <label for="compareB2">Compare (B)</label>
-        <input id="compareB2" list="branchList" autocomplete="off" spellcheck="false">
-      </div>
-      <div class="control-group">
-        <label for="compareN">Last N runs</label>
-        <input id="compareN" class="n-input" type="number" min="1" max="50">
-      </div>
-      <div class="control-group">
-        <label for="compareSort">Sort by</label>
-        <select id="compareSort">
-          <option value="cfg">Config name</option>
-          <option value="delta">Improvement (Δ%)</option>
-          <option value="abs">Magnitude |Δ|</option>
-        </select>
-      </div>
-    `;
-    app.appendChild(controls);
+    const controlsHost = document.createElement('div');
+    app.appendChild(controlsHost);
+    this.renderCompareControlsDom(controlsHost);
 
-    // Branch datalist shared by compare inputs
-    const list = document.createElement('datalist');
-    list.id = 'branchList';
-    for (const b of this.allBranches) {
-      const opt = document.createElement('option');
-      opt.value = b;
-      list.appendChild(opt);
-    }
-    app.appendChild(list);
+    const grid = document.createElement('div');
+    grid.className = 'compare-charts-grid';
+    grid.id = 'compareChartsGrid';
+    app.appendChild(grid);
 
-    const panel = document.createElement('div');
-    panel.id = 'comparePanel';
-    app.appendChild(panel);
+    const snapshot = document.createElement('div');
+    snapshot.id = 'snapshotPanel';
+    app.appendChild(snapshot);
 
-    this.syncControlsFromState();
-    this.renderCompareTable();
+    const tooltip = document.createElement('div');
+    tooltip.className = 'tooltip';
+    tooltip.id = 'tooltip';
+    app.appendChild(tooltip);
+
+    this.buildCompareCharts();
+    this.renderSnapshotPanel();
   }
 
-  private renderCompareTable() {
-    const panel = document.getElementById('comparePanel');
-    if (!panel || !this.data) return;
-    const rows = computeCompareRows(this.data, this.compareB1, this.compareB2, this.compareN);
-    renderCompareTableDom(panel, rows, { b1: this.compareB1, b2: this.compareB2, sort: this.compareSort });
+  private renderCompareControlsDom(host: HTMLElement) {
+    renderCompareControls(host, {
+      allBranches: this.allBranches,
+      selectedBranches: this.compareBranches,
+      hiddenBranches: this.compareHidden,
+      allConfigs: this.allGroups,
+      selectedConfigs: this.compareConfigs,
+      operation: this.operation,
+      timeRange: this.compareDays,
+      n: this.compareN,
+      snapMode: this.snapMode,
+    }, {
+      onAddBranch: b => this.addCompareBranch(b),
+      onRemoveBranch: b => this.removeCompareBranch(b),
+      onToggleBranchVisibility: b => this.toggleCompareBranchVisibility(b),
+      onSetBase: b => this.setCompareBase(b),
+      onToggleConfig: c => this.toggleCompareConfig(c),
+      onAllConfigs: () => this.setCompareConfigs(this.allGroups.slice()),
+      onNoConfigs: () => this.setCompareConfigs([]),
+      onOperation: op => { this.operation = op; this.writeUrlParams(); this.updateCompareVisibility(); this.rerenderCompareControls(); },
+      onTimeRange: d => { this.compareDays = d; this.writeUrlParams(); this.buildCompareCharts(); this.rerenderCompareControls(); this.updateInfo(); },
+      onN: n => { if (Number.isFinite(n)) this.compareN = Math.min(50, Math.max(1, n)); this.writeUrlParams(); this.renderSnapshotPanel(); this.rerenderCompareControls(); },
+      onSnapMode: m => { this.snapMode = m; this.writeUrlParams(); this.renderSnapshotPanel(); },
+    }, this.listenerAbort.signal);
+  }
+
+  /** Re-render just the controls bar in place (host stays in DOM). */
+  private rerenderCompareControls() {
+    const host = document.querySelector('.compare-controls') as HTMLElement | null;
+    if (host) this.renderCompareControlsDom(host);
+  }
+
+  private addCompareBranch(b: string) {
+    if (!this.allBranches.includes(b)) return;
+    if (this.compareBranches.includes(b)) return;
+    if (this.compareBranches.length >= MAX_COMPARE_BRANCHES) return;
+    this.compareBranches.push(b);
+    this.writeUrlParams();
+    this.rerenderCompareAll();
+  }
+
+  private removeCompareBranch(b: string) {
+    this.compareBranches = this.compareBranches.filter(x => x !== b);
+    if (!this.compareBranches.length) this.compareBranches = this.defaultCompareBranches();
+    this.writeUrlParams();
+    this.rerenderCompareAll();
+  }
+
+  private setCompareBase(b: string) {
+    const rest = this.compareBranches.filter(x => x !== b);
+    this.compareBranches = [b, ...rest];
+    this.writeUrlParams();
+    this.rerenderCompareAll();
+  }
+
+  private toggleCompareBranchVisibility(b: string) {
+    if (this.compareHidden.has(b)) this.compareHidden.delete(b);
+    else this.compareHidden.add(b);
+    // hidden-состояние не входит в URL (как hiddenGroups в overview)
+    this.rerenderCompareControls();
+    this.updateCompareVisibility();
+  }
+
+  private toggleCompareConfig(c: string) {
+    this.compareConfigs = this.compareConfigs.includes(c)
+      ? this.compareConfigs.filter(x => x !== c)
+      : [...this.compareConfigs, c];
+    this.writeUrlParams();
+    this.rerenderCompareAll();
+  }
+
+  private setCompareConfigs(configs: string[]) {
+    this.compareConfigs = configs;
+    this.writeUrlParams();
+    this.rerenderCompareAll();
+  }
+
+  /** Full compare re-render: controls + charts + snapshot + info. */
+  private rerenderCompareAll() {
+    this.rerenderCompareControls();
+    this.buildCompareCharts();
+    this.renderSnapshotPanel();
+    this.updateInfo();
+  }
+
+  /** Visibility-only update for op / branch-hide changes (no chart rebuild). */
+  private updateCompareVisibility() {
+    const visible = new Set(this.compareBranches.filter(b => !this.compareHidden.has(b)));
+    const opSet = this.operation === 'both' ? new Set(['read', 'write']) : new Set([this.operation]);
+    for (const chart of this.charts.values()) {
+      if (!chart) continue;
+      const fg = new Set<string>();
+      for (const p of chart.data) {
+        if (visible.has(p.group) && opSet.has(p.operation)) fg.add(p.fullGroup);
+      }
+      chart.updateVisibility(fg);
+    }
   }
 
   private buildCharts() {
@@ -458,6 +547,133 @@ class DashboardApp {
 
       if (chart) this.charts.set(cfg.id, chart);
     }
+  }
+
+  private buildCompareCharts() {
+    const grid = document.getElementById('compareChartsGrid');
+    if (!grid || !this.data) return;
+    for (const chart of this.charts.values()) chart?.destroy?.();
+    this.charts.clear();
+    grid.innerHTML = '';
+
+    if (!this.compareBranches.length) {
+      grid.appendChild(this.makeCompareEmptyState(
+        'Select at least one branch', 'Restore default branches',
+        () => { this.compareBranches = this.defaultCompareBranches(); this.compareHidden.clear(); this.rerenderCompareAll(); }));
+      return;
+    }
+    if (!this.compareConfigs.length) {
+      grid.appendChild(this.makeCompareEmptyState('No configs selected', null, null));
+      return;
+    }
+
+    const visibleBranches = new Set(this.compareBranches.filter(b => !this.compareHidden.has(b)));
+    // Данные — по ВСЕМ выбранным веткам (включая скрытые): createChart создаёт
+    // линии всех групп из data и прячет через opacity, поэтому updateCompareVisibility
+    // позже может раскрыть скрытую ветку без пересоздания графика.
+    const allSelected = new Set(this.compareBranches);
+    const opSet = this.operation === 'both' ? new Set(['read', 'write']) : new Set([this.operation]);
+    const branchColorMap = new Map<string, number>();
+    this.compareBranches.forEach((b, i) => branchColorMap.set(b, i));
+    const cutoff = this.compareDays > 0 ? new Date(Date.now() - this.compareDays * 86400000) : null;
+
+    this.compareConfigs.forEach((config, cfgIdx) => {
+      const card = document.createElement('section');
+      card.className = 'config-card';
+      const h = document.createElement('h3');
+      h.className = 'config-card-title';
+      h.textContent = config;
+      card.appendChild(h);
+      const pair = document.createElement('div');
+      pair.className = 'config-card-pair';
+      card.appendChild(pair);
+      grid.appendChild(card);
+
+      const metricCharts: { id: string; title: string; metricType: MetricType; keys: [string, string] }[] = [
+        { id: `cmp-${cfgIdx}-iops`, title: 'IOPS', metricType: 'iops',
+          keys: [CHART_KEYS_BY_CONFIG[0], CHART_KEYS_BY_CONFIG[1]] },
+        { id: `cmp-${cfgIdx}-latency`, title: 'Latency', metricType: 'latency',
+          keys: [CHART_KEYS_BY_CONFIG[2], CHART_KEYS_BY_CONFIG[3]] },
+      ];
+
+      for (const mc of metricCharts) {
+        const container = document.createElement('div');
+        container.className = 'chart-container';
+        pair.appendChild(container);
+        const data = this.compareChartPoints(mc.keys, config, allSelected, cutoff);
+        const chart = createChart({
+          container: d3.select(container) as unknown as d3.Selection<HTMLDivElement, unknown, HTMLElement, unknown>,
+          title: mc.title,
+          data,
+          metricType: mc.metricType,
+          timeRangeDays: this.compareDays,
+          visibleGroups: visibleBranches,
+          visibleOperations: opSet,
+          colorMap: branchColorMap,
+          onGroupColors: (groups, colors) => {
+            for (const [g, c] of colors) this.groupColorMap.set(g, c);
+          },
+        });
+        if (chart) this.charts.set(mc.id, chart);
+      }
+    });
+  }
+
+  /** Filter points for one compare chart and remap group -> branch short name
+   *  so createChart draws one line per branch. `branches` must contain ALL
+   *  selected branches (hidden included) — hiding is done via visibleGroups. */
+  private compareChartPoints(
+    keys: string[],
+    config: string,
+    branches: Set<string>,
+    cutoff: Date | null,
+  ): ChartDataPoint[] {
+    const out: ChartDataPoint[] = [];
+    for (const key of keys) {
+      for (const p of this.data?.charts[key] ?? []) {
+        if (p.config !== config) continue;
+        const b = stripBranchPrefix(p.branch);
+        if (!branches.has(b)) continue;
+        if (cutoff && new Date(p.timestamp) < cutoff) continue;
+        out.push({ ...p, group: b });
+      }
+    }
+    return out;
+  }
+
+  private makeCompareEmptyState(
+    message: string,
+    buttonLabel: string | null,
+    onRestore: (() => void) | null,
+  ): HTMLElement {
+    const wrap = document.createElement('div');
+    wrap.className = 'compare-empty';
+    const p = document.createElement('p');
+    p.textContent = message;
+    wrap.appendChild(p);
+    if (buttonLabel && onRestore) {
+      const btn = document.createElement('button');
+      btn.className = 'btn-retry';
+      btn.textContent = buttonLabel;
+      btn.addEventListener('click', onRestore);
+      wrap.appendChild(btn);
+    }
+    return wrap;
+  }
+
+  private renderSnapshotPanel() {
+    const panel = document.getElementById('snapshotPanel');
+    if (!panel || !this.data) return;
+    const sections = computeSnapshotSections(
+      this.data, this.compareBranches, this.compareConfigs, this.compareN);
+    const emptyMsg = this.compareBranches.length < 2
+      ? 'Add at least one more branch to compare — Δ% needs a base and another branch'
+      : undefined;
+    renderSnapshot(panel, sections, this.snapMode, m => {
+      this.snapMode = m;
+      this.writeUrlParams();
+      this.renderSnapshotPanel();
+    }, emptyMsg, this.listenerAbort.signal);
   }
 
   // ---- Legend ----
@@ -593,8 +809,15 @@ class DashboardApp {
       return;
     }
     if (this.viewMode === 'compare') {
+      const texts = [
+        `${this.compareBranches.length} branches`,
+        `${this.compareConfigs.length} configs`,
+        `base: ${this.compareBranches[0] ?? '—'}`,
+        `N=${this.compareN}`,
+        this.compareDays === 0 ? 'All time' : `Last ${this.compareDays} days`,
+      ];
       el.textContent = '';
-      for (const text of [`A: ${this.compareB1}`, `B: ${this.compareB2}`, `N=${this.compareN}`, `sort: ${this.compareSort}`]) {
+      for (const text of texts) {
         const span = document.createElement('span');
         span.textContent = text;
         el.appendChild(span);
@@ -641,42 +864,6 @@ class DashboardApp {
         this.render();
         this.bindEvents();
       }
-    }, { signal });
-
-    // Compare controls
-    document.getElementById('compareB1')?.addEventListener('change', (e) => {
-      const v = (e.target as HTMLInputElement).value.trim();
-      this.compareB1 = this.allBranches.includes(stripBranchPrefix(v)) ? stripBranchPrefix(v) : 'main';
-      this.normalizeCompareBranches();
-      this.writeUrlParams();
-      this.syncControlsFromState();
-      this.renderCompareTable();
-      this.updateInfo();
-    }, { signal });
-
-    document.getElementById('compareB2')?.addEventListener('change', (e) => {
-      const v = (e.target as HTMLInputElement).value.trim();
-      if (this.allBranches.includes(stripBranchPrefix(v))) this.compareB2 = stripBranchPrefix(v);
-      this.normalizeCompareBranches();
-      this.writeUrlParams();
-      this.syncControlsFromState();
-      this.renderCompareTable();
-      this.updateInfo();
-    }, { signal });
-
-    document.getElementById('compareN')?.addEventListener('change', (e) => {
-      const v = parseInt((e.target as HTMLInputElement).value, 10);
-      if (Number.isFinite(v) && v >= 1 && v <= 50) this.compareN = v;
-      this.writeUrlParams();
-      this.syncControlsFromState();
-      this.renderCompareTable();
-    }, { signal });
-
-    document.getElementById('compareSort')?.addEventListener('change', (e) => {
-      const s = asCompareSort((e.target as HTMLSelectElement).value);
-      if (s) this.compareSort = s;
-      this.writeUrlParams();
-      this.renderCompareTable();
     }, { signal });
 
     document.getElementById('timeRange')?.addEventListener('change', (e) => {
@@ -762,7 +949,7 @@ class DashboardApp {
         this.data = data;
         this.extractMeta();
         this.normalizeBranch();
-        this.normalizeCompareBranches();
+        this.normalizeCompareState();
         this.render();
         this.bindEvents();
         this.updateInfo('Data refreshed');
