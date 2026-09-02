@@ -16,6 +16,7 @@ class DashboardApp {
   private operation: OperationFilter = 'both';
   private viewMode: ViewMode = 'overview';
   private compareBranches: string[] = ['main'];
+  private compareTouched = false;
   private compareConfigs: string[] = [...DEFAULT_COMPARE_CONFIGS];
   private compareHidden = new Set<string>();
   private compareDays = 0;   // compare default = All time (overview: 30)
@@ -94,6 +95,7 @@ class DashboardApp {
         ? [...new Set(raw.split(',').map(s => stripBranchPrefix(s.trim())).filter(Boolean))]
             .slice(0, MAX_COMPARE_BRANCHES)
         : [];
+      if (raw !== null) this.compareTouched = true;
       this.compareConfigs = (p.get('configs') ?? '')
         .split(',').map(s => s.trim()).filter(Boolean);
       this.compareDays = days ?? 0;
@@ -121,7 +123,13 @@ class DashboardApp {
   private normalizeCompareState() {
     if (!this.allBranches.length || !this.data) return;
     const validBranches = this.compareBranches.filter(b => this.allBranches.includes(b));
-    this.compareBranches = validBranches.length ? validBranches : this.defaultCompareBranches();
+    if (validBranches.length) {
+      this.compareBranches = validBranches;
+    } else if (!this.compareTouched) {
+      this.compareBranches = this.defaultCompareBranches();
+    } else {
+      this.compareBranches = []; // explicit empty selection stays empty
+    }
     this.compareHidden = new Set([...this.compareHidden].filter(b => this.compareBranches.includes(b)));
 
     const validConfigs = this.compareConfigs.filter(c => this.allGroups.includes(c));
@@ -435,6 +443,7 @@ class DashboardApp {
   }
 
   private addCompareBranch(b: string) {
+    this.compareTouched = true;
     if (!this.allBranches.includes(b)) return;
     if (this.compareBranches.includes(b)) return;
     if (this.compareBranches.length >= MAX_COMPARE_BRANCHES) return;
@@ -445,12 +454,13 @@ class DashboardApp {
 
   private removeCompareBranch(b: string) {
     this.compareBranches = this.compareBranches.filter(x => x !== b);
-    if (!this.compareBranches.length) this.compareBranches = this.defaultCompareBranches();
+    this.compareTouched = true;
     this.writeUrlParams();
     this.rerenderCompareAll();
   }
 
   private setCompareBase(b: string) {
+    this.compareTouched = true;
     const rest = this.compareBranches.filter(x => x !== b);
     this.compareBranches = [b, ...rest];
     this.writeUrlParams();
