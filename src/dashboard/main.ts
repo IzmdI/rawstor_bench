@@ -569,7 +569,7 @@ class DashboardApp {
     if (!this.compareBranches.length) {
       grid.appendChild(this.makeCompareEmptyState(
         'Select at least one branch', 'Restore default branches',
-        () => { this.compareBranches = this.defaultCompareBranches(); this.compareHidden.clear(); this.rerenderCompareAll(); }));
+        () => { this.compareBranches = this.defaultCompareBranches(); this.compareHidden.clear(); this.writeUrlParams(); this.rerenderCompareAll(); }));
       return;
     }
     if (!this.compareConfigs.length) {
