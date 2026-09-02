@@ -302,8 +302,36 @@ class DashboardApp {
     aboutDialog.className = 'about-dialog';
     aboutDialog.id = 'aboutDialog';
     aboutDialog.setAttribute('aria-labelledby', 'aboutDialogTitle');
-    aboutDialog.innerHTML = `
-      <div class="about-content">
+    const content = document.createElement('div');
+    content.className = 'about-content';
+
+    if (this.viewMode === 'compare') {
+      content.innerHTML = `
+        <h2 id="aboutDialogTitle">About Compare View</h2>
+        <p>Pick up to 8 branches — the <strong>first one is the base</strong> (badge <code>A</code>): all Δ% are computed against it.</p>
+        <dl>
+          <dt>⌃ on a chip</dt>
+          <dd>Make that branch the base (moves it to the first position)</dd>
+          <dt>× on a chip</dt>
+          <dd>Remove the branch from the comparison</dd>
+          <dt>Click a chip</dt>
+          <dd>Hide/show that branch's chart lines (the chip dims; the snapshot keeps showing it)</dd>
+          <dt>Search field</dt>
+          <dd>Add branches (max 8)</dd>
+          <dt>Config chips</dt>
+          <dd>Choose which configurations get chart cards (All / None shortcuts)</dd>
+          <dt>Time Range</dt>
+          <dd>Filters the time-series charts only</dd>
+          <dt>Snapshot: last N</dt>
+          <dd>The snapshot block shows the median of the last N daily points per (config, metric, branch). <strong>N affects only the snapshot</strong>, not the charts.</dd>
+        </dl>
+        <p><strong>Δ%:</strong> green = improvement (IOPS up, latency down), red = regression, <code>—</code> = no data.</p>
+        <p><strong>Snapshot views:</strong> Dots — values on a shared scale, dashed line = base; Bars — heights, outlined bar = base; Table — exact numbers.</p>
+        <p>Config pattern: <code>perftest[-without-liburing][-legacy]-{backend}-{blocksize}-{threads}-{queues}</code> — full breakdown in the Overview help.</p>
+        <button class="btn-close-about" id="closeAbout">Close</button>
+      `;
+    } else {
+      content.innerHTML = `
         <h2 id="aboutDialogTitle">About Test Configurations</h2>
         <p>Configuration names follow the pattern:</p>
         <code>perftest[-without-liburing][-legacy]-{backend}-{blocksize}-{threads}-{queues}</code>
@@ -322,10 +350,11 @@ class DashboardApp {
           <dd>Legacy configuration mode</dd>
         </dl>
         <p>Example: <code>perftest-ost-4k-2-1</code> = object storage, 4 KB blocks, 2 threads, queue depth 1.</p>
-        <p><strong>Compare view:</strong> pick up to 8 branches — the first is the base (A). Each selected config gets a card with IOPS and Latency time-series: lines = branches (dashed = write when Both is on). The snapshot block shows the median of the last N runs per (config, metric, branch) with Δ% vs base: green = improvement (IOPS up, latency down). Click a branch chip to hide its lines; × removes the branch; ⌃ makes it the base.</p>
+        <p>Compare mode has its own help — switch the mode and press <code>?</code> again.</p>
         <button class="btn-close-about" id="closeAbout">Close</button>
-      </div>
-    `;
+      `;
+    }
+    aboutDialog.appendChild(content);
     app.appendChild(aboutDialog);
   }
 
