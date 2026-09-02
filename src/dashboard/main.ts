@@ -174,7 +174,7 @@ class DashboardApp {
       if (this.operation !== 'both') p.set('op', this.operation);
     } else {
       p.set('branches', this.compareBranches.join(','));
-      if (this.compareConfigs.join(',') !== DEFAULT_COMPARE_CONFIGS.join(',')) {
+      if (this.compareConfigs.length && this.compareConfigs.join(',') !== DEFAULT_COMPARE_CONFIGS.join(',')) {
         p.set('configs', this.compareConfigs.join(','));
       }
       if (this.operation !== 'both') p.set('op', this.operation);
@@ -289,7 +289,7 @@ class DashboardApp {
           <button id="modeOverview" role="tab" aria-selected="${this.viewMode === 'overview'}">Overview</button>
           <button id="modeCompare" role="tab" aria-selected="${this.viewMode === 'compare'}">Compare</button>
         </div>
-        <button class="btn-about" id="aboutBtn" aria-label="About test configurations">?</button>
+        <button class="btn-about" id="aboutBtn" aria-label="${this.viewMode === 'compare' ? 'About compare view' : 'About test configurations'}">?</button>
       </div>
       <p class="header-subtitle">Interactive dashboard for tracking librawstor fio benchmark results across commits and configurations.</p>
       <div class="info-bar" id="infoBar" role="status" aria-live="polite"></div>
@@ -451,7 +451,6 @@ class DashboardApp {
       operation: this.operation,
       timeRange: this.compareDays,
       n: this.compareN,
-      snapMode: this.snapMode,
     }, {
       onAddBranch: b => this.addCompareBranch(b),
       onRemoveBranch: b => this.removeCompareBranch(b),
@@ -461,9 +460,17 @@ class DashboardApp {
       onAllConfigs: () => this.setCompareConfigs(this.allGroups.slice()),
       onNoConfigs: () => this.setCompareConfigs([]),
       onOperation: op => { this.operation = op; this.writeUrlParams(); this.updateCompareVisibility(); this.renderSnapshotPanel(); },
-      onTimeRange: d => { this.compareDays = d; this.writeUrlParams(); this.buildCompareCharts(); this.rerenderCompareControls(); this.updateInfo(); },
-      onN: n => { if (Number.isFinite(n)) this.compareN = Math.min(50, Math.max(1, n)); this.writeUrlParams(); this.renderSnapshotPanel(); this.updateInfo(); },
-      onSnapMode: m => { this.snapMode = m; this.writeUrlParams(); this.renderSnapshotPanel(); },
+      onTimeRange: d => { this.compareDays = d; this.writeUrlParams(); this.buildCompareCharts(); this.updateInfo(); },
+      onN: n => {
+        if (Number.isFinite(n)) {
+          this.compareN = Math.min(50, Math.max(1, n));
+          const inp = document.getElementById('compareN') as HTMLInputElement | null;
+          if (inp) inp.value = String(this.compareN);
+        }
+        this.writeUrlParams();
+        this.renderSnapshotPanel();
+        this.updateInfo();
+      },
     }, this.listenerAbort.signal);
   }
 
@@ -474,10 +481,10 @@ class DashboardApp {
   }
 
   private addCompareBranch(b: string) {
-    this.compareTouched = true;
     if (!this.allBranches.includes(b)) return;
     if (this.compareBranches.includes(b)) return;
     if (this.compareBranches.length >= MAX_COMPARE_BRANCHES) return;
+    this.compareTouched = true;
     this.compareBranches.push(b);
     this.writeUrlParams();
     this.rerenderCompareAll();
@@ -713,7 +720,6 @@ class DashboardApp {
     renderSnapshot(panel, sections, this.snapMode, m => {
       this.snapMode = m;
       this.writeUrlParams();
-      this.renderSnapshotPanel();
     }, emptyMsg, this.listenerAbort.signal);
   }
 
@@ -894,6 +900,7 @@ class DashboardApp {
       if (this.viewMode !== 'overview') {
         this.viewMode = 'overview';
         this.writeUrlParams();
+        this.hiddenGroups.clear();
         this.render();
         this.bindEvents();
       }
@@ -902,6 +909,7 @@ class DashboardApp {
       if (this.viewMode !== 'compare') {
         this.viewMode = 'compare';
         this.writeUrlParams();
+        this.hiddenGroups.clear();
         this.render();
         this.bindEvents();
       }

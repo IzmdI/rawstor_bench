@@ -175,7 +175,6 @@ export interface CompareControlState {
   operation: OperationFilter;
   timeRange: number;
   n: number;
-  snapMode: SnapMode;
 }
 
 /** Callbacks wired by main.ts to compare-control interactions. */
@@ -190,5 +189,4 @@ export interface CompareControlHandlers {
   onOperation(op: OperationFilter): void;
   onTimeRange(days: number): void;
   onN(n: number): void;
-  onSnapMode(mode: SnapMode): void;
 }

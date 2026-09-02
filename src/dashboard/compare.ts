@@ -275,6 +275,19 @@ function renderSnapshotTable(container: HTMLElement, sections: SnapshotSection[]
   }
 }
 
+function renderSnapshotBody(body: HTMLElement, sections: SnapshotSection[], mode: SnapMode, emptyMessage?: string): void {
+  body.innerHTML = '';
+  if (!sections.length) {
+    const p = el('p', 'no-data');
+    p.textContent = emptyMessage ?? 'No snapshot data for the selected branches and configs';
+    body.appendChild(p);
+    return;
+  }
+  if (mode === 'dots') renderSnapshotDots(body, sections);
+  else if (mode === 'bars') renderSnapshotBars(body, sections);
+  else renderSnapshotTable(body, sections);
+}
+
 /** Render the snapshot block: header with view toggle + sections in `mode`. */
 export function renderSnapshot(
   container: HTMLElement,
@@ -293,6 +306,7 @@ export function renderSnapshot(
   header.appendChild(title);
 
   const toggle = el('div', 'snap-toggle');
+  toggle.setAttribute('role', 'radiogroup');
   toggle.setAttribute('aria-label', 'Snapshot view mode');
   const buttons: HTMLButtonElement[] = [];
   const modes: SnapMode[] = ['dots', 'bars', 'table'];
@@ -305,25 +319,17 @@ export function renderSnapshot(
     toggle.appendChild(btn);
   });
   header.appendChild(toggle);
-  container.appendChild(header);
 
   const body = el('div', 'snapshot-body');
-  container.appendChild(body);
+  container.append(header, body);
 
   bindRadiogroup(buttons, modes.indexOf(mode), btn => {
     const m = asSnapMode(btn.dataset.snap ?? '');
-    if (m) onModeChange(m);
+    if (!m) return;
+    renderSnapshotBody(body, sections, m, emptyMessage);
+    onModeChange(m);
   }, signal);
-
-  if (!sections.length) {
-    const p = el('p', 'no-data');
-    p.textContent = emptyMessage ?? 'No snapshot data for the selected branches and configs';
-    body.appendChild(p);
-    return;
-  }
-  if (mode === 'dots') renderSnapshotDots(body, sections);
-  else if (mode === 'bars') renderSnapshotBars(body, sections);
-  else renderSnapshotTable(body, sections);
+  renderSnapshotBody(body, sections, mode, emptyMessage);
 }
 
 /** Render the compare-mode controls bar (branch chips + search, config chips,
@@ -443,6 +449,8 @@ export function renderCompareControls(
   oLegend.textContent = 'Operations';
   oGroup.appendChild(oLegend);
   const oRow = el('div', 'toggle-group');
+  oRow.setAttribute('role', 'radiogroup');
+  oRow.setAttribute('aria-label', 'Operation filter');
   const opButtons: HTMLButtonElement[] = [];
   for (const op of ['read', 'write', 'both'] as const) {
     const btn = el('button', 'cmp-op-btn');
