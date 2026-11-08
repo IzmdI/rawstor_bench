@@ -1,0 +1,52 @@
+
+randread: (groupid=0, jobs=1): err= 0: pid=14841: Thu Sep 17 09:46:49 2026
+  read: IOPS=399k, BW=1560MiB/s (1636MB/s)(15.2GiB/10001msec)
+    slat (nsec): min=330, max=94206, avg=391.13, stdev=272.40
+    clat (nsec): min=3607, max=154799, avg=4386.05, stdev=939.67
+     lat (nsec): min=4027, max=155200, avg=4777.18, stdev=985.96
+    clat percentiles (nsec):
+     |  1.00th=[ 4016],  5.00th=[ 4080], 10.00th=[ 4128], 20.00th=[ 4192],
+     | 30.00th=[ 4192], 40.00th=[ 4256], 50.00th=[ 4320], 60.00th=[ 4320],
+     | 70.00th=[ 4384], 80.00th=[ 4448], 90.00th=[ 4576], 95.00th=[ 4640],
+     | 99.00th=[ 5920], 99.50th=[ 8256], 99.90th=[16192], 99.95th=[18304],
+     | 99.99th=[30080]
+   bw (  MiB/s): min= 1526, max= 1582, per=100.00%, avg=1561.11, stdev=13.22, samples=20
+   iops        : min=390757, max=405134, avg=399644.10, stdev=3383.72, samples=20
+  lat (usec)   : 4=0.98%, 10=98.55%, 20=0.44%, 50=0.03%, 100=0.01%
+  lat (usec)   : 250=0.01%
+  cpu          : usr=42.87%, sys=57.11%, ctx=70, majf=0, minf=36
+  IO depths    : 1=0.0%, 2=100.0%, 4=0.0%, 8=0.0%, 16=0.0%, 32=0.0%, >=64=0.0%
+     submit    : 0=0.0%, 4=100.0%, 8=0.0%, 16=0.0%, 32=0.0%, 64=0.0%, >=64=0.0%
+     complete  : 0=0.0%, 4=100.0%, 8=0.0%, 16=0.0%, 32=0.0%, 64=0.0%, >=64=0.0%
+     issued rwts: total=3994220,0,0,0 short=0,0,0,0 dropped=0,0,0,0
+     latency   : target=0, window=0, percentile=100.00%, depth=2
+randwrite: (groupid=1, jobs=1): err= 0: pid=14844: Thu Sep 17 09:46:49 2026
+  write: IOPS=56.4k, BW=220MiB/s (231MB/s)(2202MiB/10001msec); 0 zone resets
+    slat (nsec): min=511, max=40746, avg=960.51, stdev=474.38
+    clat (usec): min=4, max=352, avg=33.93, stdev= 5.81
+     lat (usec): min=6, max=353, avg=34.89, stdev= 6.07
+    clat percentiles (nsec):
+     |  1.00th=[23680],  5.00th=[27776], 10.00th=[28288], 20.00th=[29824],
+     | 30.00th=[30336], 40.00th=[30592], 50.00th=[31104], 60.00th=[31872],
+     | 70.00th=[39168], 80.00th=[40704], 90.00th=[41728], 95.00th=[42752],
+     | 99.00th=[45824], 99.50th=[49408], 99.90th=[56064], 99.95th=[62208],
+     | 99.99th=[80384]
+   bw (  KiB/s): min=  304, max=243414, per=95.31%, avg=214922.14, stdev=51578.17, samples=21
+   iops        : min=   76, max=60853, avg=53730.38, stdev=12894.51, samples=21
+  lat (usec)   : 10=0.01%, 20=0.11%, 50=99.45%, 100=0.44%, 250=0.01%
+  lat (usec)   : 500=0.01%
+  cpu          : usr=17.40%, sys=37.56%, ctx=281909, majf=0, minf=36
+  IO depths    : 1=0.0%, 2=100.0%, 4=0.0%, 8=0.0%, 16=0.0%, 32=0.0%, >=64=0.0%
+     submit    : 0=0.0%, 4=100.0%, 8=0.0%, 16=0.0%, 32=0.0%, 64=0.0%, >=64=0.0%
+     complete  : 0=0.0%, 4=100.0%, 8=0.0%, 16=0.0%, 32=0.0%, 64=0.0%, >=64=0.0%
+     issued rwts: total=0,563827,0,0 short=0,0,0,0 dropped=0,0,0,0
+     latency   : target=0, window=0, percentile=100.00%, depth=2
+
+Run status group 0 (all jobs):
+   READ: bw=1560MiB/s (1636MB/s), 1560MiB/s-1560MiB/s (1636MB/s-1636MB/s), io=15.2GiB (16.4GB), run=10001-10001msec
+
+Run status group 1 (all jobs):
+  WRITE: bw=220MiB/s (231MB/s), 220MiB/s-220MiB/s (231MB/s-231MB/s), io=2202MiB (2309MB), run=10001-10001msec
+
+Disk stats (read/write):
+  sda: ios=0/580, sectors=0/1107480, merge=0/1040, ticks=0/4926, in_queue=4926, util=0.50%
