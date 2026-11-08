@@ -1,5 +1,5 @@
 import type {
-  ChartDataPoint, DashboardData, CompareRow, CompareSort, MetricType,
+  ChartDataPoint, DashboardData, CompareRow, CompareSort, MetricType, OperationFilter,
   SnapshotSection, SnapshotRow, SnapshotCell, SnapMode,
   CompareControlState, CompareControlHandlers,
 } from './types';
@@ -32,6 +32,7 @@ export function computeSnapshotSections(
   branches: string[],
   configs: string[],
   n: number,
+  operation: OperationFilter = 'both',
 ): SnapshotSection[] {
   if (branches.length < 2) return [];
   const sections: SnapshotSection[] = [];
@@ -40,6 +41,7 @@ export function computeSnapshotSections(
     const rows: SnapshotRow[] = [];
 
     for (const spec of METRIC_SPECS) {
+      if (operation !== 'both' && spec.operation !== operation) continue;
       const points = data.charts[spec.chartKey] ?? [];
       const medians: (number | null)[] = [];
       const counts: number[] = [];
@@ -287,7 +289,7 @@ export function renderSnapshot(
 
   const header = el('div', 'snapshot-header');
   const title = el('h3', 'snapshot-title');
-  title.textContent = 'Snapshot · median of last N runs · Δ% vs base';
+  title.textContent = 'Snapshot · median of last N daily points · Δ% vs base';
   header.appendChild(title);
 
   const toggle = el('div', 'snap-toggle');
@@ -461,7 +463,7 @@ export function renderCompareControls(
   const tGroup = el('div', 'control-group');
   const tLabel = el('label');
   tLabel.htmlFor = 'compareTimeRange';
-  tLabel.textContent = 'Time Range';
+  tLabel.textContent = 'Chart time range';
   tGroup.appendChild(tLabel);
   const tSelect = el('select');
   tSelect.id = 'compareTimeRange';
@@ -484,7 +486,7 @@ export function renderCompareControls(
   const nGroup = el('div', 'control-group');
   const nLabel = el('label');
   nLabel.htmlFor = 'compareN';
-  nLabel.textContent = 'Snapshot: last N';
+  nLabel.textContent = 'Snapshot: last N daily points';
   nGroup.appendChild(nLabel);
   const nInput = el('input', 'n-input');
   nInput.id = 'compareN';
@@ -492,9 +494,17 @@ export function renderCompareControls(
   nInput.min = '1';
   nInput.max = '50';
   nInput.value = String(state.n);
+  let lastValidN = state.n;
   nInput.addEventListener('change', () => {
     const v = parseInt(nInput.value, 10);
-    if (Number.isFinite(v)) handlers.onN(v);
+    if (Number.isFinite(v)) {
+      const n = Math.min(50, Math.max(1, v));
+      lastValidN = n;
+      nInput.value = String(n);
+      handlers.onN(n);
+    } else {
+      nInput.value = String(lastValidN);
+    }
   }, { signal });
   nGroup.appendChild(nInput);
   container.appendChild(nGroup);

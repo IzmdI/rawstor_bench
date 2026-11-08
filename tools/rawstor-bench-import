@@ -34,7 +34,9 @@ def _validate_commit(value):
 def _validate_inputs(prefix, repo, name, branch, commit):
     _validate_name(repo, '--repo')
     _validate_name(name, '--name')
-    _validate_name(branch, '--branch')
+    # Branch is metadata, not a path component; refs may contain slashes.
+    if not branch or any(c.isspace() or ord(c) < 32 or ord(c) == 127 for c in branch):
+        raise ValueError('invalid --branch: expected a non-empty name without whitespace or control characters')
     _validate_commit(commit)
 
 

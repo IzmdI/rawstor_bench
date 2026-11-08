@@ -42,7 +42,7 @@ def load_meta(meta_path):
             raise ValueError(f"missing 'date' in {meta_path}")
         data_block = meta.get("data") or {}
         if not data_block.get("txt") or not data_block.get("json"):
-            raise ValueError(f"missing/invalid 'data.{txt,json}' in {meta_path}")
+            raise ValueError(f"missing/invalid 'data.txt' or 'data.json' in {meta_path}")
         meta["date"] = datetime.datetime.fromisoformat(date_raw)
     return meta
 
@@ -137,15 +137,22 @@ def compile_repo_md(dest_abspath, dest_path, repo_name, repo):
         repo_md.write(f"# [&lt;](..) {repo_name} tests\n\n")
         for name, metas in repo:
             fios = []
-            for meta_path, meta in metas[:REPO_TABLE_COMMIT_LIMIT]:
+            # Generate every detail page; retain only the summary rows in memory.
+            for meta_path, meta in metas:
                 try:
-                    fios.append((meta_path, meta, read_fio_json(meta_path, meta)))
+                    fio = read_fio_json(meta_path, meta)
+                    commit_md_url = compile_commit_md(
+                        dest_abspath / name, name, repo_name,
+                        meta_path, meta, fio, name,
+                    )
+                    if len(fios) < REPO_TABLE_COMMIT_LIMIT:
+                        fios.append((meta_path, meta, fio, commit_md_url))
                 except (OSError, json.JSONDecodeError, KeyError) as e:
                     print(f"  Skipping {meta_path}: {e}")
                     continue
 
             job_names = set()
-            for meta_path, meta, fio in fios:
+            for meta_path, meta, fio, commit_md_url in fios:
                 for job in fio.get("jobs", []):
                     opts = job.get("job options") or {}
                     if opts.get("name"):
@@ -184,28 +191,12 @@ def compile_repo_md(dest_abspath, dest_path, repo_name, repo):
                 )
             repo_md.write("\n")
 
-            for meta_path, meta, fio in fios:
-                commmit_md_dest_path = f"{name}"
-                commmit_md_dest_abspath = dest_abspath / commmit_md_dest_path
-                try:
-                    commmit_md_url = compile_commit_md(
-                        commmit_md_dest_abspath,
-                        commmit_md_dest_path,
-                        repo_name,
-                        meta_path,
-                        meta,
-                        fio,
-                        name,
-                    )
-                except (OSError, KeyError, json.JSONDecodeError) as e:
-                    print(f"  Skipping commit md {meta_path}: {e}")
-                    continue
-
+            for meta_path, meta, fio, commit_md_url in fios:
                 commit_sha = meta_path.stem
 
                 repo_md.write(
                     f"| "
-                    f"[{get_date_txt(meta['date'])}]({commmit_md_url}) | "
+                    f"[{get_date_txt(meta['date'])}]({commit_md_url}) | "
                     f"{meta['branch']} | "
                     f"{get_commit_txt(repo_name, commit_sha)} | "
                 )

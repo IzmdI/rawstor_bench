@@ -320,9 +320,11 @@ class DashboardApp {
           <dd>Add branches (max 8)</dd>
           <dt>Config chips</dt>
           <dd>Choose which configurations get chart cards (All / None shortcuts)</dd>
-          <dt>Time Range</dt>
+          <dt>Operations</dt>
+          <dd>Read / Write / Both filters both the charts and the snapshot.</dd>
+          <dt>Chart time range</dt>
           <dd>Filters the time-series charts only</dd>
-          <dt>Snapshot: last N</dt>
+          <dt>Snapshot: last N daily points</dt>
           <dd>The snapshot block shows the median of the last N daily points per (config, metric, branch). <strong>N affects only the snapshot</strong>, not the charts.</dd>
         </dl>
         <p><strong>Δ%:</strong> green = improvement (IOPS up, latency down), red = regression, <code>—</code> = no data.</p>
@@ -458,9 +460,9 @@ class DashboardApp {
       onToggleConfig: c => this.toggleCompareConfig(c),
       onAllConfigs: () => this.setCompareConfigs(this.allGroups.slice()),
       onNoConfigs: () => this.setCompareConfigs([]),
-      onOperation: op => { this.operation = op; this.writeUrlParams(); this.updateCompareVisibility(); this.rerenderCompareControls(); },
+      onOperation: op => { this.operation = op; this.writeUrlParams(); this.updateCompareVisibility(); this.renderSnapshotPanel(); },
       onTimeRange: d => { this.compareDays = d; this.writeUrlParams(); this.buildCompareCharts(); this.rerenderCompareControls(); this.updateInfo(); },
-      onN: n => { if (Number.isFinite(n)) this.compareN = Math.min(50, Math.max(1, n)); this.writeUrlParams(); this.renderSnapshotPanel(); this.rerenderCompareControls(); },
+      onN: n => { if (Number.isFinite(n)) this.compareN = Math.min(50, Math.max(1, n)); this.writeUrlParams(); this.renderSnapshotPanel(); this.updateInfo(); },
       onSnapMode: m => { this.snapMode = m; this.writeUrlParams(); this.renderSnapshotPanel(); },
     }, this.listenerAbort.signal);
   }
@@ -704,7 +706,7 @@ class DashboardApp {
     const panel = document.getElementById('snapshotPanel');
     if (!panel || !this.data) return;
     const sections = computeSnapshotSections(
-      this.data, this.compareBranches, this.compareConfigs, this.compareN);
+      this.data, this.compareBranches, this.compareConfigs, this.compareN, this.operation);
     const emptyMsg = this.compareBranches.length < 2
       ? 'Add at least one more branch to compare — Δ% needs a base and another branch'
       : undefined;
@@ -853,7 +855,7 @@ class DashboardApp {
         `${this.compareConfigs.length} configs`,
         `base: ${this.compareBranches[0] ?? '—'}`,
         `N=${this.compareN}`,
-        this.compareDays === 0 ? 'All time' : `Last ${this.compareDays} days`,
+        this.compareDays === 0 ? 'Charts: all time' : `Charts: last ${this.compareDays} days`,
       ];
       el.textContent = '';
       for (const text of texts) {
