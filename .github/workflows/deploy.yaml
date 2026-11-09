@@ -7,6 +7,7 @@ on:
       - 'data/**'
       - 'docs/**'
       - 'tools/**'
+      - 'tests/**'
       - 'src/dashboard/**'
       - 'package.json'
       - 'package-lock.json'
@@ -19,6 +20,7 @@ on:
       - 'data/**'
       - 'docs/**'
       - 'tools/**'
+      - 'tests/**'
       - 'src/dashboard/**'
       - 'package.json'
       - 'package-lock.json'
@@ -66,6 +68,7 @@ jobs:
       - name: Typecheck + build
         run: |
           npm ci
+          npm test
           npm run typecheck
           npm run build
 
@@ -82,6 +85,8 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.10'
+      - name: Test benchmark tools
+        run: python -m unittest discover -s tests -p "test_*.py"
       - name: Smoke-test rawstor-bench-compile
         run: python3 tools/rawstor-bench-compile --prefix . fio
 
@@ -118,6 +123,9 @@ jobs:
           echo "days=$DAYS" >> "$GITHUB_OUTPUT"
           echo "Using time range: $DAYS days"
 
+      - name: Generate benchmark detail pages
+        run: python3 tools/rawstor-bench-compile --prefix . fio
+
       - name: Process data
         env:
           DAYS: ${{ steps.time-range.outputs.days }}
@@ -139,6 +147,7 @@ jobs:
       - name: Build dashboard
         run: |
           npm ci
+          npm test
           npm run typecheck
           npm run build
 
