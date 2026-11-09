@@ -168,6 +168,7 @@ export interface SnapshotSection {
 /** Current compare-mode control values, consumed by renderCompareControls. */
 export interface CompareControlState {
   allBranches: string[];
+  branchLastUpdated: ReadonlyMap<string, string>;
   selectedBranches: string[];
   hiddenBranches: Set<string>;
   allConfigs: string[];

@@ -26,12 +26,14 @@ test('dashboard browser regressions', { skip: !existsSync(browser) ? 'Set BROWSE
     write: false, format: 'esm', external: ['d3'] });
   const configs = ['perftest-ost-4k-1-1', 'perftest-ost-4k-2-1'];
   const charts = {};
+  const latestTimestamp = new Date(Date.now() - 3600000).toISOString();
   for (const metric of ['iops', 'latency']) for (const op of ['read', 'write']) {
     charts[`${metric}_${op}_by_config`] = configs.flatMap(config => ['main', 'feature/test'].flatMap(branch =>
       [1, 2, 3].map(day => ({ group: config, config, branch: `refs/heads/${branch}`,
         timestamp: new Date(Date.now() - day * 86400000).toISOString(), value: day * 10,
         commit_sha: 'abcdef', operation: op, test_url: `../${config}/abcdef.md` }))));
   }
+  charts.latency_write_by_config.push({ ...charts.latency_write_by_config[0], timestamp: latestTimestamp });
   const data = { generated_at: new Date().toISOString(), filter: { days: 0, cutoff_date: null, applied: false },
     summary: { total_tests: 12, total_configurations: 2, total_branches: 2, configurations: configs,
       branches: ['refs/heads/main', 'refs/heads/feature/test'], time_range: { start: null, end: null } }, charts };
@@ -170,11 +172,39 @@ test('dashboard browser regressions', { skip: !existsSync(browser) ? 'Set BROWSE
     await t.test('compare branch search excludes selected branches and adds a result', async () => {
       await load('?view=compare&branches=main');
       await click('.branch-picker-toggle');
-      assert.deepEqual(await evaluate(`[...document.querySelectorAll('[role="option"]')].map(e=>e.textContent)`), ['feature/test']);
+      assert.deepEqual(await evaluate(`[...document.querySelectorAll('[role="option"] .branch-option-name')].map(e=>e.textContent)`), ['feature/test']);
       await click('[role="option"]');
       assert.equal(await evaluate(`new URLSearchParams(location.search).get('branches')`), 'main,feature/test');
       assert.equal(await evaluate(`document.activeElement.id`), 'compareBranchInput');
       assert.equal(await evaluate(`document.querySelectorAll('[role="option"]').length`), 0);
+    });
+    await t.test('branch dates show the latest benchmark across metrics in both modes', async () => {
+      await load('');
+      await click('.branch-picker-toggle');
+      await screenshot('branch-dates');
+      const expected = latestTimestamp.slice(0,10);
+      assert.equal(await evaluate(`document.querySelector('[role="option"] time').textContent`), expected);
+      assert.equal(await evaluate(`document.querySelector('[role="option"] time').dateTime`), latestTimestamp);
+      await load('?view=compare&branches=feature%2Ftest&days=2');
+      await click('.branch-picker-toggle');
+      assert.equal(await evaluate(`document.querySelector('[role="option"] .branch-option-name').textContent`), 'main');
+      assert.equal(await evaluate(`document.querySelector('[role="option"] time').textContent`), expected);
+      await click('[role="option"]');
+      assert.equal(await evaluate(`new URLSearchParams(location.search).get('branches')`), 'feature/test,main');
+    });
+    await t.test('branches without valid dates show No date instead of a fabricated date', async () => {
+      const undated = structuredClone(data);
+      for (const points of Object.values(undated.charts)) for (const p of points) {
+        if (p.branch === 'refs/heads/feature/test') p.timestamp = 'Unknown date';
+      }
+      const original = routes['/data.json'];
+      routes['/data.json'] = ['application/json', JSON.stringify(undated)];
+      try {
+        await load('?view=compare&branches=main');
+        await click('.branch-picker-toggle');
+        assert.equal(await evaluate(`document.querySelector('[role="option"] .branch-option-date').textContent`), 'No date');
+        assert.equal(await evaluate(`document.querySelector('[role="option"] time') === null`), true);
+      } finally { routes['/data.json'] = original; }
     });
     await t.test('two-branch delta stays compact on wide screens and fits narrow screens', async () => {
       await call('Emulation.setDeviceMetricsOverride', {width:1920,height:1080,deviceScaleFactor:1,mobile:false});

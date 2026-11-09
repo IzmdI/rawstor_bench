@@ -364,6 +364,7 @@ export function renderCompareControls(
   const full = state.selectedBranches.length >= MAX_COMPARE_BRANCHES;
   bRow.appendChild(createBranchPicker({
     id: 'compareBranchInput',
+    lastUpdated: state.branchLastUpdated,
     branches: state.allBranches.filter(b => !state.selectedBranches.includes(b)),
     placeholder: full ? 'Maximum 8 branches selected' : 'Search and add a branch…',
     disabled: full,

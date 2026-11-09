@@ -1,6 +1,7 @@
 interface BranchPickerOptions {
   id: string;
   branches: string[];
+  lastUpdated?: ReadonlyMap<string, string>;
   value?: string;
   placeholder?: string;
   disabled?: boolean;
@@ -95,8 +96,18 @@ export function createBranchPicker(opts: BranchPickerOptions): HTMLElement {
       option.id = `${id}-option-${i}`;
       option.className = 'branch-picker-option';
       option.setAttribute('role', 'option');
-      option.textContent = branch;
-      option.title = branch;
+      const name = document.createElement('span');
+      name.className = 'branch-option-name';
+      name.textContent = branch;
+      const timestamp = opts.lastUpdated?.get(branch);
+      const date = document.createElement(timestamp ? 'time' : 'span');
+      date.className = 'branch-option-date';
+      date.textContent = timestamp ? timestamp.slice(0, 10) : 'No date';
+      if (date instanceof HTMLTimeElement && timestamp) date.dateTime = timestamp;
+      date.title = timestamp ? `Last benchmark: ${timestamp} (UTC)` : 'No dated benchmarks';
+      option.title = `${branch} — ${date.title}`;
+      option.setAttribute('aria-label', `${branch}, ${date.title}`);
+      option.append(name, date);
       option.addEventListener('pointerdown', e => e.preventDefault(), { signal });
       option.addEventListener('click', () => choose(branch), { signal });
       list.appendChild(option);

@@ -28,6 +28,7 @@ class DashboardApp {
   private hiddenGroups = new Set<string>();
 
   private allBranches: string[] = [];
+  private branchLastUpdated = new Map<string, string>();
   private allGroups: string[] = [];
   private abortController: AbortController | null = null;
   private listenerAbort: AbortController = new AbortController();
@@ -220,11 +221,18 @@ class DashboardApp {
 
     // Derive groups/branches from the config-grouped chart set.
     // Branches are stored in short form (without refs/heads/ and refs/tags/ prefixes).
+    this.branchLastUpdated.clear();
     const branchSet = new Set<string>();
     const groupSet = new Set<string>();
     for (const key of CHART_KEYS_BY_CONFIG) {
       for (const pt of this.data.charts[key] ?? []) {
-        branchSet.add(stripBranchPrefix(pt.branch));
+        const branch = stripBranchPrefix(pt.branch);
+        branchSet.add(branch);
+        const timestamp = Date.parse(pt.timestamp);
+        const previous = Date.parse(this.branchLastUpdated.get(branch) ?? '');
+        if (Number.isFinite(timestamp) && (!Number.isFinite(previous) || timestamp > previous)) {
+          this.branchLastUpdated.set(branch, new Date(timestamp).toISOString());
+        }
         groupSet.add(pt.config);
       }
     }
@@ -243,6 +251,7 @@ class DashboardApp {
     if (!host) return;
     host.replaceChildren(createBranchPicker({
       id: 'branchInput', branches: this.allBranches, value: this.branch,
+      lastUpdated: this.branchLastUpdated,
       onSelect: branch => {
         this.branch = branch;
         this.writeUrlParams();
@@ -438,6 +447,7 @@ class DashboardApp {
   private renderCompareControlsDom(host: HTMLElement) {
     renderCompareControls(host, {
       allBranches: this.allBranches,
+      branchLastUpdated: this.branchLastUpdated,
       selectedBranches: this.compareBranches,
       hiddenBranches: this.compareHidden,
       allConfigs: this.allGroups,
