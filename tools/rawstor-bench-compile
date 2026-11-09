@@ -37,13 +37,27 @@ def read_fio_json(meta_path, meta):
 def load_meta(meta_path):
     with open(meta_path, 'r') as f:
         meta = json.load(f)
+        if not isinstance(meta, dict):
+            raise ValueError(f"metadata must be an object in {meta_path}")
+        for field in ('repo', 'name'):
+            if not isinstance(meta.get(field), str) or not meta[field]:
+                raise ValueError(f"missing/invalid '{field}' in {meta_path}")
         date_raw = meta.get("date")
         if not date_raw:
             raise ValueError(f"missing 'date' in {meta_path}")
         data_block = meta.get("data") or {}
-        if not data_block.get("txt") or not data_block.get("json"):
+        if not isinstance(data_block, dict) or any(
+            not isinstance(data_block.get(field), str) or not data_block[field]
+            for field in ('txt', 'json')
+        ):
             raise ValueError(f"missing/invalid 'data.txt' or 'data.json' in {meta_path}")
-        meta["date"] = datetime.datetime.fromisoformat(date_raw)
+        if not isinstance(date_raw, str):
+            raise ValueError(f"invalid 'date' in {meta_path}")
+        parsed = datetime.datetime.fromisoformat(date_raw.replace('Z', '+00:00'))
+        # Match data-processor: dates without an offset are interpreted as UTC.
+        if parsed.tzinfo is not None:
+            parsed = parsed.astimezone(datetime.timezone.utc).replace(tzinfo=None)
+        meta["date"] = parsed
     return meta
 
 
@@ -250,7 +264,7 @@ def _clean_compiled(dest_abspath):
                 elif child.is_file() and child.suffix == ".md" \
                         and child.name != "index.md":
                     child.unlink()
-        elif entry.is_file() and entry.suffix == ".md":
+        elif entry.is_file() and entry.suffix == ".md" and entry.name != "index.md":
             entry.unlink()
 
 
