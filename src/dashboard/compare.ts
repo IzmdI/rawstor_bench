@@ -16,10 +16,11 @@ export function computeMedian(values: number[]): number {
   return s.length % 2 ? s[mid] : (s[mid - 1] + s[mid]) / 2;
 }
 
-/** Most-recent N points by timestamp (desc). At least 1 if input non-empty. */
+/** Most-recent N dated points; undated measurements cannot be ordered. */
 export function lastN(points: ChartDataPoint[], n: number): ChartDataPoint[] {
-  return [...points]
-    .sort((a, b) => (a.timestamp < b.timestamp ? 1 : a.timestamp > b.timestamp ? -1 : 0))
+  return points
+    .filter(p => Number.isFinite(Date.parse(p.timestamp)))
+    .sort((a, b) => Date.parse(b.timestamp) - Date.parse(a.timestamp))
     .slice(0, Math.max(1, n));
 }
 

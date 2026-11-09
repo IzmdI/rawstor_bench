@@ -35,3 +35,40 @@ test('snapshot omits configs with no data for the selected operation', () => {
   const readOnly = { charts: { iops_read_by_config: data.charts.iops_read_by_config } };
   assert.deepEqual(computeSnapshotSections(readOnly, ['main', 'fix/test'], ['test'], 2, 'write'), []);
 });
+
+
+test('snapshot excludes undated measurements from the most recent sample', () => {
+  const charts = structuredClone(data.charts);
+  charts.iops_read_by_config.push({ ...charts.iops_read_by_config[0], timestamp: 'Unknown date', value: 999 });
+  const [section] = computeSnapshotSections({ charts }, ['main', 'fix/test'], ['test'], 2, 'read');
+  assert.equal(section.rows[0].cells[0].value, 25);
+  assert.equal(section.rows[0].cells[0].n, 2);
+});
+
+test('snapshot handles missing candidate data without inventing zero', () => {
+  const charts = { iops_read_by_config: data.charts.iops_read_by_config.filter(p => p.branch === 'refs/heads/main') };
+  const [section] = computeSnapshotSections({ charts }, ['main', 'fix/test'], ['test'], 2, 'read');
+  assert.deepEqual(section.rows[0].cells[1], { value: null, n: 0, deltaPct: null, better: null });
+});
+
+test('snapshot skips zero baseline instead of dividing by zero', () => {
+  const charts = { iops_read_by_config: data.charts.iops_read_by_config.map(p => ({ ...p, value: 0 })) };
+  assert.deepEqual(computeSnapshotSections({ charts }, ['main', 'fix/test'], ['test'], 2), []);
+});
+
+test('improvement direction differs for IOPS and latency', () => {
+  const charts = structuredClone(data.charts);
+  for (const points of Object.values(charts)) for (const p of points) if (p.branch.endsWith('fix/test')) p.value *= 2;
+  const [section] = computeSnapshotSections({ charts }, ['main', 'fix/test'], ['test'], 2, 'read');
+  assert.equal(section.rows[0].cells[1].deltaPct, 100);
+  assert.equal(section.rows[0].cells[1].better, true);
+  assert.equal(section.rows[1].cells[1].deltaPct, 100);
+  assert.equal(section.rows[1].cells[1].better, false);
+});
+
+test('snapshot needs two branches and does not mutate input', () => {
+  const before = structuredClone(data);
+  assert.deepEqual(computeSnapshotSections(data, ['main'], ['test'], 2), []);
+  computeSnapshotSections(data, ['main', 'fix/test'], ['test'], 2);
+  assert.deepEqual(data, before);
+});
