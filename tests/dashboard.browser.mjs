@@ -5,7 +5,7 @@ import { test } from 'node:test';
 import { build } from 'esbuild';
 import { createServer } from 'node:http';
 import { spawn } from 'node:child_process';
-import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -86,8 +86,18 @@ test('dashboard browser regressions', { skip: !existsSync(browser) ? 'Set BROWSE
       throw Error('App failed to load');
     };
     const click = selector => evaluate(`document.querySelector(${JSON.stringify(selector)}).click()`);
+    const screenshot = async (name, selector) => {
+      const dir = process.env.DASHBOARD_SCREENSHOT_DIR;
+      if (!dir) return;
+      mkdirSync(dir, { recursive: true });
+      const clip = selector ? await evaluate(`(()=>{const r=document.querySelector(${JSON.stringify(selector)}).getBoundingClientRect();return {x:r.x+scrollX,y:r.y+scrollY,width:r.width,height:r.height,scale:1}})()`) : undefined;
+      const result = await call('Page.captureScreenshot', { format: 'png', ...(clip ? { clip, captureBeyondViewport: true } : {}) });
+      writeFileSync(join(dir, name + '.png'), Buffer.from(result.data, 'base64'));
+    };
+
     const counts = () => evaluate(`({cards:document.querySelectorAll('.config-card').length,lines:[...document.querySelectorAll('path.line')].filter(p=>p.style.opacity==='1').length})`);
     await call('Runtime.enable'); await call('Page.enable');
+    await call('Emulation.setFocusEmulationEnabled', { enabled: true });
     await t.test('mode selection stays highlighted across repeated switches', async () => {
       await load('');
       for (let i = 0; i < 3; i++) {
@@ -131,6 +141,59 @@ test('dashboard browser regressions', { skip: !existsSync(browser) ? 'Set BROWSE
       assert.equal(await evaluate(`document.querySelector('.snapshot-body').textContent.includes('IOPS write')`), true);
       const query = await evaluate('location.search'); await load(query);
       assert.deepEqual(await counts(), { cards: 1, lines: 4 });
+    });
+
+    await t.test('branch picker searches, selects by keyboard and preserves selection on Escape', async () => {
+      await load('');
+      await evaluate(`(()=>{const e=document.querySelector('#branchInput');e.focus();e.value='feature';e.dispatchEvent(new Event('input'));})()`);
+      assert.equal(await evaluate(`document.querySelector('#branchInput').getAttribute('aria-expanded')`), 'true');
+      assert.equal(await evaluate(`document.querySelector('[role="listbox"]').textContent.includes('feature/test')`), true);
+      await screenshot('branch-search');
+      await evaluate(`document.querySelector('#branchInput').dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true}))`);
+      assert.equal(await evaluate(`new URLSearchParams(location.search).get('branch')`), 'feature/test');
+      await evaluate(`(()=>{const e=document.querySelector('#branchInput');e.focus();e.value='no-such-branch';e.dispatchEvent(new Event('input'));})()`);
+      assert.equal(await evaluate(`document.querySelector('.branch-picker-status').textContent.includes('No branches')`), true);
+      await evaluate(`document.querySelector('#branchInput').dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}))`);
+      assert.equal(await evaluate(`document.querySelector('#branchInput').value`), 'feature/test');
+      assert.equal(await evaluate(`document.querySelector('#branchInput').getAttribute('aria-expanded')`), 'false');
+    });
+    await t.test('branch picker supports arrows and restores committed value on blur', async () => {
+      await load('');
+      await click('.branch-picker-toggle');
+      await evaluate(`document.querySelector('#branchInput').dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowDown',bubbles:true}))`);
+      await evaluate(`document.querySelector('#branchInput').dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true}))`);
+      assert.equal(await evaluate(`document.querySelector('#branchInput').value`), 'feature/test');
+      await evaluate(`(()=>{const e=document.querySelector('#branchInput');e.value='invalid';e.dispatchEvent(new Event('input'));document.querySelector('#refreshBtn').focus()})()`);
+      assert.equal(await evaluate(`document.querySelector('#branchInput').value`), 'feature/test');
+      assert.equal(await evaluate(`document.querySelector('#branchInput').getAttribute('aria-expanded')`), 'false');
+    });
+    await t.test('compare branch search excludes selected branches and adds a result', async () => {
+      await load('?view=compare&branches=main');
+      await click('.branch-picker-toggle');
+      assert.deepEqual(await evaluate(`[...document.querySelectorAll('[role="option"]')].map(e=>e.textContent)`), ['feature/test']);
+      await click('[role="option"]');
+      assert.equal(await evaluate(`new URLSearchParams(location.search).get('branches')`), 'main,feature/test');
+      assert.equal(await evaluate(`document.activeElement.id`), 'compareBranchInput');
+      assert.equal(await evaluate(`document.querySelectorAll('[role="option"]').length`), 0);
+    });
+    await t.test('two-branch delta stays compact on wide screens and fits narrow screens', async () => {
+      await call('Emulation.setDeviceMetricsOverride', {width:1920,height:1080,deviceScaleFactor:1,mobile:false});
+      for (const mode of ['dots','bars','table']) {
+        await load('?view=compare&branches=main,feature%2Ftest&snap='+mode);
+        const dimensions=await evaluate(`(()=>{const e=document.querySelector('.snapshot-section');return {width:e.getBoundingClientRect().width,viewport:innerWidth};})()`);
+        assert.ok(dimensions.width <= 1060, mode+' comparison must not stretch across the screen');
+        await evaluate(`document.querySelector('.snapshot-panel').scrollIntoView({block:'start'})`);
+        await screenshot('compare-wide-'+mode);
+        if(mode==='dots') await screenshot('compare-compact', '.snapshot-section');
+        if(mode==='bars') assert.equal(await evaluate(`[...document.querySelectorAll('.snap-bar-label')].every(e=>e.clientHeight>=e.scrollHeight)`), true, 'bar labels must not be clipped');
+        if(mode==='bars') assert.ok(await evaluate(`(()=>{const e=[...document.querySelectorAll('.snap-bars .snap-bar-col')].slice(0,2);return Math.abs(e[1].getBoundingClientRect().x-e[0].getBoundingClientRect().x)<250})()`));
+      }
+      await call('Emulation.setDeviceMetricsOverride', {width:390,height:844,deviceScaleFactor:1,mobile:false});
+      await load('?view=compare&branches=main,feature%2Ftest&snap=dots');
+      assert.equal(await evaluate(`document.querySelector('.snapshot-section').getBoundingClientRect().right <= innerWidth`), true);
+      await evaluate(`document.querySelector('.snapshot-panel').scrollIntoView({block:'start'})`);
+      await screenshot('compare-mobile-dots');
+      await call('Emulation.clearDeviceMetricsOverride');
     });
     assert.deepEqual(errors, [], 'No uncaught browser exceptions');
   } finally {

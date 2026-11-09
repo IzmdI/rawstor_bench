@@ -798,7 +798,7 @@ fieldset.control-group {
   align-items: center;
 }
 
-#compareBranchInput { width: 11rem; }
+
 
 .compare-controls .control-group input.n-input { width: 5rem; }
 
@@ -1037,7 +1037,6 @@ fieldset.control-group {
   display: flex;
   align-items: flex-end;
   gap: 18px;
-  height: 110px;
   margin-top: 4px;
 }
 
@@ -1047,7 +1046,6 @@ fieldset.control-group {
   flex-direction: column;
   align-items: center;
   justify-content: flex-end;
-  height: 100%;
   min-width: 0;
 }
 
@@ -1098,3 +1096,53 @@ fieldset.control-group {
 
 .snap-badge.good { background: #dafbe1; }
 .snap-badge.bad { background: #ffebe9; }
+
+
+/* Branch search: consistent mouse and keyboard selection in both modes. */
+.branch-picker { position: relative; display: flex; width: 20rem; max-width: 100%; }
+.control-group .branch-picker input { width: 100%; min-width: 0; padding-right: 36px; }
+.branch-picker-toggle {
+  position: absolute; right: 1px; top: 1px; bottom: 1px; width: 32px;
+  border: 0; background: transparent; color: #57606a; cursor: pointer; font-size: 18px;
+}
+.branch-picker-toggle:focus-visible { outline: 2px solid #0969da; outline-offset: -3px; }
+.branch-picker-toggle:disabled { cursor: default; opacity: .4; }
+.branch-picker-popup {
+  position: absolute; top: calc(100% + 5px); left: 0; z-index: 50;
+  width: 100%; min-width: 0; background: #fff; color: #24292f;
+  border: 1px solid #d0d7de; border-radius: 8px;
+  box-shadow: 0 8px 24px #1f232826; overflow: hidden;
+}
+.branch-picker-options { max-height: 260px; overflow-y: auto; overscroll-behavior: contain; }
+.branch-picker-option { padding: 9px 12px; font-size: .8rem; cursor: pointer; overflow-wrap: anywhere; }
+.branch-picker-option:hover, .branch-picker-option[aria-selected="true"] { background: #ddf4ff; color: #0550ae; }
+.branch-picker-status { padding: 8px 12px; border-top: 1px solid #eee; font-size: .72rem; color: #57606a; }
+
+/* Keep two-branch values and deltas close even on ultrawide screens. */
+.snapshot-pair { max-width: 1040px; }
+.snapshot-pair:has(.snap-table) { max-width: 780px; }
+.snapshot-pair:has(.snap-block) { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 24px; }
+.snapshot-pair .snapshot-config { grid-column: 1 / -1; }
+.snapshot-config { overflow-wrap: anywhere; }
+.snap-block { min-width: 0; }
+.snap-track { min-width: 36px; }
+.snap-value { width: 80px; flex: none; text-align: right; font-variant-numeric: tabular-nums; }
+.snapshot-pair .snap-branch { width: 130px; }
+.snapshot-pair .snap-bars { max-width: 360px; }
+.snap-bar-value { font-size: .72rem; margin-bottom: 4px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+@media (max-width: 1000px) {
+  .snapshot-pair:has(.snap-block) { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 600px) {
+  .branch-picker { width: min(20rem, 100%); }
+  .snapshot-panel { padding: 16px 12px; }
+  .snapshot-pair .snap-branch { width: 90px; }
+  .snap-value { width: 65px; font-size: .68rem; }
+  .snap-row { gap: 5px; }
+  .snap-delta { width: 48px; }
+  .snap-table { display: block; overflow-x: auto; }
+}
+
+.snap-bar-plot { height: 90px; display: flex; align-items: flex-end; justify-content: center; width: 100%; flex: none; }
+.snap-bar-label, .snap-bar-value, .snap-bar-delta { flex: none; }
+@media (max-width: 600px) { .compare-controls { position: static; padding: 12px; } }

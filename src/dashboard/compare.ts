@@ -1,3 +1,4 @@
+import { createBranchPicker } from './branch-picker';
 import type {
   ChartDataPoint, DashboardData, OperationFilter,
   SnapshotSection, SnapshotRow, SnapshotCell, SnapMode,
@@ -95,7 +96,7 @@ function deltaText(c: SnapshotCell, isBase: boolean): string {
 }
 
 function deltaClass(c: SnapshotCell): string {
-  if (c.better === null) return 'na';
+  if (c.better === null || c.deltaPct === 0) return 'na';
   return c.better ? 'good' : 'bad';
 }
 
@@ -142,7 +143,7 @@ function snapshotSectionHeader(config: string): HTMLElement {
 
 function renderSnapshotDots(container: HTMLElement, sections: SnapshotSection[]): void {
   for (const sec of sections) {
-    const secEl = el('div', 'snapshot-section');
+    const secEl = el('div', 'snapshot-section' + (sec.branches.length === 2 ? ' snapshot-pair' : ''));
     secEl.appendChild(snapshotSectionHeader(sec.config));
 
     for (const row of sec.rows) {
@@ -178,6 +179,9 @@ function renderSnapshotDots(container: HTMLElement, sections: SnapshotSection[])
         }
         r.appendChild(track);
 
+        const value = el('span', 'snap-value');
+        value.textContent = c.value === null ? '—' : formatMetricValue(c.value, row.metricType);
+        r.appendChild(value);
         const d = el('span', 'snap-delta ' + deltaClass(c));
         d.textContent = deltaText(c, isBase);
         r.appendChild(d);
@@ -191,7 +195,7 @@ function renderSnapshotDots(container: HTMLElement, sections: SnapshotSection[])
 
 function renderSnapshotBars(container: HTMLElement, sections: SnapshotSection[]): void {
   for (const sec of sections) {
-    const secEl = el('div', 'snapshot-section');
+    const secEl = el('div', 'snapshot-section' + (sec.branches.length === 2 ? ' snapshot-pair' : ''));
     secEl.appendChild(snapshotSectionHeader(sec.config));
 
     for (const row of sec.rows) {
@@ -218,7 +222,11 @@ function renderSnapshotBars(container: HTMLElement, sections: SnapshotSection[])
         const lab = el('span', 'snap-bar-label');
         lab.textContent = sec.branches[i];
         lab.title = sec.branches[i];
-        col.append(d, bar, lab);
+        const value = el('span', 'snap-bar-value');
+        value.textContent = c.value === null ? '—' : formatMetricValue(c.value, row.metricType);
+        const plotArea = el('div', 'snap-bar-plot');
+        plotArea.appendChild(bar);
+        col.append(d, value, plotArea, lab);
         plot.appendChild(col);
       });
       block.appendChild(plot);
@@ -230,7 +238,7 @@ function renderSnapshotBars(container: HTMLElement, sections: SnapshotSection[])
 
 function renderSnapshotTable(container: HTMLElement, sections: SnapshotSection[]): void {
   for (const sec of sections) {
-    const secEl = el('div', 'snapshot-section');
+    const secEl = el('div', 'snapshot-section' + (sec.branches.length === 2 ? ' snapshot-pair' : ''));
     secEl.appendChild(snapshotSectionHeader(sec.config));
 
     const table = el('table', 'snap-table');
@@ -353,28 +361,15 @@ export function renderCompareControls(
   bGroup.appendChild(bLabel);
 
   const bRow = el('div', 'chip-row');
-  const input = el('input');
-  input.id = 'compareBranchInput';
-  input.type = 'text';
-  input.placeholder = 'add branch…';
-  input.autocomplete = 'off';
-  input.spellcheck = false;
-  input.setAttribute('list', 'compareBranchList');
-  input.addEventListener('change', () => {
-    const v = stripBranchPrefix(input.value.trim());
-    input.value = '';
-    if (v) handlers.onAddBranch(v);
-  }, { signal });
-  bRow.appendChild(input);
-
-  const dl = el('datalist');
-  dl.id = 'compareBranchList';
-  for (const b of state.allBranches.filter(b => !state.selectedBranches.includes(b))) {
-    const opt = el('option');
-    opt.value = b;
-    dl.appendChild(opt);
-  }
-  bRow.appendChild(dl);
+  const full = state.selectedBranches.length >= MAX_COMPARE_BRANCHES;
+  bRow.appendChild(createBranchPicker({
+    id: 'compareBranchInput',
+    branches: state.allBranches.filter(b => !state.selectedBranches.includes(b)),
+    placeholder: full ? 'Maximum 8 branches selected' : 'Search and add a branch…',
+    disabled: full,
+    onSelect: handlers.onAddBranch,
+    signal,
+  }));
 
   state.selectedBranches.forEach((b, i) => {
     const isBase = i === 0;

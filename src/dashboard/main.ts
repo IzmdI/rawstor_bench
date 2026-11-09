@@ -1,3 +1,4 @@
+import { createBranchPicker } from './branch-picker';
 import * as d3 from 'd3';
 import type { DashboardData, OperationFilter, MetricType, ViewMode, SnapMode, ChartDataPoint } from './types';
 import { CHART_KEYS_BY_CONFIG, asOperationFilter, asViewMode, asSnapMode,
@@ -238,26 +239,19 @@ class DashboardApp {
   }
 
   private populateBranchSelector() {
-    const input = document.getElementById('branchInput') as HTMLInputElement | null;
-    const list = document.getElementById('branchList') as HTMLDataListElement | null;
-    if (!input || !list) return;
-    list.innerHTML = '';
-    for (const b of this.allBranches) {
-      const opt = document.createElement('option');
-      opt.value = b;
-      list.appendChild(opt);
-    }
-    input.value = this.branch;
-
-    // Fix datalist arrow: clear input on focus to show all options, restore on blur if empty
-    input.addEventListener('focus', () => {
-      input.value = '';
-    });
-    input.addEventListener('blur', () => {
-      if (!input.value) {
-        input.value = this.branch;
-      }
-    });
+    const host = document.getElementById('branchPickerHost');
+    if (!host) return;
+    host.replaceChildren(createBranchPicker({
+      id: 'branchInput', branches: this.allBranches, value: this.branch,
+      onSelect: branch => {
+        this.branch = branch;
+        this.writeUrlParams();
+        this.buildCharts();
+        this.renderLegend();
+        this.updateInfo();
+      },
+      signal: this.listenerAbort.signal,
+    }));
   }
 
   // ---- Charts ----
@@ -380,8 +374,7 @@ class DashboardApp {
       </div>
       <div class="control-group">
         <label for="branchInput">Branch</label>
-        <input id="branchInput" list="branchList" autocomplete="off" spellcheck="false">
-        <datalist id="branchList"></datalist>
+        <div id="branchPickerHost"></div>
       </div>
       <fieldset class="control-group">
         <legend>Operations</legend>
@@ -919,17 +912,6 @@ class DashboardApp {
     document.getElementById('timeRange')?.addEventListener('change', (e) => {
       this.timeRange = parseInt((e.target as HTMLSelectElement).value, 10);
       if (isNaN(this.timeRange)) this.timeRange = 30;
-      this.writeUrlParams();
-      this.buildCharts();
-      this.renderLegend();
-      this.updateInfo();
-    }, { signal });
-
-    document.getElementById('branchInput')?.addEventListener('change', (e) => {
-      const input = e.target as HTMLInputElement;
-      const raw = input.value.trim();
-      this.branch = this.allBranches.includes(raw) ? raw : DashboardApp.DEFAULT_BRANCH;
-      input.value = this.branch;
       this.writeUrlParams();
       this.buildCharts();
       this.renderLegend();
