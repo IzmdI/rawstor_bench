@@ -275,6 +275,7 @@ class DashboardApp {
     this.renderHeader(app);
     if (this.viewMode === 'compare') this.renderCompare(app);
     else this.renderOverview(app);
+    this.syncControlsFromState();
     this.renderAboutDialog(app);
     this.updateInfo();
   }
