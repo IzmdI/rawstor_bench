@@ -28,7 +28,7 @@ export function createBranchPicker(opts: BranchPickerOptions): HTMLElement {
   const toggle = document.createElement('button');
   toggle.type = 'button';
   toggle.className = 'branch-picker-toggle';
-  toggle.textContent = '⌄';
+  toggle.textContent = '🔎';
   toggle.setAttribute('aria-label', 'Show branches');
   toggle.setAttribute('aria-controls', `${id}-options`);
   toggle.setAttribute('aria-expanded', 'false');
