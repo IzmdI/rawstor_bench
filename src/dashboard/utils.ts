@@ -1,3 +1,4 @@
+import { formatConfigLabel } from './config-label';
 import type { MetricType, TooltipData } from './types';
 
 // ---- HTML escaping ----
@@ -112,10 +113,10 @@ export class Tooltip {
     const commitShort = data.commit_sha.substring(0, 8);
 
     el.innerHTML =
-      `<div class="tooltip-header">${escapeHtml(data.group)} (${escapeHtml(data.operation)})</div>` +
+      `<div class="tooltip-header">${escapeHtml(data.group === data.config ? formatConfigLabel(data.group) : data.group)} (${escapeHtml(data.operation)})</div>` +
       `<div class="tooltip-metric">${escapeHtml(valueStr)}</div>` +
       `<div class="tooltip-date">${escapeHtml(dateStr)}</div>` +
-      `<div class="tooltip-meta">${escapeHtml(branchShort)} / ${escapeHtml(data.config)}</div>` +
+      `<div class="tooltip-meta" title="${escapeHtml(data.config)}">${escapeHtml(branchShort)} / ${escapeHtml(formatConfigLabel(data.config))}</div>` +
       `<div class="tooltip-commit">${escapeHtml(commitShort)}</div>` +
       `<div class="tooltip-hint">Click to view test details</div>`;
 

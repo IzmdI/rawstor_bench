@@ -206,6 +206,19 @@ test('dashboard browser regressions', { skip: !existsSync(browser) ? 'Set BROWSE
         assert.equal(await evaluate(`document.querySelector('[role="option"] time') === null`), true);
       } finally { routes['/data.json'] = original; }
     });
+    await t.test('friendly configuration labels keep original URL and selection identifiers', async () => {
+      await load('?view=compare&branches=main,feature%2Ftest');
+      assert.equal(await evaluate(`document.querySelector('.config-card-title .config-title-text').textContent`), 'Object storage');
+      assert.deepEqual(await evaluate(`[...document.querySelectorAll('.config-card-title .config-tag')].slice(0,3).map(e=>e.textContent)`), ['4 KiB','QD 1','1 job']);
+      assert.equal(await evaluate(`document.querySelector('.config-chip').textContent`), 'OST · 4 KiB · QD 1 · 1 job');
+      assert.equal(await evaluate(`document.querySelector('.config-chip').title.includes('perftest-ost-4k-1-1')`), true);
+      assert.equal(await evaluate(`document.querySelector('.snapshot-config .config-title-text').textContent`), 'Object storage');
+      await click('.config-chip');
+      assert.equal(await evaluate(`new URLSearchParams(location.search).get('configs')`), 'perftest-ost-4k-2-1');
+      await load('');
+      assert.equal(await evaluate(`document.querySelector('.legend-label').textContent`), 'OST · 4 KiB · QD 1 · 1 job');
+      assert.equal(await evaluate(`document.querySelector('.legend-item').title`), 'perftest-ost-4k-1-1');
+    });
     await t.test('two-branch delta stays compact on wide screens and fits narrow screens', async () => {
       await call('Emulation.setDeviceMetricsOverride', {width:1920,height:1080,deviceScaleFactor:1,mobile:false});
       for (const mode of ['dots','bars','table']) {

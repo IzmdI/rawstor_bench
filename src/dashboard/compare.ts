@@ -1,3 +1,4 @@
+import { formatConfigLabel, renderConfigHeading } from './config-label';
 import { createBranchPicker } from './branch-picker';
 import type {
   ChartDataPoint, DashboardData, OperationFilter,
@@ -137,7 +138,7 @@ function bindRadiogroup(
 
 function snapshotSectionHeader(config: string): HTMLElement {
   const h = el('h4', 'snapshot-config');
-  h.textContent = config;
+  renderConfigHeading(h, config);
   return h;
 }
 
@@ -432,8 +433,8 @@ export function renderCompareControls(
   for (const cfg of state.allConfigs) {
     const chip = el('span', 'config-chip '
       + (state.selectedConfigs.includes(cfg) ? 'on' : 'off'));
-    chip.textContent = cfg;
-    chip.title = 'Click to toggle this config';
+    chip.textContent = formatConfigLabel(cfg);
+    chip.title = `${cfg} — click to toggle this config`;
     chip.addEventListener('click', () => handlers.onToggleConfig(cfg), { signal });
     cRow.appendChild(chip);
   }

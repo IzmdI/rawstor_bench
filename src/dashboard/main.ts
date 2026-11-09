@@ -1,3 +1,4 @@
+import { formatConfigLabel, renderConfigHeading } from './config-label';
 import { createBranchPicker } from './branch-picker';
 import * as d3 from 'd3';
 import type { DashboardData, OperationFilter, MetricType, ViewMode, SnapMode, ChartDataPoint } from './types';
@@ -333,29 +334,30 @@ class DashboardApp {
         </dl>
         <p><strong>Δ%:</strong> green = improvement (IOPS up, latency down), red = regression, <code>—</code> = no data.</p>
         <p><strong>Snapshot views:</strong> Dots — values on a shared scale, dashed line = base; Bars — heights, outlined bar = base; Table — exact numbers.</p>
-        <p>Config pattern: <code>perftest[-without-liburing][-legacy]-{backend}-{blocksize}-{threads}-{queues}</code> — full breakdown in the Overview help.</p>
+        <p>Configuration cards show the backend and separate parameter labels. <strong>QD</strong> means queue depth; <strong>jobs</strong> means parallel fio jobs. Hover a configuration heading or chip to see its original name.</p>
         <button class="btn-close-about" id="closeAbout">Close</button>
       `;
     } else {
       content.innerHTML = `
         <h2 id="aboutDialogTitle">About Test Configurations</h2>
-        <p>Configuration names follow the pattern:</p>
-        <code>perftest[-without-liburing][-legacy]-{backend}-{blocksize}-{threads}-{queues}</code>
+        <p>Cards show the backend with labels for block size, queue depth (QD), parallel fio jobs, and optional build modes. Filters use compact versions of the same labels. Hover a configuration to see its original name.</p>
+        <p>Original configuration names follow the pattern:</p>
+        <code>perftest[-without-liburing]-{backend}[-legacy]-{blocksize}-{iodepth}-{numjobs}</code>
         <dl>
           <dt>backend</dt>
           <dd><code>file</code> — regular file I/O, <code>ost</code> — object storage target</dd>
           <dt>blocksize</dt>
-          <dd>Block size for I/O operations (e.g. <code>4k</code> = 4 KB)</dd>
-          <dt>threads</dt>
-          <dd>Number of concurrent I/O threads</dd>
-          <dt>queues</dt>
-          <dd>Queue depth per thread</dd>
+          <dd>Block size for I/O operations (e.g. <code>4k</code> = 4 KiB)</dd>
+          <dt>QD / iodepth</dt>
+          <dd>Maximum number of outstanding I/O requests per fio job</dd>
+          <dt>jobs / numjobs</dt>
+          <dd>Number of parallel fio jobs</dd>
           <dt>without-liburing</dt>
-          <dd>Built without io_uring support (legacy AIO backend)</dd>
+          <dd>Built without liburing support; shown as <code>No liburing</code></dd>
           <dt>legacy</dt>
-          <dd>Legacy configuration mode</dd>
+          <dd>Legacy configuration mode; shown as a separate <code>Legacy</code> label</dd>
         </dl>
-        <p>Example: <code>perftest-ost-4k-2-1</code> = object storage, 4 KB blocks, 2 threads, queue depth 1.</p>
+        <p>Example: <code>perftest-ost-4k-2-1</code> = Object storage · 4 KiB · QD 2 · 1 job.</p>
         <p>Compare mode has its own help — switch the mode and press <code>?</code> again.</p>
         <button class="btn-close-about" id="closeAbout">Close</button>
       `;
@@ -634,7 +636,7 @@ class DashboardApp {
       card.className = 'config-card';
       const h = document.createElement('h3');
       h.className = 'config-card-title';
-      h.textContent = config;
+      renderConfigHeading(h, config);
       card.appendChild(h);
       const pair = document.createElement('div');
       pair.className = 'config-card-pair';
@@ -740,7 +742,7 @@ class DashboardApp {
 
     const hint = document.createElement('p');
     hint.className = 'legend-hint';
-    hint.innerHTML = 'Pattern: <code>perftest[-...]-{backend}-{size}-{threads}-{queues}</code> — <button class="btn-about-inline" id="aboutBtnLegend" type="button">?</button>';
+    hint.innerHTML = 'QD = queue depth · jobs = parallel fio jobs — <button class="btn-about-inline" id="aboutBtnLegend" type="button">?</button>';
     el.appendChild(hint);
 
     const controls = document.createElement('div');
@@ -774,7 +776,8 @@ class DashboardApp {
       dot.style.background = color;
       const label = document.createElement('span');
       label.className = 'legend-label';
-      label.textContent = group;
+      label.textContent = formatConfigLabel(group);
+      item.title = group;
       item.append(dot, label);
       item.addEventListener('click', () => this.toggleGroup(group));
       item.addEventListener('keydown', (e: KeyboardEvent) => {
