@@ -1,4 +1,4 @@
-import { formatConfigLabel, renderConfigHeading } from './config-label';
+import { describeConfig, renderConfigHeading } from './config-label';
 import { createBranchPicker } from './branch-picker';
 import * as d3 from 'd3';
 import type { DashboardData, OperationFilter, MetricType, ViewMode, SnapMode, ChartDataPoint } from './types';
@@ -790,10 +790,19 @@ class DashboardApp {
     controls.append(showAll, hideAll);
     el.appendChild(controls);
 
-    const grid = document.createElement('div');
-    grid.className = 'legend-items';
-    grid.setAttribute('role', 'group');
-    grid.setAttribute('aria-label', 'Toggle configuration visibility');
+    const scroll = document.createElement('div');
+    scroll.className = 'legend-table-wrap';
+    const table = document.createElement('table');
+    table.className = 'legend-table';
+    table.setAttribute('aria-label', 'Configuration visibility');
+    const headings = table.createTHead().insertRow();
+    for (const label of ['Storage', 'Block', 'QD', 'Jobs', 'Mode']) {
+      const th = document.createElement('th');
+      th.scope = 'col';
+      th.textContent = label;
+      headings.appendChild(th);
+    }
+    const body = table.createTBody();
 
     for (const group of this.allGroups) {
       const color = this.groupColorMap.get(group) ?? getColor(this.colorMap.get(group) ?? 0);
@@ -809,7 +818,18 @@ class DashboardApp {
       dot.style.background = color;
       const label = document.createElement('span');
       label.className = 'legend-label';
-      label.textContent = formatConfigLabel(group);
+      const config = describeConfig(group);
+      label.textContent = config.title;
+      item.setAttribute('aria-label', config.compact);
+      const row = body.insertRow();
+      const name = document.createElement('th');
+      name.scope = 'row';
+      name.appendChild(item);
+      row.appendChild(name);
+      const [block, depth, jobs, ...modes] = config.tags;
+      for (const value of [block, depth?.replace('QD ', ''), jobs, modes.join(' · ')]) {
+        row.insertCell().textContent = value || '—';
+      }
       item.title = group;
       item.append(dot, label);
       item.addEventListener('click', () => this.toggleGroup(group));
@@ -817,16 +837,16 @@ class DashboardApp {
         // Space/Enter handled natively by <button>; only handle arrows.
         if (e.key === 'ArrowDown' || e.key === 'ArrowRight') {
           e.preventDefault();
-          (item.nextElementSibling as HTMLElement | null)?.focus();
+          row.nextElementSibling?.querySelector<HTMLElement>('.legend-item')?.focus();
         } else if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') {
           e.preventDefault();
-          (item.previousElementSibling as HTMLElement | null)?.focus();
+          row.previousElementSibling?.querySelector<HTMLElement>('.legend-item')?.focus();
         }
       });
-      grid.appendChild(item);
     }
 
-    el.appendChild(grid);
+    scroll.appendChild(table);
+    el.appendChild(scroll);
 
     document.getElementById('aboutBtnLegend')?.addEventListener('click', () => {
       (document.getElementById('aboutDialog') as HTMLDialogElement | null)?.showModal();

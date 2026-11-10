@@ -1254,3 +1254,21 @@ fieldset.control-group {
 .compare-summary-row { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 7px; margin-top: 4px; }
 .compare-summary-branch { font-size: .75rem; overflow-wrap: anywhere; min-width: 0; }
 .compare-summary-delta { margin-left: 0; }
+
+.legend-table-wrap {
+  width: fit-content;
+  max-width: 100%;
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+.legend-table { border-collapse: collapse; font-size: .8rem; }
+.legend-table th, .legend-table td { padding: 5px 12px; text-align: left; white-space: nowrap; }
+.legend-table thead { background: var(--bg); color: var(--text-secondary); }
+.legend-table tbody tr { border-top: 1px solid var(--border); }
+.legend-table tbody tr:has(.legend-item[aria-checked="true"]) { background: var(--accent-light); }
+.legend-table .legend-item { border: 1px solid var(--accent); background: var(--surface); color: var(--text); }
+.legend-table .legend-item::before { content: '✓'; color: var(--accent); width: 1em; }
+.legend-table .legend-item.hidden { border-color: var(--border); opacity: 1; text-decoration: none; }
+.legend-table .legend-item.hidden::before { content: '○'; color: var(--text-muted); }
+.legend-table .legend-item.hidden .legend-dot { opacity: .45; }

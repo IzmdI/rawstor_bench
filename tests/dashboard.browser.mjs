@@ -216,8 +216,11 @@ test('dashboard browser regressions', { skip: !existsSync(browser) ? 'Set BROWSE
       await click('.config-chip');
       assert.equal(await evaluate(`new URLSearchParams(location.search).get('configs')`), 'perftest-ost-4k-2-1');
       await load('');
-      assert.equal(await evaluate(`document.querySelector('.legend-label').textContent`), 'OST · 4 KiB · QD 1 · 1 job');
+      assert.equal(await evaluate(`document.querySelector('.legend-label').textContent`), 'Object storage');
       assert.equal(await evaluate(`document.querySelector('.legend-item').title`), 'perftest-ost-4k-1-1');
+      assert.deepEqual(await evaluate(`[...document.querySelectorAll('.legend-table tbody tr:first-child td')].map(cell => cell.textContent)`), ['4 KiB', '1', '1 job', '—']);
+      await click('.legend-table tbody tr:first-child .legend-item');
+      assert.equal(await evaluate(`document.querySelector('.legend-item').getAttribute('aria-checked')`), 'false');
     });
     await t.test('operation markers and separate charts work in both views', async () => {
       await load('');
