@@ -380,10 +380,18 @@ class DashboardApp {
     toolbar.className = 'chart-layout';
     toolbar.innerHTML = `
       <div class="chart-layout-choice">
-        <span id="chartLayoutLabel">Read / Write layout</span>
+        <span class="chart-layout-label" id="chartLayoutLabel">Read / Write layout</span>
         <div class="snap-toggle" role="group" aria-labelledby="chartLayoutLabel">
           <button type="button" id="chartsTogether">Together</button>
           <button type="button" id="chartsSeparate">Separate</button>
+        </div>
+      </div>
+      <div class="chart-layout-choice">
+        <span class="chart-layout-label" id="chartOperationsLabel">Operations</span>
+        <div class="toggle-group" role="radiogroup" aria-labelledby="chartOperationsLabel">
+          <button class="op-btn" data-op="read" role="radio" aria-checked="false">Read</button>
+          <button class="op-btn" data-op="write" role="radio" aria-checked="false">Write</button>
+          <button class="op-btn active" data-op="both" role="radio" aria-checked="true">Both</button>
         </div>
       </div>
       <span class="operation-key"><span aria-hidden="true">●</span> Read <span aria-hidden="true">◆</span> Write</span>
@@ -412,14 +420,6 @@ class DashboardApp {
         <label for="branchInput">Branch</label>
         <div id="branchPickerHost"></div>
       </div>
-      <fieldset class="control-group">
-        <legend>Operations</legend>
-        <div class="toggle-group" role="radiogroup" aria-label="Operation filter">
-          <button class="op-btn" data-op="read" role="radio" aria-checked="false">Read</button>
-          <button class="op-btn" data-op="write" role="radio" aria-checked="false">Write</button>
-          <button class="op-btn active" data-op="both" role="radio" aria-checked="true">Both</button>
-        </div>
-      </fieldset>
       <button id="refreshBtn" class="btn-refresh">Refresh</button>
     `;
     app.appendChild(controls);
@@ -481,7 +481,6 @@ class DashboardApp {
       hiddenBranches: this.compareHidden,
       allConfigs: this.allGroups,
       selectedConfigs: this.compareConfigs,
-      operation: this.operation,
       timeRange: this.compareDays,
       n: this.compareN,
     }, {
@@ -492,7 +491,6 @@ class DashboardApp {
       onToggleConfig: c => this.toggleCompareConfig(c),
       onAllConfigs: () => this.setCompareConfigs(this.allGroups.slice()),
       onNoConfigs: () => this.setCompareConfigs([]),
-      onOperation: op => { this.operation = op; this.writeUrlParams(); if (this.splitOperations) this.buildCompareCharts(); else this.updateCompareVisibility(); this.renderSnapshotPanel(); },
       onTimeRange: d => { this.compareDays = d; this.writeUrlParams(); this.buildCompareCharts(); this.updateInfo(); },
       onN: n => {
         if (Number.isFinite(n)) {
@@ -970,24 +968,28 @@ class DashboardApp {
       this.updateInfo();
     }, { signal });
 
-// Radiogroup keyboard navigation helper
-    const setupRadiogroup = (selector: string, onSelect: (btn: HTMLElement) => void, rebuild = true) => {
-      const selectRadio = (btn: HTMLElement) => {
-        onSelect(btn);
-        this.syncControlsFromState();
-        this.writeUrlParams();
-        if (rebuild || this.splitOperations) {
-          this.buildCharts();
-          this.renderLegend();
-        } else {
-          this.updateChartsVisibility();
-        }
-        this.updateInfo();
-      };
+    const selectOperation = (btn: HTMLElement) => {
+      const op = asOperationFilter(btn.dataset.op ?? '');
+      if (!op) return;
+      this.operation = op;
+      this.syncControlsFromState();
+      this.writeUrlParams();
+      if (this.viewMode === 'compare') {
+        if (this.splitOperations) this.buildCompareCharts();
+        else this.updateCompareVisibility();
+        this.renderSnapshotPanel();
+      } else if (this.splitOperations) {
+        this.buildCharts();
+        this.renderLegend();
+      } else {
+        this.updateChartsVisibility();
+      }
+      this.updateInfo();
+    };
 
-    document.querySelectorAll(selector).forEach(btnEl => {
+    document.querySelectorAll('.op-btn').forEach(btnEl => {
       const btn = btnEl as HTMLButtonElement;
-      btn.addEventListener('click', () => selectRadio(btn), { signal });
+      btn.addEventListener('click', () => selectOperation(btn), { signal });
       btn.addEventListener('keydown', ((e: KeyboardEvent) => {
         const container = btn.closest('.toggle-group');
         if (!container) return;
@@ -1009,16 +1011,10 @@ class DashboardApp {
         }
         if (next) {
           next.focus();
-          selectRadio(next);
+          selectOperation(next);
         }
       }) as EventListener, { signal });
     });
-  };
-
-    setupRadiogroup('.op-btn', (btn) => {
-      const op = asOperationFilter(btn.dataset.op ?? '');
-      if (op) this.operation = op;
-    }, false);
 
     document.getElementById('refreshBtn')?.addEventListener('click', async () => {
       const gen = ++this.generation;

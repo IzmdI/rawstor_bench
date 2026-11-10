@@ -234,7 +234,7 @@ test('dashboard browser regressions', { skip: !existsSync(browser) ? 'Set BROWSE
       assert.equal(await panels(), 2);
       await click('#modeCompare');
       assert.equal(await panels(), 4);
-      await click('.cmp-op-btn[data-op="both"]');
+      await click('.chart-layout .op-btn[data-op="both"]');
       assert.equal(await panels(), 8);
       await click('#chartsTogether');
       assert.equal(await panels(), 4);

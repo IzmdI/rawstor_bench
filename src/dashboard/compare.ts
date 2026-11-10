@@ -5,7 +5,7 @@ import type {
   SnapshotSection, SnapshotRow, SnapshotCell, SnapMode,
   CompareControlState, CompareControlHandlers,
 } from './types';
-import { METRIC_SPECS, asSnapMode, asOperationFilter, MAX_COMPARE_BRANCHES } from './types';
+import { METRIC_SPECS, asSnapMode, MAX_COMPARE_BRANCHES } from './types';
 import { stripBranchPrefix, formatMetricValue, getColor } from './utils';
 
 // ---- Pure helpers ----
@@ -440,30 +440,6 @@ export function renderCompareControls(
   }
   cGroup.appendChild(cRow);
   container.appendChild(cGroup);
-
-  // --- Operations (radiogroup) ---
-  const oGroup = el('fieldset', 'control-group');
-  const oLegend = el('legend');
-  oLegend.textContent = 'Operations';
-  oGroup.appendChild(oLegend);
-  const oRow = el('div', 'toggle-group');
-  oRow.setAttribute('role', 'radiogroup');
-  oRow.setAttribute('aria-label', 'Operation filter');
-  const opButtons: HTMLButtonElement[] = [];
-  for (const op of ['read', 'write', 'both'] as const) {
-    const btn = el('button', 'cmp-op-btn');
-    btn.type = 'button';
-    btn.dataset.op = op;
-    btn.textContent = op === 'read' ? 'Read' : op === 'write' ? 'Write' : 'Both';
-    opButtons.push(btn);
-    oRow.appendChild(btn);
-  }
-  oGroup.appendChild(oRow);
-  container.appendChild(oGroup);
-  bindRadiogroup(opButtons, ['read', 'write', 'both'].indexOf(state.operation), btn => {
-    const op = asOperationFilter(btn.dataset.op ?? '');
-    if (op) handlers.onOperation(op);
-  }, signal);
 
   // --- Time Range ---
   const tGroup = el('div', 'control-group');

@@ -173,7 +173,6 @@ export interface CompareControlState {
   hiddenBranches: Set<string>;
   allConfigs: string[];
   selectedConfigs: string[];
-  operation: OperationFilter;
   timeRange: number;
   n: number;
 }
@@ -187,7 +186,6 @@ export interface CompareControlHandlers {
   onToggleConfig(config: string): void;
   onAllConfigs(): void;
   onNoConfigs(): void;
-  onOperation(op: OperationFilter): void;
   onTimeRange(days: number): void;
   onN(n: number): void;
 }
