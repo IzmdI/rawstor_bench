@@ -83,10 +83,18 @@ export function createBranchPicker(opts: BranchPickerOptions): HTMLElement {
     toggle.setAttribute('aria-expanded', 'true');
     const needle = query.trim().toLocaleLowerCase();
     const filtered = branches.filter(b => b.toLocaleLowerCase().includes(needle));
+    const rank = (branch: string) => {
+      const name = branch.toLocaleLowerCase();
+      if (!needle) return 0;
+      if (name === needle) return 0;
+      return name.startsWith(needle) ? 1 : 2;
+    };
     filtered.sort((a, b) => {
-      const rank = (v: string) => v === selected ? 0 : v.toLocaleLowerCase() === needle ? 1
-        : v.toLocaleLowerCase().startsWith(needle) ? 2 : 3;
-      return rank(a) - rank(b);
+      const relevance = rank(a) - rank(b);
+      if (relevance) return relevance;
+      const first = opts.lastUpdated?.get(a) ?? '';
+      const second = opts.lastUpdated?.get(b) ?? '';
+      return second.localeCompare(first) || a.localeCompare(b);
     });
     matches = filtered.slice(0, 50);
     active = 0;

@@ -298,7 +298,10 @@ class DashboardApp {
     header.className = 'dashboard-header';
     header.innerHTML = `
       <div class="header-top">
-        <h1>Rawstor Benchmark Dashboard</h1>
+        <div class="header-brand">
+          <p class="header-kicker">Rawstor · Performance</p>
+          <h1>Benchmark Dashboard</h1>
+        </div>
         <div class="mode-toggle" role="tablist" aria-label="View mode">
           <button id="modeOverview" role="tab" aria-selected="${this.viewMode === 'overview'}">Overview</button>
           <button id="modeCompare" role="tab" aria-selected="${this.viewMode === 'compare'}">Compare</button>
@@ -419,9 +422,11 @@ class DashboardApp {
       </div>
       <div class="control-group">
         <label for="branchInput">Branch</label>
-        <div id="branchPickerHost"></div>
+        <div class="branch-field">
+          <div id="branchPickerHost"></div>
+          <button id="refreshBtn" type="button" class="surface-action refresh-action">Refresh</button>
+        </div>
       </div>
-      <button id="refreshBtn" class="btn-refresh">Refresh</button>
     `;
     app.appendChild(controls);
 
@@ -772,19 +777,23 @@ class DashboardApp {
     title.textContent = 'Configurations';
     el.appendChild(title);
 
-    const hint = document.createElement('p');
-    hint.className = 'legend-hint';
-    hint.innerHTML = 'QD = queue depth · jobs = parallel fio jobs — <button class="btn-about-inline" id="aboutBtnLegend" type="button">?</button>';
+    const hint = document.createElement('div');
+    hint.className = 'configuration-help';
+    hint.innerHTML = `
+      <span><strong>QD</strong> Queue depth</span>
+      <span><strong>Jobs</strong> Parallel fio jobs</span>
+      <button class="surface-action" id="aboutBtnLegend" type="button">About configurations</button>
+    `;
     el.appendChild(hint);
 
     const controls = document.createElement('div');
     controls.className = 'legend-controls';
     const showAll = document.createElement('button');
-    showAll.className = 'legend-btn';
+    showAll.className = 'surface-action';
     showAll.textContent = 'Show All';
     showAll.addEventListener('click', () => this.showAllGroups());
     const hideAll = document.createElement('button');
-    hideAll.className = 'legend-btn';
+    hideAll.className = 'surface-action';
     hideAll.textContent = 'Hide All';
     hideAll.addEventListener('click', () => this.hideAllGroups());
     controls.append(showAll, hideAll);
@@ -1044,7 +1053,10 @@ class DashboardApp {
       }) as EventListener, { signal });
     });
 
-    document.getElementById('refreshBtn')?.addEventListener('click', async () => {
+    document.querySelector(this.viewMode === 'compare' ? '.compare-controls' : '.controls-bar')
+      ?.addEventListener('click', async event => {
+      const refreshButton = (event.target as HTMLElement).closest<HTMLButtonElement>('#refreshBtn');
+      if (!refreshButton || refreshButton.disabled) return;
       const gen = ++this.generation;
       this.abortController?.abort();
       const btn = document.getElementById('refreshBtn') as HTMLButtonElement | null;
@@ -1089,7 +1101,7 @@ class DashboardApp {
       banner.className = 'error';
       banner.setAttribute('role', 'alert');
       banner.style.margin = '12px 24px';
-      const legend = document.getElementById('legend') ?? document.querySelector('.charts-grid');
+      const legend = document.getElementById('legend') ?? document.querySelector('.charts-grid, .compare-charts-grid');
       legend?.insertAdjacentElement('beforebegin', banner);
     }
     banner.textContent = `Refresh failed: ${msg}`;

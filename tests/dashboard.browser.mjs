@@ -252,6 +252,20 @@ test('dashboard browser regressions', { skip: !existsSync(browser) ? 'Set BROWSE
       assert.equal(await evaluate(`[...document.querySelectorAll('#compareSummary .compare-summary-delta')].every(el => el.textContent.includes('write'))`), true);
 
     });
+    await t.test('branch list starts with the latest benchmark and Compare can refresh after changing filters', async () => {
+      await load('?branch=feature%2Ftest');
+      await click('.branch-picker-toggle');
+      assert.deepEqual(await evaluate(`[...document.querySelectorAll('.branch-option-name')].map(el => el.textContent)`), ['main', 'feature/test']);
+      await load('?view=compare&branches=main,feature%2Ftest');
+      await click('.config-chip');
+      await click('#refreshBtn');
+      for (let i = 0; i < 50; i++) {
+        if (await evaluate(`document.querySelector('#infoBar').textContent === 'Data refreshed'`)) break;
+        await sleep(100);
+      }
+      assert.equal(await evaluate(`document.querySelector('#infoBar').textContent`), 'Data refreshed');
+      assert.equal(await evaluate(`document.querySelectorAll('.config-card').length`), 1);
+    });
     await t.test('two-branch delta stays compact on wide screens and fits narrow screens', async () => {
       await call('Emulation.setDeviceMetricsOverride', {width:1920,height:1080,deviceScaleFactor:1,mobile:false});
       for (const mode of ['dots','bars','table']) {

@@ -1272,3 +1272,53 @@ fieldset.control-group {
 .legend-table .legend-item.hidden { border-color: var(--border); opacity: 1; text-decoration: none; }
 .legend-table .legend-item.hidden::before { content: '○'; color: var(--text-muted); }
 .legend-table .legend-item.hidden .legend-dot { opacity: .45; }
+
+.dashboard-header {
+  background: linear-gradient(110deg, #fff 55%, #f4effb);
+  padding-block: 25px 20px;
+}
+.header-top { gap: 12px 20px; }
+.header-brand { margin-inline-end: auto; }
+.header-kicker { font-size: .72rem; color: var(--accent); font-weight: 650; letter-spacing: .09em; text-transform: uppercase; }
+.dashboard-header h1 { font-size: clamp(1.55rem, 3.3vw, 2.25rem); line-height: 1.2; margin: 3px 0 8px; }
+.header-subtitle { font-size: .9rem; }
+.header-top .mode-toggle button { font-size: .85rem; padding: 7px 14px; }
+
+.controls-bar, .compare-controls { gap: 12px 20px; padding: 15px clamp(12px, 3vw, 24px); }
+.controls-bar .control-group, .compare-controls .control-group { min-width: 0; max-width: 100%; }
+.controls-bar .control-group select, .compare-controls .control-group select,
+.controls-bar .branch-picker input, .compare-controls .branch-picker input {
+  min-height: 38px;
+  font-size: .9rem;
+}
+.branch-field { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; max-width: 100%; }
+.surface-action {
+  font: inherit;
+  font-size: .8rem;
+  font-weight: 600;
+  color: var(--accent);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 6px 11px;
+  cursor: pointer;
+}
+.surface-action:hover { background: var(--accent-light); border-color: var(--accent); }
+.surface-action:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.surface-action:disabled { opacity: .6; cursor: wait; }
+.refresh-action { min-height: 38px; }
+.configuration-help { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 9px; margin: 6px 0 10px; }
+.configuration-help > span {
+  background: var(--bg);
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: .75rem;
+  padding: 4px 8px;
+}
+.configuration-help strong { color: var(--text); margin-inline-end: 4px; }
+.compare-controls .config-chip { padding-block: 5px; }
+@media (max-width: 600px) {
+  .header-brand { flex-basis: 100%; }
+  .controls-bar { position: static; }
+}

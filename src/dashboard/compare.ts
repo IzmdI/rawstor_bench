@@ -407,8 +407,9 @@ export function renderCompareControls(
   bGroup.appendChild(bLabel);
 
   const bRow = el('div', 'chip-row');
+  const branchField = el('div', 'branch-field');
   const full = state.selectedBranches.length >= MAX_COMPARE_BRANCHES;
-  bRow.appendChild(createBranchPicker({
+  branchField.appendChild(createBranchPicker({
     id: 'compareBranchInput',
     lastUpdated: state.branchLastUpdated,
     branches: state.allBranches.filter(b => !state.selectedBranches.includes(b)),
@@ -417,6 +418,13 @@ export function renderCompareControls(
     onSelect: handlers.onAddBranch,
     signal,
   }));
+
+  const refresh = el('button', 'surface-action refresh-action');
+  refresh.id = 'refreshBtn';
+  refresh.type = 'button';
+  refresh.textContent = 'Refresh';
+  branchField.appendChild(refresh);
+  bGroup.appendChild(branchField);
 
   state.selectedBranches.forEach((b, i) => {
     const isBase = i === 0;
@@ -461,15 +469,15 @@ export function renderCompareControls(
   // --- Configs ---
   const cGroup = el('div', 'control-group');
   const cLabel = el('span', 'control-label');
-  cLabel.textContent = 'Configs';
+  cLabel.textContent = 'Configurations';
   cGroup.appendChild(cLabel);
 
   const cRow = el('div', 'chip-row');
-  const allBtn = el('button', 'chip-mini-btn');
+  const allBtn = el('button', 'chip-mini-btn surface-action');
   allBtn.type = 'button';
   allBtn.textContent = 'All';
   allBtn.addEventListener('click', () => handlers.onAllConfigs(), { signal });
-  const noneBtn = el('button', 'chip-mini-btn');
+  const noneBtn = el('button', 'chip-mini-btn surface-action');
   noneBtn.type = 'button';
   noneBtn.textContent = 'None';
   noneBtn.addEventListener('click', () => handlers.onNoConfigs(), { signal });
