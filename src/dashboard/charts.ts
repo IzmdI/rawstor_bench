@@ -183,7 +183,7 @@ export function createChart(opts: CreateChartOptions): ChartState | null {
   // ---- Dimensions ----
   const margin = { top: 16, right: 30, bottom: 50, left: 65 };
   const fullWidth = container.node()?.getBoundingClientRect().width || 800;
-  const width = Math.max(300, fullWidth - margin.left - margin.right);
+  let width = Math.max(1, fullWidth - margin.left - margin.right);
   const height = 380 - margin.top - margin.bottom;
 
   // ---- SVG ----
@@ -198,7 +198,7 @@ export function createChart(opts: CreateChartOptions): ChartState | null {
 
   // Clip path for chart area
   const clipId = `clip-${CLIP_SEQ++}`;
-  svgEl.append('defs').append('clipPath')
+  const clipRect = svgEl.append('defs').append('clipPath')
     .attr('id', clipId)
     .attr('clipPathUnits', 'userSpaceOnUse')
     .append('rect')
@@ -422,6 +422,34 @@ export function createChart(opts: CreateChartOptions): ChartState | null {
   drawAxes(xAxisGroup, yAxisGroup, xScale, yScale, timeRangeDays, metricType);
   drawGrid(gridGroup, xScale, yScale, width, height);
 
+  let resizeFrame = 0;
+  function fitToWidth() {
+    const wrapperWidth = wrapper.node()?.clientWidth;
+    if (!wrapperWidth) return;
+    const nextWidth = Math.max(1, wrapperWidth - margin.left - margin.right);
+    if (nextWidth === width) return;
+
+    const node = wrapper.node()!;
+    const zoom = d3.zoomTransform(node);
+    const horizontalRatio = nextWidth / width;
+    width = nextWidth;
+    xScale.range([0, width]);
+    xScaleOrig.range([0, width]);
+    svgEl.attr('viewBox', `0 0 ${wrapperWidth} ${height + margin.top + margin.bottom}`);
+    clipRect.attr('width', width);
+    zoomBehavior.extent([[0, 0], [width, height]]).translateExtent([[0, 0], [width, height]]);
+    // Preserve the visible data domain when the horizontal pixel scale changes.
+    wrapper.interrupt().call(zoomBehavior.transform,
+      d3.zoomIdentity.translate(zoom.x * horizontalRatio, zoom.y).scale(zoom.k));
+  }
+
+  function onResize() {
+    cancelAnimationFrame(resizeFrame);
+    resizeFrame = requestAnimationFrame(fitToWidth);
+  }
+  fitToWidth();
+  window.addEventListener('resize', onResize);
+
   // ---- State ----
   const state: ChartState = {
     data: filtered,
@@ -444,7 +472,10 @@ export function createChart(opts: CreateChartOptions): ChartState | null {
       }
     },
     destroy() {
+      window.removeEventListener('resize', onResize);
+      cancelAnimationFrame(resizeFrame);
       cancelAnimationFrame(rafId);
+      wrapper.interrupt();
       wrapper.on('.zoom', null);
     },
   };

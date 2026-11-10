@@ -266,6 +266,47 @@ test('dashboard browser regressions', { skip: !existsSync(browser) ? 'Set BROWSE
       assert.equal(await evaluate(`document.querySelector('#infoBar').textContent`), 'Data refreshed');
       assert.equal(await evaluate(`document.querySelectorAll('.config-card').length`), 1);
     });
+    await t.test('chart layout fits again after widening and narrowing the same page', async () => {
+      const resize = width => call('Emulation.setDeviceMetricsOverride', {
+        width, height: 900, deviceScaleFactor: 1, mobile: false,
+      });
+      try {
+        for (const query of ['', '?view=compare&branches=main,feature%2Ftest&split=1']) {
+          await resize(768);
+          await load(query);
+          const width = () => evaluate(`document.querySelector('.chart-wrapper svg').getBoundingClientRect().width`);
+          const original = await width();
+          const assertUnscaled = async () => {
+            const scale = await evaluate(`(() => {
+              const svg = document.querySelector('.chart-wrapper svg');
+              return svg.getBoundingClientRect().width / svg.viewBox.baseVal.width;
+            })()`);
+            assert.ok(Math.abs(scale - 1) < .01, 'The plot viewBox follows the rendered width');
+          };
+          await resize(1920);
+          await sleep(100);
+          assert.ok(await width() > original);
+          await assertUnscaled();
+          await resize(390);
+          await sleep(100);
+          assert.ok(await width() < original);
+          await assertUnscaled();
+          assert.equal(await evaluate(`document.documentElement.scrollWidth <= innerWidth`), true);
+          await resize(768);
+          await sleep(100);
+          assert.equal(await width(), original);
+          if (query) {
+            assert.equal(await evaluate(`(() => {
+              const a = document.querySelector('#compareTimeRange').getBoundingClientRect();
+              const b = document.querySelector('#compareN').getBoundingClientRect();
+              return Math.abs(a.top - b.top) < 1 && Math.abs(a.width - b.width) < 1 && a.height === b.height;
+            })()`), true);
+          }
+        }
+      } finally {
+        await call('Emulation.clearDeviceMetricsOverride');
+      }
+    });
     await t.test('two-branch delta stays compact on wide screens and fits narrow screens', async () => {
       await call('Emulation.setDeviceMetricsOverride', {width:1920,height:1080,deviceScaleFactor:1,mobile:false});
       for (const mode of ['dots','bars','table']) {

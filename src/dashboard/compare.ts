@@ -400,7 +400,7 @@ export function renderCompareControls(
   container.className = 'compare-controls';
 
   // --- Branches ---
-  const bGroup = el('div', 'control-group');
+  const bGroup = el('div', 'control-group compare-filter-card');
   const bLabel = el('label');
   bLabel.htmlFor = 'compareBranchInput';
   bLabel.textContent = `Branches (first = base, max ${MAX_COMPARE_BRANCHES})`;
@@ -467,7 +467,7 @@ export function renderCompareControls(
   container.appendChild(bGroup);
 
   // --- Configs ---
-  const cGroup = el('div', 'control-group');
+  const cGroup = el('div', 'control-group compare-filter-card');
   const cLabel = el('span', 'control-label');
   cLabel.textContent = 'Configurations';
   cGroup.appendChild(cLabel);
@@ -495,6 +495,7 @@ export function renderCompareControls(
   container.appendChild(cGroup);
 
   // --- Time Range ---
+  const periods = el('div', 'compare-periods compare-filter-card');
   const tGroup = el('div', 'control-group');
   const tLabel = el('label');
   tLabel.htmlFor = 'compareTimeRange';
@@ -515,13 +516,14 @@ export function renderCompareControls(
     if (Number.isFinite(d)) handlers.onTimeRange(d);
   }, { signal });
   tGroup.appendChild(tSelect);
-  container.appendChild(tGroup);
+  periods.appendChild(tGroup);
 
   // --- Snapshot N ---
   const nGroup = el('div', 'control-group');
   const nLabel = el('label');
   nLabel.htmlFor = 'compareN';
-  nLabel.textContent = 'Snapshot: last N daily points';
+  nLabel.textContent = 'Snapshot points';
+  nLabel.title = 'Number of latest daily points per branch';
   nGroup.appendChild(nLabel);
   const nInput = el('input', 'n-input');
   nInput.id = 'compareN';
@@ -542,5 +544,6 @@ export function renderCompareControls(
     }
   }, { signal });
   nGroup.appendChild(nInput);
-  container.appendChild(nGroup);
+  periods.appendChild(nGroup);
+  container.appendChild(periods);
 }

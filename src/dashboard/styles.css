@@ -1322,3 +1322,43 @@ fieldset.control-group {
   .header-brand { flex-basis: 100%; }
   .controls-bar { position: static; }
 }
+
+/* Let tracks shrink independently of the SVG's intrinsic dimensions. */
+.charts-grid, .config-card-pair { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.compare-charts-grid { grid-template-columns: minmax(0, 1fr); }
+.chart-container, .config-card, .chart-wrapper { min-width: 0; }
+@media (max-width: 1100px) { .config-card-pair { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 900px) { .charts-grid { grid-template-columns: minmax(0, 1fr); } }
+
+.dashboard-header, .controls-bar, .legend-bar, .snapshot-panel {
+  margin: 12px clamp(12px, 3vw, 24px) 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+}
+.dashboard-header { border-top: 3px solid var(--accent); }
+.snapshot-panel { background: var(--surface); margin-bottom: 16px; }
+.snapshot-section { background: var(--bg); }
+.compare-controls {
+  align-items: stretch;
+  background: var(--bg);
+  border: 0;
+  gap: 10px;
+}
+.compare-filter-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+  padding: 10px 12px;
+  max-width: 100%;
+}
+.compare-periods { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.compare-periods .control-group label { line-height: 1.25; }
+.compare-periods .control-group select,
+.compare-periods .control-group input.n-input {
+  width: 100%;
+  min-width: 0;
+  height: 38px;
+  font-size: .9rem;
+}
