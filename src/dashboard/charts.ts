@@ -342,7 +342,7 @@ export function createChart(opts: CreateChartOptions): ChartState | null {
       .attr('class', `dot dot-${safeClassName(fullGroup)}`)
       .attr('data-operation', operation)
       .attr('transform', markerPosition)
-      .attr('d', markerShape(operation, 4))
+      .attr('d', markerShape(operation, 5))
       .attr('fill', color)
       .attr('stroke', '#fff')
       .attr('stroke-width', 1.5)
@@ -366,10 +366,10 @@ export function createChart(opts: CreateChartOptions): ChartState | null {
       if (!pt) return;
       if (lineElements.get(pt.fullGroup)?.style('opacity') !== '0') {
         if (activeDot && activeDot !== target) {
-          d3.select(activeDot).attr('d', markerShape(dotDataMap.get(activeDot)!.operation, 4));
+          d3.select(activeDot).attr('d', markerShape(dotDataMap.get(activeDot)!.operation, 5));
         }
         activeDot = target;
-        d3.select(target).attr('d', markerShape(pt.operation, 6));
+        d3.select(target).attr('d', markerShape(pt.operation, 7));
         tooltip.show(event, {
           group: pt.group, operation: pt.operation, value: pt.value,
           timestamp: pt.timestamp, branch: pt.branch, config: pt.config,
@@ -382,7 +382,7 @@ export function createChart(opts: CreateChartOptions): ChartState | null {
       const related = event.relatedTarget as HTMLElement | null;
       if (related && dotsGroup.node()?.contains(related)) return;
       if (activeDot) {
-        d3.select(activeDot).attr('d', markerShape(dotDataMap.get(activeDot)!.operation, 4));
+        d3.select(activeDot).attr('d', markerShape(dotDataMap.get(activeDot)!.operation, 5));
         activeDot = null;
       }
       tooltip.hide();

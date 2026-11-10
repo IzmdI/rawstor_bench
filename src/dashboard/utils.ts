@@ -112,25 +112,23 @@ export class Tooltip {
     const branchShort = stripBranchPrefix(data.branch);
     const commitShort = data.commit_sha.substring(0, 8);
 
+    const operation = data.operation === 'read' ? '● Read' : '◆ Write';
     el.innerHTML =
-      `<div class="tooltip-header">${escapeHtml(data.group === data.config ? formatConfigLabel(data.group) : data.group)} (${escapeHtml(data.operation)})</div>` +
+      `<div class="tooltip-header"><span class="tooltip-operation">${operation}</span><span class="tooltip-date">${escapeHtml(dateStr)}</span></div>` +
       `<div class="tooltip-metric">${escapeHtml(valueStr)}</div>` +
-      `<div class="tooltip-date">${escapeHtml(dateStr)}</div>` +
-      `<div class="tooltip-meta" title="${escapeHtml(data.config)}">${escapeHtml(branchShort)} / ${escapeHtml(formatConfigLabel(data.config))}</div>` +
-      `<div class="tooltip-commit">${escapeHtml(commitShort)}</div>` +
-      `<div class="tooltip-hint">Click to view test details</div>`;
+      `<div class="tooltip-branch">${escapeHtml(branchShort)}</div>` +
+      `<div class="tooltip-meta" title="${escapeHtml(data.config)}">${escapeHtml(formatConfigLabel(data.config))}</div>` +
+      `<div class="tooltip-footer"><span class="tooltip-commit">${escapeHtml(commitShort)}</span><span class="tooltip-hint">Click for test details ↗</span></div>`;
 
     el.classList.add('visible');
 
-    const x = event.pageX + 15;
-    const y = event.pageY - 28;
-
     const rect = el.getBoundingClientRect();
-    const maxX = window.pageXOffset + window.innerWidth - rect.width - 20;
-    const maxY = window.pageYOffset + window.innerHeight - rect.height - 20;
-
-    el.style.left = Math.min(x, maxX) + 'px';
-    el.style.top = Math.min(y, maxY) + 'px';
+    const gap = 12;
+    const x = Math.min(event.clientX + gap, window.innerWidth - rect.width - gap);
+    const above = event.clientY - rect.height - gap;
+    const y = above >= gap ? above : event.clientY + gap;
+    el.style.left = Math.max(gap, x) + 'px';
+    el.style.top = Math.max(gap, Math.min(y, window.innerHeight - rect.height - gap)) + 'px';
   }
 
   hide(): void {

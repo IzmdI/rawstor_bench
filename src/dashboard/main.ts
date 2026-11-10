@@ -1,4 +1,5 @@
-import { describeConfig, renderConfigHeading } from './config-label';
+import { renderConfigHeading } from './config-label';
+import { renderConfigTable } from './config-table';
 import { createBranchPicker } from './branch-picker';
 import * as d3 from 'd3';
 import type { DashboardData, OperationFilter, MetricType, ViewMode, SnapMode, ChartDataPoint } from './types';
@@ -335,8 +336,8 @@ class DashboardApp {
           <dd>Hide/show that branch's chart lines (the chip dims; the snapshot keeps showing it)</dd>
           <dt>Search field</dt>
           <dd>Add branches (max 8)</dd>
-          <dt>Config chips</dt>
-          <dd>Choose which configurations get chart cards (All / None shortcuts)</dd>
+          <dt>Configurations</dt>
+          <dd>Choose configurations in the table, or use All / None to change the entire selection</dd>
           <dt>Operations</dt>
           <dd>Read / Write / Both filters both the charts and the snapshot.</dd>
           <dt>Chart time range</dt>
@@ -799,63 +800,12 @@ class DashboardApp {
     controls.append(showAll, hideAll);
     el.appendChild(controls);
 
-    const scroll = document.createElement('div');
-    scroll.className = 'legend-table-wrap';
-    const table = document.createElement('table');
-    table.className = 'legend-table';
-    table.setAttribute('aria-label', 'Configuration visibility');
-    const headings = table.createTHead().insertRow();
-    for (const label of ['Storage', 'Block', 'QD', 'Jobs', 'Mode']) {
-      const th = document.createElement('th');
-      th.scope = 'col';
-      th.textContent = label;
-      headings.appendChild(th);
-    }
-    const body = table.createTBody();
-
-    for (const group of this.allGroups) {
-      const color = this.groupColorMap.get(group) ?? getColor(this.colorMap.get(group) ?? 0);
-      const item = document.createElement('button');
-      item.className = 'legend-item';
-      item.dataset.group = group;
-      item.type = 'button';
-      item.setAttribute('role', 'checkbox');
-      item.classList.toggle('hidden', this.hiddenGroups.has(group));
-      item.setAttribute('aria-checked', String(!this.hiddenGroups.has(group)));
-      const dot = document.createElement('span');
-      dot.className = 'legend-dot';
-      dot.style.background = color;
-      const label = document.createElement('span');
-      label.className = 'legend-label';
-      const config = describeConfig(group);
-      label.textContent = config.title;
-      item.setAttribute('aria-label', config.compact);
-      const row = body.insertRow();
-      const name = document.createElement('th');
-      name.scope = 'row';
-      name.appendChild(item);
-      row.appendChild(name);
-      const [block, depth, jobs, ...modes] = config.tags;
-      for (const value of [block, depth?.replace('QD ', ''), jobs, modes.join(' · ')]) {
-        row.insertCell().textContent = value || '—';
-      }
-      item.title = group;
-      item.append(dot, label);
-      item.addEventListener('click', () => this.toggleGroup(group));
-      item.addEventListener('keydown', (e: KeyboardEvent) => {
-        // Space/Enter handled natively by <button>; only handle arrows.
-        if (e.key === 'ArrowDown' || e.key === 'ArrowRight') {
-          e.preventDefault();
-          row.nextElementSibling?.querySelector<HTMLElement>('.legend-item')?.focus();
-        } else if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') {
-          e.preventDefault();
-          row.previousElementSibling?.querySelector<HTMLElement>('.legend-item')?.focus();
-        }
-      });
-    }
-
-    scroll.appendChild(table);
-    el.appendChild(scroll);
+    el.appendChild(renderConfigTable(
+      this.allGroups,
+      group => !this.hiddenGroups.has(group),
+      group => this.toggleGroup(group),
+      group => this.groupColorMap.get(group) ?? getColor(this.colorMap.get(group) ?? 0),
+    ));
 
     document.getElementById('aboutBtnLegend')?.addEventListener('click', () => {
       (document.getElementById('aboutDialog') as HTMLDialogElement | null)?.showModal();

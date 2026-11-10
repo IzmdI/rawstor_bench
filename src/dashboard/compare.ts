@@ -1,3 +1,4 @@
+import { renderConfigTable } from './config-table';
 import { formatConfigLabel, renderConfigHeading } from './config-label';
 import { createBranchPicker } from './branch-picker';
 import type {
@@ -464,38 +465,9 @@ export function renderCompareControls(
     bRow.appendChild(chip);
   });
   bGroup.appendChild(bRow);
-  container.appendChild(bGroup);
-
-  // --- Configs ---
-  const cGroup = el('div', 'control-group compare-filter-card');
-  const cLabel = el('span', 'control-label');
-  cLabel.textContent = 'Configurations';
-  cGroup.appendChild(cLabel);
-
-  const cRow = el('div', 'chip-row');
-  const allBtn = el('button', 'chip-mini-btn surface-action');
-  allBtn.type = 'button';
-  allBtn.textContent = 'All';
-  allBtn.addEventListener('click', () => handlers.onAllConfigs(), { signal });
-  const noneBtn = el('button', 'chip-mini-btn surface-action');
-  noneBtn.type = 'button';
-  noneBtn.textContent = 'None';
-  noneBtn.addEventListener('click', () => handlers.onNoConfigs(), { signal });
-  cRow.append(allBtn, noneBtn);
-
-  for (const cfg of state.allConfigs) {
-    const chip = el('span', 'config-chip '
-      + (state.selectedConfigs.includes(cfg) ? 'on' : 'off'));
-    chip.textContent = formatConfigLabel(cfg);
-    chip.title = `${cfg} — click to toggle this config`;
-    chip.addEventListener('click', () => handlers.onToggleConfig(cfg), { signal });
-    cRow.appendChild(chip);
-  }
-  cGroup.appendChild(cRow);
-  container.appendChild(cGroup);
 
   // --- Time Range ---
-  const periods = el('div', 'compare-periods compare-filter-card');
+  const periods = el('div', 'compare-periods');
   const tGroup = el('div', 'control-group');
   const tLabel = el('label');
   tLabel.htmlFor = 'compareTimeRange';
@@ -545,5 +517,32 @@ export function renderCompareControls(
   }, { signal });
   nGroup.appendChild(nInput);
   periods.appendChild(nGroup);
-  container.appendChild(periods);
+  bGroup.appendChild(periods);
+  container.appendChild(bGroup);
+
+  // --- Configs ---
+  const cGroup = el('div', 'control-group compare-filter-card');
+  const cLabel = el('span', 'control-label');
+  cLabel.textContent = 'Configurations';
+  cGroup.appendChild(cLabel);
+
+  const cRow = el('div', 'chip-row');
+  const allBtn = el('button', 'chip-mini-btn surface-action');
+  allBtn.type = 'button';
+  allBtn.textContent = 'All';
+  allBtn.addEventListener('click', () => handlers.onAllConfigs(), { signal });
+  const noneBtn = el('button', 'chip-mini-btn surface-action');
+  noneBtn.type = 'button';
+  noneBtn.textContent = 'None';
+  noneBtn.addEventListener('click', () => handlers.onNoConfigs(), { signal });
+  cRow.append(allBtn, noneBtn);
+
+  cGroup.appendChild(cRow);
+  const selected = new Set(state.selectedConfigs);
+  cGroup.appendChild(renderConfigTable(
+    state.allConfigs,
+    config => selected.has(config),
+    handlers.onToggleConfig,
+  ));
+  container.appendChild(cGroup);
 }

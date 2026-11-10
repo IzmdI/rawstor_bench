@@ -113,8 +113,8 @@ test('dashboard browser regressions', { skip: !existsSync(browser) ? 'Set BROWSE
       await load('?view=compare&branches=main,feature%2Ftest&snap=table');
       await click('.chip-mini-btn:nth-child(2)');
       assert.deepEqual(await counts(), { cards: 0, lines: 0 });
-      await click('.config-chip'); assert.equal((await counts()).cards, 1);
-      await click('.config-chip:nth-of-type(2)');
+      await click('.legend-item'); assert.equal((await counts()).cards, 1);
+      await click('.legend-table tbody tr:nth-child(2) .legend-item');
       const individually = await counts();
       assert.deepEqual(individually, { cards: 2, lines: 16 });
       await click('.chip-mini-btn'); assert.deepEqual(await counts(), individually);
@@ -210,15 +210,15 @@ test('dashboard browser regressions', { skip: !existsSync(browser) ? 'Set BROWSE
       await load('?view=compare&branches=main,feature%2Ftest');
       assert.equal(await evaluate(`document.querySelector('.config-card-title .config-title-text').textContent`), 'Object storage');
       assert.deepEqual(await evaluate(`[...document.querySelectorAll('.config-card-title .config-tag')].slice(0,3).map(e=>e.textContent)`), ['4 KiB','QD 1','1 job']);
-      assert.equal(await evaluate(`document.querySelector('.config-chip').textContent`), 'OST · 4 KiB · QD 1 · 1 job');
-      assert.equal(await evaluate(`document.querySelector('.config-chip').title.includes('perftest-ost-4k-1-1')`), true);
+      assert.equal(await evaluate(`document.querySelector('.legend-item').getAttribute('aria-label')`), 'OST · 4 KiB · QD 1 · 1 job');
+      assert.equal(await evaluate(`document.querySelector('.legend-item').title.includes('perftest-ost-4k-1-1')`), true);
       assert.equal(await evaluate(`document.querySelector('.snapshot-config .config-title-text').textContent`), 'Object storage');
-      await click('.config-chip');
+      await click('.legend-item');
       assert.equal(await evaluate(`new URLSearchParams(location.search).get('configs')`), 'perftest-ost-4k-2-1');
       await load('');
       assert.equal(await evaluate(`document.querySelector('.legend-label').textContent`), 'Object storage');
       assert.equal(await evaluate(`document.querySelector('.legend-item').title`), 'perftest-ost-4k-1-1');
-      assert.deepEqual(await evaluate(`[...document.querySelectorAll('.legend-table tbody tr:first-child td')].map(cell => cell.textContent)`), ['4 KiB', '1', '1 job', '—']);
+      assert.deepEqual(await evaluate(`[...document.querySelectorAll('.legend-table tbody tr:first-child td')].map(cell => cell.textContent)`), ['4 KiB', '1', '1 job', 'With liburing']);
       await click('.legend-table tbody tr:first-child .legend-item');
       assert.equal(await evaluate(`document.querySelector('.legend-item').getAttribute('aria-checked')`), 'false');
     });
@@ -257,7 +257,7 @@ test('dashboard browser regressions', { skip: !existsSync(browser) ? 'Set BROWSE
       await click('.branch-picker-toggle');
       assert.deepEqual(await evaluate(`[...document.querySelectorAll('.branch-option-name')].map(el => el.textContent)`), ['main', 'feature/test']);
       await load('?view=compare&branches=main,feature%2Ftest');
-      await click('.config-chip');
+      await click('.legend-item');
       await click('#refreshBtn');
       for (let i = 0; i < 50; i++) {
         if (await evaluate(`document.querySelector('#infoBar').textContent === 'Data refreshed'`)) break;
@@ -303,6 +303,21 @@ test('dashboard browser regressions', { skip: !existsSync(browser) ? 'Set BROWSE
             })()`), true);
           }
         }
+      } finally {
+        await call('Emulation.clearDeviceMetricsOverride');
+      }
+    });
+    await t.test('chart tooltip identifies the operation and fits a narrow viewport', async () => {
+      await call('Emulation.setDeviceMetricsOverride', {width:390,height:844,deviceScaleFactor:1,mobile:false});
+      try {
+        await load('?op=write');
+        await evaluate(`document.querySelector('.dot[data-operation="write"]').dispatchEvent(
+          new MouseEvent('mouseover', { bubbles: true, clientX: innerWidth - 2, clientY: 2 }))`);
+        assert.equal(await evaluate(`document.querySelector('.tooltip.visible .tooltip-operation').textContent`), '◆ Write');
+        assert.equal(await evaluate(`(() => {
+          const box = document.querySelector('.tooltip').getBoundingClientRect();
+          return box.left >= 0 && box.top >= 0 && box.right <= innerWidth && box.bottom <= innerHeight;
+        })()`), true);
       } finally {
         await call('Emulation.clearDeviceMetricsOverride');
       }
