@@ -58,7 +58,7 @@ function drawGrid(gridGroup: d3.Selection<SVGGElement, unknown, SVGGElement, unk
   xSel.exit().remove();
   xSel.enter().append('line')
     .attr('class', 'grid-x-line')
-    .attr('stroke', '#eee')
+    .attr('stroke', '#eeedf4')
     .attr('stroke-dasharray', '2,2')
     .merge(xSel)
     .attr('x1', d => xScale(d))
@@ -71,7 +71,7 @@ function drawGrid(gridGroup: d3.Selection<SVGGElement, unknown, SVGGElement, unk
   if (xLine.empty()) {
     xLine = gridGroup.append('line')
       .attr('class', 'grid-x-axis')
-      .attr('stroke', '#eee');
+      .attr('stroke', '#eeedf4');
   }
   xLine.attr('x1', 0).attr('x2', width).attr('y1', height).attr('y2', height);
 
@@ -81,7 +81,7 @@ function drawGrid(gridGroup: d3.Selection<SVGGElement, unknown, SVGGElement, unk
   ySel.exit().remove();
   ySel.enter().append('line')
     .attr('class', 'grid-y-line')
-    .attr('stroke', '#eee')
+    .attr('stroke', '#eeedf4')
     .attr('stroke-dasharray', '2,2')
     .merge(ySel)
     .attr('x1', 0)
@@ -94,7 +94,7 @@ function drawGrid(gridGroup: d3.Selection<SVGGElement, unknown, SVGGElement, unk
   if (yLine.empty()) {
     yLine = gridGroup.append('line')
       .attr('class', 'grid-y-axis')
-      .attr('stroke', '#eee');
+      .attr('stroke', '#eeedf4');
   }
   yLine.attr('x1', 0).attr('x2', 0).attr('y1', 0).attr('y2', height);
 }
@@ -122,14 +122,14 @@ function drawAxes(
     .call(xAxis as any)
     .call(g => g.select('.domain').attr('stroke', '#ddd'))
     .call(g => g.selectAll('.tick line').attr('stroke', '#ddd'))
-    .call(g => g.selectAll('.tick text').attr('fill', '#555').attr('font-size', '11px'));
+    .call(g => g.selectAll('.tick text').attr('fill', '#59566d').attr('font-size', '11px'));
 
   const yAxis = d3.axisLeft(yScale).ticks(6).tickFormat((d: number | { valueOf(): number }) => formatYAxis(typeof d === 'number' ? d : d.valueOf(), metricType));
   yAxisGroup
     .call(yAxis as any)
     .call(g => g.select('.domain').attr('stroke', '#ddd'))
     .call(g => g.selectAll('.tick line').attr('stroke', '#ddd'))
-    .call(g => g.selectAll('.tick text').attr('fill', '#555').attr('font-size', '11px'));
+    .call(g => g.selectAll('.tick text').attr('fill', '#59566d').attr('font-size', '11px'));
 }
 
 // ---- Main chart factory ----

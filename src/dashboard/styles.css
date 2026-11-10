@@ -11,14 +11,14 @@
 }
 
 :root {
-  --bg: #f8f9fa;
+  --bg: #f4f5f8;
   --surface: #ffffff;
-  --border: #e0e0e0;
-  --text: #1a1a2e;
+  --border: #e7e8f0;
+  --text: #242239;
   --text-secondary: #555;
   --text-muted: #666;
-  --accent: #4e79a7;
-  --accent-light: #d6e4f0;
+  --accent: #6746ae;
+  --accent-light: #eee8fa;
   --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.08);
   --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.1);
   --radius: 8px;
@@ -817,8 +817,8 @@ fieldset.control-group {
 }
 
 .branch-chip:hover { border-color: #8c959f; }
-.branch-chip:focus-visible { outline: 2px solid #0969da; outline-offset: 2px; }
-.branch-chip.chip-base { border-color: #0969da; background: #fff; box-shadow: 0 0 0 1px #0969da inset; }
+.branch-chip:focus-visible { outline: 2px solid #6746ae; outline-offset: 2px; }
+.branch-chip.chip-base { border-color: #6746ae; background: #fff; box-shadow: 0 0 0 1px #6746ae inset; }
 .branch-chip.chip-hidden { opacity: 0.45; }
 
 .chip-dot { width: 9px; height: 9px; border-radius: 50%; flex: none; }
@@ -831,8 +831,8 @@ fieldset.control-group {
 }
 
 .chip-base-badge {
-  background: #ddf4ff;
-  color: #0969da;
+  background: #f0eafa;
+  color: #6746ae;
   font-size: 0.65rem;
   font-weight: 700;
   padding: 1px 6px;
@@ -851,10 +851,10 @@ fieldset.control-group {
   color: var(--text-secondary, #57606a);
 }
 
-.chip-base-btn:hover { background: #ddf4ff; color: #0969da; }
+.chip-base-btn:hover { background: #f0eafa; color: #6746ae; }
 .chip-remove:hover { background: #ffebe9; color: #cf222e; }
 .chip-base-btn:focus-visible,
-.chip-remove:focus-visible { outline: 2px solid #0969da; outline-offset: 1px; }
+.chip-remove:focus-visible { outline: 2px solid #6746ae; outline-offset: 1px; }
 
 .config-chip {
   display: inline-flex;
@@ -869,9 +869,9 @@ fieldset.control-group {
   user-select: none;
 }
 
-.config-chip.on { border-color: #0969da; background: #fff; box-shadow: 0 0 0 1px #0969da inset; }
+.config-chip.on { border-color: #6746ae; background: #fff; box-shadow: 0 0 0 1px #6746ae inset; }
 .config-chip.off { opacity: 0.45; }
-.config-chip:focus-visible { outline: 2px solid #0969da; outline-offset: 2px; }
+.config-chip:focus-visible { outline: 2px solid #6746ae; outline-offset: 2px; }
 
 .chip-mini-btn {
   border: 1px solid #d0d7de;
@@ -949,8 +949,8 @@ fieldset.control-group {
   cursor: pointer;
 }
 
-.snap-toggle button.active { background: #0969da; color: #fff; }
-.snap-toggle button:focus-visible { outline: 2px solid #0969da; outline-offset: -2px; }
+.snap-toggle button.active { background: #6746ae; color: #fff; }
+.snap-toggle button:focus-visible { outline: 2px solid #6746ae; outline-offset: -2px; }
 
 .snapshot-section {
   background: var(--bg-card, #fff);
@@ -1105,7 +1105,7 @@ fieldset.control-group {
   position: absolute; right: 1px; top: 1px; bottom: 1px; width: 32px;
   border: 0; background: transparent; color: #57606a; cursor: pointer; font-size: 18px;
 }
-.branch-picker-toggle:focus-visible { outline: 2px solid #0969da; outline-offset: -3px; }
+.branch-picker-toggle:focus-visible { outline: 2px solid #6746ae; outline-offset: -3px; }
 .branch-picker-toggle:disabled { cursor: default; opacity: .4; }
 .branch-picker-popup {
   position: absolute; top: calc(100% + 5px); left: 0; z-index: 50;
@@ -1115,7 +1115,7 @@ fieldset.control-group {
 }
 .branch-picker-options { max-height: 260px; overflow-y: auto; overscroll-behavior: contain; }
 .branch-picker-option { padding: 9px 12px; font-size: .8rem; cursor: pointer; overflow-wrap: anywhere; }
-.branch-picker-option:hover, .branch-picker-option[aria-selected="true"] { background: #ddf4ff; color: #0550ae; }
+.branch-picker-option:hover, .branch-picker-option[aria-selected="true"] { background: #f0eafa; color: #0550ae; }
 .branch-picker-status { padding: 8px 12px; border-top: 1px solid #eee; font-size: .72rem; color: #57606a; }
 
 /* Keep two-branch values and deltas close even on ultrawide screens. */
@@ -1165,3 +1165,53 @@ fieldset.control-group {
   font: 500 .7rem/1.4 system-ui, sans-serif; white-space: nowrap;
 }
 .config-chip { font-family: inherit; font-size: .75rem; }
+
+/* Light surfaces and restrained violet accents across both views. */
+:root {
+  --shadow-sm: 0 2px 8px rgb(38 31 65 / 4%);
+  --shadow-md: 0 8px 24px rgb(38 31 65 / 8%);
+  --radius: 14px;
+  --radius-sm: 8px;
+}
+
+.dashboard-header {
+  padding: 24px clamp(16px, 3vw, 44px) 18px;
+  border-top: 3px solid var(--accent);
+}
+
+.dashboard-header h1 { font-weight: 700; letter-spacing: -.035em; }
+.header-top { flex-wrap: wrap; }
+.info-bar { color: #59566d; }
+.controls-bar, .compare-controls { border-color: var(--border); }
+.chart-container, .config-card, .snapshot-section {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+}
+.config-card .chart-container { box-shadow: none; }
+.mode-toggle, .snap-toggle {
+  background: #f1eff6;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  padding: 3px;
+}
+.mode-toggle button, .snap-toggle button {
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  color: #59566d;
+}
+.mode-toggle button.active, .snap-toggle button.active {
+  background: var(--surface);
+  color: var(--accent);
+  box-shadow: var(--shadow-sm);
+  font-weight: 650;
+}
+.branch-chip, .config-chip, .config-tag { border-color: var(--border); }
+.branch-chip.chip-base, .config-chip.on { background: #f6f1fc; }
+.config-tag, .snap-track { background: #f4f2f8; }
+.branch-picker-popup { border-color: var(--border); box-shadow: var(--shadow-md); }
+.branch-picker-option:hover,
+.branch-picker-option[aria-selected="true"] { color: #54348f; }
+.branch-picker-option[aria-selected="true"] .branch-option-date { color: #54348f; }

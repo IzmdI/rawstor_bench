@@ -12,7 +12,7 @@ export function escapeHtml(s: string): string {
 // ---- 32-color palette ----
 
 const PALETTE = [
-  '#4e79a7', '#f28e2b', '#e15759', '#76b7b2', '#59a14f',
+  '#7654b5', '#008891', '#e15759', '#76b7b2', '#59a14f',
   '#edc948', '#b07aa1', '#ff9da7', '#9c755f', '#bab0ac',
   '#1b9e77', '#d95f02', '#7570b3', '#e7298a', '#66a61e',
   '#e6ab02', '#a6761d', '#666666', '#1f77b4', '#ff7f0e',
