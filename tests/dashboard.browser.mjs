@@ -229,6 +229,8 @@ test('dashboard browser regressions', { skip: !existsSync(browser) ? 'Set BROWSE
       assert.equal(await evaluate(`document.querySelector('#chartsTogether').getAttribute('aria-pressed')`), 'true');
       assert.match(await evaluate(`document.querySelector('.dot[data-operation="read"]').getAttribute('d')`), / a/);
       assert.match(await evaluate(`document.querySelector('.dot[data-operation="write"]').getAttribute('d')`), / L/);
+      assert.equal(await evaluate(`document.querySelector('.dot[data-operation="write"]').getBBox().width >
+        document.querySelector('.dot[data-operation="read"]').getBBox().width`), true);
       await click('#chartsSeparate');
       assert.equal(await panels(), 4);
       assert.equal(await evaluate(`[...document.querySelectorAll('.chart-container')].every(el => new Set([...el.querySelectorAll('.dot')].map(dot => dot.dataset.operation)).size === 1)`), true);
@@ -326,6 +328,12 @@ test('dashboard browser regressions', { skip: !existsSync(browser) ? 'Set BROWSE
       await call('Emulation.setDeviceMetricsOverride', {width:1920,height:1080,deviceScaleFactor:1,mobile:false});
       for (const mode of ['dots','bars','table']) {
         await load('?view=compare&branches=main,feature%2Ftest&snap='+mode);
+        assert.equal(await evaluate(`(() => {
+          const cards = document.querySelectorAll('.compare-controls > .compare-filter-card');
+          const a = cards[0].getBoundingClientRect();
+          const b = cards[1].getBoundingClientRect();
+          return b.top >= a.bottom && Math.abs(a.width - b.width) < 1 && a.width > innerWidth * .9;
+        })()`), true);
         const dimensions=await evaluate(`(()=>{const e=document.querySelector('.snapshot-section');return {width:e.getBoundingClientRect().width,viewport:innerWidth};})()`);
         assert.ok(dimensions.width <= 1060, mode+' comparison must not stretch across the screen');
         await evaluate(`document.querySelector('.snapshot-panel').scrollIntoView({block:'start'})`);

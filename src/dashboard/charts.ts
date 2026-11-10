@@ -304,9 +304,14 @@ export function createChart(opts: CreateChartOptions): ChartState | null {
   type DotSelection = d3.Selection<SVGPathElement, ProcessedPoint, SVGGElement, undefined>;
 
   const markerPosition = (d: ProcessedPoint) => `translate(${xScale(d.timestamp)},${yScale(d.value)})`;
-  const markerShape = (op: ProcessedPoint['operation'], radius: number) => op === 'write'
-    ? `M0,${-radius} L${radius},0 L0,${radius} L${-radius},0 Z`
-    : `M${-radius},0 a${radius},${radius} 0 1,0 ${2 * radius},0 a${radius},${radius} 0 1,0 ${-2 * radius},0`;
+  const markerShape = (op: ProcessedPoint['operation'], radius: number) => {
+    if (op === 'write') {
+      // Give the diamond a wider outline so it reads clearly beside the circle.
+      const tip = radius * 1.4;
+      return `M0,${-tip} L${tip},0 L0,${tip} L${-tip},0 Z`;
+    }
+    return `M${-radius},0 a${radius},${radius} 0 1,0 ${2 * radius},0 a${radius},${radius} 0 1,0 ${-2 * radius},0`;
+  };
 
   const lineElements = new Map<string, LineSelection>();
   const dotElements = new Map<string, DotSelection>();

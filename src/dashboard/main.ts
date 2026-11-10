@@ -303,14 +303,16 @@ class DashboardApp {
           <p class="header-kicker">Rawstor · Performance</p>
           <h1>Benchmark Dashboard</h1>
         </div>
-        <div class="mode-toggle" role="tablist" aria-label="View mode">
-          <button id="modeOverview" role="tab" aria-selected="${this.viewMode === 'overview'}">Overview</button>
-          <button id="modeCompare" role="tab" aria-selected="${this.viewMode === 'compare'}">Compare</button>
-        </div>
         <button class="btn-about" id="aboutBtn" aria-label="${this.viewMode === 'compare' ? 'About compare view' : 'About test configurations'}">?</button>
       </div>
       <p class="header-subtitle">Interactive dashboard for tracking librawstor fio benchmark results across commits and configurations.</p>
       <div class="info-bar" id="infoBar" role="status" aria-live="polite"></div>
+      <div class="header-mode">
+        <div class="mode-toggle" role="tablist" aria-label="View mode">
+          <button id="modeOverview" role="tab" aria-selected="${this.viewMode === 'overview'}">Overview</button>
+          <button id="modeCompare" role="tab" aria-selected="${this.viewMode === 'compare'}">Compare</button>
+        </div>
+      </div>
     `;
     app.appendChild(header);
   }
