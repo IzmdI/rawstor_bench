@@ -151,7 +151,7 @@ export function createChart(opts: CreateChartOptions): ChartState | null {
 
   // Per-chart dot lookup map (scoped to this chart instance; released when
   // the chart DOM is replaced).
-  const dotDataMap = new WeakMap<SVGCircleElement, ProcessedPoint>();
+  const dotDataMap = new WeakMap<SVGPathElement, ProcessedPoint>();
 
   // Cleanup old zoom behavior before clearing DOM
   container.select('.chart-wrapper').on('.zoom', null);
@@ -301,7 +301,12 @@ export function createChart(opts: CreateChartOptions): ChartState | null {
   const dotsGroup = svg.append('g').attr('class', 'dots').attr('clip-path', `url(#${clipId})`) as unknown as d3.Selection<SVGGElement, unknown, SVGGElement, unknown>;
 
   type LineSelection = d3.Selection<SVGPathElement, ProcessedPoint[], SVGGElement, undefined>;
-  type DotSelection = d3.Selection<SVGCircleElement, ProcessedPoint, SVGGElement, undefined>;
+  type DotSelection = d3.Selection<SVGPathElement, ProcessedPoint, SVGGElement, undefined>;
+
+  const markerPosition = (d: ProcessedPoint) => `translate(${xScale(d.timestamp)},${yScale(d.value)})`;
+  const markerShape = (op: ProcessedPoint['operation'], radius: number) => op === 'write'
+    ? `M0,${-radius} L${radius},0 L0,${radius} L${-radius},0 Z`
+    : `M${-radius},0 a${radius},${radius} 0 1,0 ${2 * radius},0 a${radius},${radius} 0 1,0 ${-2 * radius},0`;
 
   const lineElements = new Map<string, LineSelection>();
   const dotElements = new Map<string, DotSelection>();
@@ -333,11 +338,11 @@ export function createChart(opts: CreateChartOptions): ChartState | null {
     const dots = dotsGroup.selectAll('.dot-' + safeClassName(fullGroup))
       .data(pts)
       .enter()
-      .append('circle')
+      .append('path')
       .attr('class', `dot dot-${safeClassName(fullGroup)}`)
-      .attr('cx', (d: ProcessedPoint) => xScale(d.timestamp))
-      .attr('cy', (d: ProcessedPoint) => yScale(d.value))
-      .attr('r', 3.5)
+      .attr('data-operation', operation)
+      .attr('transform', markerPosition)
+      .attr('d', markerShape(operation, 4))
       .attr('fill', color)
       .attr('stroke', '#fff')
       .attr('stroke-width', 1.5)
@@ -352,20 +357,19 @@ export function createChart(opts: CreateChartOptions): ChartState | null {
   }
 
   // ---- Event delegation on dots group ----
-  let activeDot: SVGCircleElement | null = null;
+  let activeDot: SVGPathElement | null = null;
 
   dotsGroup
     .on('mouseover', function (event: MouseEvent) {
-      const target = event.target as SVGCircleElement;
-      if (target.tagName !== 'circle') return;
+      const target = event.target as SVGPathElement;
       const pt = dotDataMap.get(target);
       if (!pt) return;
       if (lineElements.get(pt.fullGroup)?.style('opacity') !== '0') {
         if (activeDot && activeDot !== target) {
-          d3.select(activeDot).attr('r', 3.5);
+          d3.select(activeDot).attr('d', markerShape(dotDataMap.get(activeDot)!.operation, 4));
         }
         activeDot = target;
-        d3.select(target).attr('r', 6);
+        d3.select(target).attr('d', markerShape(pt.operation, 6));
         tooltip.show(event, {
           group: pt.group, operation: pt.operation, value: pt.value,
           timestamp: pt.timestamp, branch: pt.branch, config: pt.config,
@@ -374,19 +378,17 @@ export function createChart(opts: CreateChartOptions): ChartState | null {
       }
     })
     .on('mouseout', function (event: MouseEvent) {
-      const target = event.target as SVGCircleElement;
-      if (target.tagName !== 'circle') return;
+      const target = event.target as SVGPathElement;
       const related = event.relatedTarget as HTMLElement | null;
       if (related && dotsGroup.node()?.contains(related)) return;
       if (activeDot) {
-        d3.select(activeDot).attr('r', 3.5);
+        d3.select(activeDot).attr('d', markerShape(dotDataMap.get(activeDot)!.operation, 4));
         activeDot = null;
       }
       tooltip.hide();
     })
     .on('click', function (event: MouseEvent) {
-      const target = event.target as SVGCircleElement;
-      if (target.tagName !== 'circle') return;
+      const target = event.target as SVGPathElement;
       const pt = dotDataMap.get(target);
       if (!pt) return;
       const url = pt.test_url;
@@ -411,8 +413,7 @@ export function createChart(opts: CreateChartOptions): ChartState | null {
       if (dots) {
         dots.style('display', (d: ProcessedPoint) => d.timestamp < x0 || d.timestamp > x1 ? 'none' : null);
         dots.filter((d: ProcessedPoint) => d.timestamp >= x0 && d.timestamp <= x1)
-          .attr('cx', (d: ProcessedPoint) => xScale(d.timestamp))
-          .attr('cy', (d: ProcessedPoint) => yScale(d.value));
+          .attr('transform', markerPosition);
       }
     }
   }

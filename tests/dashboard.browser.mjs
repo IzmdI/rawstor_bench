@@ -219,6 +219,27 @@ test('dashboard browser regressions', { skip: !existsSync(browser) ? 'Set BROWSE
       assert.equal(await evaluate(`document.querySelector('.legend-label').textContent`), 'OST · 4 KiB · QD 1 · 1 job');
       assert.equal(await evaluate(`document.querySelector('.legend-item').title`), 'perftest-ost-4k-1-1');
     });
+    await t.test('operation markers and separate charts work in both views', async () => {
+      await load('');
+      const panels = () => evaluate(`document.querySelectorAll('.chart-container').length`);
+      assert.equal(await panels(), 2);
+      assert.equal(await evaluate(`document.querySelector('#chartsTogether').getAttribute('aria-pressed')`), 'true');
+      assert.match(await evaluate(`document.querySelector('.dot[data-operation="read"]').getAttribute('d')`), / a/);
+      assert.match(await evaluate(`document.querySelector('.dot[data-operation="write"]').getAttribute('d')`), / L/);
+      await click('#chartsSeparate');
+      assert.equal(await panels(), 4);
+      assert.equal(await evaluate(`[...document.querySelectorAll('.chart-container')].every(el => new Set([...el.querySelectorAll('.dot')].map(dot => dot.dataset.operation)).size === 1)`), true);
+      assert.equal(await evaluate(`new URLSearchParams(location.search).get('split')`), '1');
+      await click('.op-btn[data-op="write"]');
+      assert.equal(await panels(), 2);
+      await click('#modeCompare');
+      assert.equal(await panels(), 4);
+      await click('.cmp-op-btn[data-op="both"]');
+      assert.equal(await panels(), 8);
+      await click('#chartsTogether');
+      assert.equal(await panels(), 4);
+      assert.equal(await evaluate(`new URLSearchParams(location.search).has('split')`), false);
+    });
     await t.test('two-branch delta stays compact on wide screens and fits narrow screens', async () => {
       await call('Emulation.setDeviceMetricsOverride', {width:1920,height:1080,deviceScaleFactor:1,mobile:false});
       for (const mode of ['dots','bars','table']) {

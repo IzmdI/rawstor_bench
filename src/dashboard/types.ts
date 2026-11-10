@@ -70,7 +70,7 @@ export interface ChartState {
   data: ProcessedPoint[];
   fullGroups: string[];
   lines: Map<string, d3.Selection<SVGPathElement, ProcessedPoint[], SVGGElement, undefined>>;
-  dots: Map<string, d3.Selection<SVGCircleElement, ProcessedPoint, SVGGElement, undefined>>;
+  dots: Map<string, d3.Selection<SVGPathElement, ProcessedPoint, SVGGElement, undefined>>;
   updateVisibility(visibleGroups: Set<string>): void;
   /** Cancel pending RAF and unbind zoom — call before the chart DOM is replaced. */
   destroy(): void;

@@ -16,6 +16,7 @@ class DashboardApp {
   private timeRange = 30;
   private branch = DashboardApp.DEFAULT_BRANCH;
   private operation: OperationFilter = 'both';
+  private splitOperations = false;
   private viewMode: ViewMode = 'overview';
   private compareBranches: string[] = ['main'];
   private compareTouched = false;
@@ -79,6 +80,7 @@ class DashboardApp {
 
   private readUrlParams() {
     const p = new URLSearchParams(window.location.search);
+    this.splitOperations = p.get('split') === '1';
     const daysParam = p.get('days');
     const days = daysParam !== null && DashboardApp.ALLOWED_DAYS.has(parseInt(daysParam, 10))
       ? parseInt(daysParam, 10) : null;
@@ -171,6 +173,7 @@ class DashboardApp {
   private writeUrlParams() {
     const p = new URLSearchParams();
     p.set('view', this.viewMode);
+    if (this.splitOperations) p.set('split', '1');
     if (this.viewMode === 'overview') {
       if (this.timeRange !== 30) p.set('days', String(this.timeRange));
       if (this.branch !== DashboardApp.DEFAULT_BRANCH) p.set('branch', this.branch);
@@ -201,6 +204,12 @@ class DashboardApp {
       const el = btn as HTMLElement;
       el.classList.toggle('active', el.id === (this.viewMode === 'overview' ? 'modeOverview' : 'modeCompare'));
     });
+
+    for (const [id, split] of [['chartsTogether', false], ['chartsSeparate', true]] as const) {
+      const button = document.getElementById(id);
+      button?.classList.toggle('active', this.splitOperations === split);
+      button?.setAttribute('aria-pressed', String(this.splitOperations === split));
+    }
 
     // Overview controls
     const timeEl = document.getElementById('timeRange') as HTMLSelectElement | null;
@@ -295,6 +304,13 @@ class DashboardApp {
           <button id="modeCompare" role="tab" aria-selected="${this.viewMode === 'compare'}">Compare</button>
         </div>
         <button class="btn-about" id="aboutBtn" aria-label="${this.viewMode === 'compare' ? 'About compare view' : 'About test configurations'}">?</button>
+      </div>
+      <div class="chart-layout">
+        <div class="snap-toggle" role="group" aria-label="Read and Write chart layout">
+          <button type="button" id="chartsTogether">Together</button>
+          <button type="button" id="chartsSeparate">Separate</button>
+        </div>
+        <span class="operation-key"><span aria-hidden="true">●</span> Read <span aria-hidden="true">◆</span> Write</span>
       </div>
       <p class="header-subtitle">Interactive dashboard for tracking librawstor fio benchmark results across commits and configurations.</p>
       <div class="info-bar" id="infoBar" role="status" aria-live="polite"></div>
@@ -465,7 +481,7 @@ class DashboardApp {
       onToggleConfig: c => this.toggleCompareConfig(c),
       onAllConfigs: () => this.setCompareConfigs(this.allGroups.slice()),
       onNoConfigs: () => this.setCompareConfigs([]),
-      onOperation: op => { this.operation = op; this.writeUrlParams(); this.updateCompareVisibility(); this.renderSnapshotPanel(); },
+      onOperation: op => { this.operation = op; this.writeUrlParams(); if (this.splitOperations) this.buildCompareCharts(); else this.updateCompareVisibility(); this.renderSnapshotPanel(); },
       onTimeRange: d => { this.compareDays = d; this.writeUrlParams(); this.buildCompareCharts(); this.updateInfo(); },
       onN: n => {
         if (Number.isFinite(n)) {
@@ -555,6 +571,20 @@ class DashboardApp {
     }
   }
 
+  private chartSpecs(prefix: string) {
+    const keys = CHART_KEYS_BY_CONFIG;
+    const metrics = [
+      { id: `${prefix}-iops`, title: 'IOPS', metricType: 'iops' as const, keys: keys.slice(0, 2) },
+      { id: `${prefix}-latency`, title: 'Latency', metricType: 'latency' as const, keys: keys.slice(2, 4) },
+    ];
+    if (!this.splitOperations) return metrics;
+    const operations = ['read', 'write'] as const;
+    return metrics.flatMap(metric => operations.flatMap((op, i) =>
+      this.operation === 'both' || this.operation === op
+        ? [{ ...metric, id: `${metric.id}-${op}`, title: `${metric.title} · ${op === 'read' ? 'Read' : 'Write'}`, keys: [metric.keys[i]] }]
+        : []));
+  }
+
   private buildCharts() {
     const grid = document.getElementById('chartsGrid');
     if (!grid || !this.data) return;
@@ -564,14 +594,8 @@ class DashboardApp {
     this.charts.clear();
     grid.innerHTML = '';
 
-    const keys = CHART_KEYS_BY_CONFIG;
-
     const opSet = this.operation === 'both' ? new Set(['read', 'write']) : new Set([this.operation]);
-
-    const chartsToRender: { id: string; title: string; metricType: MetricType; keys: string[] }[] = [
-      { id: 'chart-iops', title: 'IOPS', metricType: 'iops', keys: [keys[0], keys[1]] },
-      { id: 'chart-latency', title: 'Latency', metricType: 'latency', keys: [keys[2], keys[3]] },
-    ];
+    const chartsToRender = this.chartSpecs('chart');
 
     for (const cfg of chartsToRender) {
       const container = document.createElement('div');
@@ -579,11 +603,9 @@ class DashboardApp {
       container.id = cfg.id;
       grid.appendChild(container);
 
-      const points1 = this.data.charts[cfg.keys[0]] ?? [];
-      const points2 = this.data.charts[cfg.keys[1]] ?? [];
-      const cutoff = this.timeRange > 0 ? new Date(Date.now() - this.timeRange * 86400000) : null;
-      const filterByTime = (pts: typeof points1) => cutoff ? pts.filter(p => new Date(p.timestamp) >= cutoff) : pts;
-      const branchFiltered = [...filterByTime(points1).filter(p => stripBranchPrefix(p.branch) === this.branch), ...filterByTime(points2).filter(p => stripBranchPrefix(p.branch) === this.branch)];
+      const cutoff = this.timeRange > 0 ? Date.now() - this.timeRange * 86400000 : null;
+      const branchFiltered = cfg.keys.flatMap(key => this.data?.charts[key] ?? []).filter(p =>
+        stripBranchPrefix(p.branch) === this.branch && (cutoff === null || Date.parse(p.timestamp) >= cutoff));
 
       const chart = createChart({
         container: d3.select(container) as unknown as d3.Selection<HTMLDivElement, unknown, HTMLElement, unknown>,
@@ -591,7 +613,7 @@ class DashboardApp {
         data: branchFiltered,
         metricType: cfg.metricType,
         timeRangeDays: this.timeRange,
-        visibleGroups: new Set(this.allGroups),
+        visibleGroups: new Set(this.allGroups.filter(group => !this.hiddenGroups.has(group))),
         visibleOperations: opSet,
         colorMap: this.colorMap,
         onGroupColors: (groups, colors) => {
@@ -643,14 +665,7 @@ class DashboardApp {
       card.appendChild(pair);
       grid.appendChild(card);
 
-      const metricCharts: { id: string; title: string; metricType: MetricType; keys: [string, string] }[] = [
-        { id: `cmp-${cfgIdx}-iops`, title: 'IOPS', metricType: 'iops',
-          keys: [CHART_KEYS_BY_CONFIG[0], CHART_KEYS_BY_CONFIG[1]] },
-        { id: `cmp-${cfgIdx}-latency`, title: 'Latency', metricType: 'latency',
-          keys: [CHART_KEYS_BY_CONFIG[2], CHART_KEYS_BY_CONFIG[3]] },
-      ];
-
-      for (const mc of metricCharts) {
+      for (const mc of this.chartSpecs(`cmp-${cfgIdx}`)) {
         const container = document.createElement('div');
         container.className = 'chart-container';
         pair.appendChild(container);
@@ -770,7 +785,8 @@ class DashboardApp {
       item.dataset.group = group;
       item.type = 'button';
       item.setAttribute('role', 'checkbox');
-      item.setAttribute('aria-checked', 'true');
+      item.classList.toggle('hidden', this.hiddenGroups.has(group));
+      item.setAttribute('aria-checked', String(!this.hiddenGroups.has(group)));
       const dot = document.createElement('span');
       dot.className = 'legend-dot';
       dot.style.background = color;
@@ -902,6 +918,18 @@ class DashboardApp {
   private bindEvents() {
     const signal = this.listenerAbort.signal;
 
+    for (const [id, split] of [['chartsTogether', false], ['chartsSeparate', true]] as const) {
+      document.getElementById(id)?.addEventListener('click', () => {
+        if (this.splitOperations === split) return;
+        this.splitOperations = split;
+        this.syncControlsFromState();
+        this.writeUrlParams();
+        if (this.viewMode === 'compare') this.buildCompareCharts();
+        else this.buildCharts();
+      }, { signal });
+    }
+
+
     // Mode toggle
     document.getElementById('modeOverview')?.addEventListener('click', () => {
       if (this.viewMode !== 'overview') {
@@ -937,7 +965,7 @@ class DashboardApp {
         onSelect(btn);
         this.syncControlsFromState();
         this.writeUrlParams();
-        if (rebuild) {
+        if (rebuild || this.splitOperations) {
           this.buildCharts();
           this.renderLegend();
         } else {
