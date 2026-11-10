@@ -305,13 +305,6 @@ class DashboardApp {
         </div>
         <button class="btn-about" id="aboutBtn" aria-label="${this.viewMode === 'compare' ? 'About compare view' : 'About test configurations'}">?</button>
       </div>
-      <div class="chart-layout">
-        <div class="snap-toggle" role="group" aria-label="Read and Write chart layout">
-          <button type="button" id="chartsTogether">Together</button>
-          <button type="button" id="chartsSeparate">Separate</button>
-        </div>
-        <span class="operation-key"><span aria-hidden="true">●</span> Read <span aria-hidden="true">◆</span> Write</span>
-      </div>
       <p class="header-subtitle">Interactive dashboard for tracking librawstor fio benchmark results across commits and configurations.</p>
       <div class="info-bar" id="infoBar" role="status" aria-live="polite"></div>
     `;
@@ -382,6 +375,22 @@ class DashboardApp {
     app.appendChild(aboutDialog);
   }
 
+  private renderChartLayout(app: HTMLElement) {
+    const toolbar = document.createElement('div');
+    toolbar.className = 'chart-layout';
+    toolbar.innerHTML = `
+      <div class="chart-layout-choice">
+        <span id="chartLayoutLabel">Read / Write layout</span>
+        <div class="snap-toggle" role="group" aria-labelledby="chartLayoutLabel">
+          <button type="button" id="chartsTogether">Together</button>
+          <button type="button" id="chartsSeparate">Separate</button>
+        </div>
+      </div>
+      <span class="operation-key"><span aria-hidden="true">●</span> Read <span aria-hidden="true">◆</span> Write</span>
+    `;
+    app.appendChild(toolbar);
+  }
+
   private renderOverview(app: HTMLElement) {
     // Controls
     const controls = document.createElement('div');
@@ -425,6 +434,7 @@ class DashboardApp {
     const grid = document.createElement('div');
     grid.className = 'charts-grid';
     grid.id = 'chartsGrid';
+    this.renderChartLayout(app);
     app.appendChild(grid);
 
     // Tooltip
@@ -447,6 +457,7 @@ class DashboardApp {
     const grid = document.createElement('div');
     grid.className = 'compare-charts-grid';
     grid.id = 'compareChartsGrid';
+    this.renderChartLayout(app);
     app.appendChild(grid);
 
     const snapshot = document.createElement('div');
