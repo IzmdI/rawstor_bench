@@ -101,6 +101,51 @@ function deltaClass(c: SnapshotCell): string {
   return c.better ? 'good' : 'bad';
 }
 
+export function renderCompareSummary(
+  host: HTMLElement, sections: SnapshotSection[], branches: string[], n: number,
+): void {
+  host.replaceChildren();
+  host.hidden = branches.length < 2;
+  if (host.hidden) return;
+
+  const heading = el('h2', 'compare-summary-title');
+  heading.textContent = 'Comparison summary';
+  const note = el('p', 'compare-summary-note');
+  note.textContent = `Base: ${branches[0]} · Median of last ${n} daily points per branch`;
+  host.append(heading, note);
+
+  if (!sections.length) {
+    const empty = el('p', 'compare-summary-note');
+    empty.textContent = 'No comparable measurements for the current selection.';
+    host.appendChild(empty);
+    return;
+  }
+
+  const grid = el('div', 'compare-summary-grid');
+  for (const section of sections) {
+    const card = el('div', 'compare-summary-card');
+    const title = el('h3', 'compare-summary-config');
+    title.textContent = formatConfigLabel(section.config);
+    title.title = section.config;
+    card.appendChild(title);
+    section.branches.slice(1).forEach((branch, index) => {
+      const row = el('div', 'compare-summary-row');
+      const name = el('strong', 'compare-summary-branch');
+      name.textContent = branch;
+      row.appendChild(name);
+      for (const metric of section.rows) {
+        const cell = metric.cells[index + 1];
+        const badge = el('span', `compare-summary-delta snap-badge ${deltaClass(cell)}`);
+        badge.textContent = `${metric.label} ${deltaText(cell, false)}`;
+        row.appendChild(badge);
+      }
+      card.appendChild(row);
+    });
+    grid.appendChild(card);
+  }
+  host.appendChild(grid);
+}
+
 /** Radiogroup behavior: click + arrows/Home/End + roving tabindex (WCAG 2.1.1). */
 function bindRadiogroup(
   buttons: HTMLButtonElement[],

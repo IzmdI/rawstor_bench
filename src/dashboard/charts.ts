@@ -137,6 +137,7 @@ function drawAxes(
 export interface CreateChartOptions {
   container: d3.Selection<HTMLDivElement, unknown, HTMLElement, unknown>;
   title: string;
+  operation?: ChartDataPoint['operation'];
   data: ChartDataPoint[];
   metricType: MetricType;
   timeRangeDays: number;
@@ -157,6 +158,13 @@ export function createChart(opts: CreateChartOptions): ChartState | null {
   container.select('.chart-wrapper').on('.zoom', null);
   container.html('');
   tooltip.reset();
+
+  const heading = container.append('div').attr('class', 'chart-heading');
+  heading.append('h4').text(title);
+  if (opts.operation) {
+    heading.append('span').attr('class', 'chart-operation-badge')
+      .text(opts.operation === 'read' ? '● Read' : '◆ Write');
+  }
   // Note: ordered-before-clear teardown (RAF cancel, zoom unbind) for the
   // previous chart in this container is handled by the caller via state.destroy().
 
@@ -173,7 +181,7 @@ export function createChart(opts: CreateChartOptions): ChartState | null {
   }
 
   // ---- Dimensions ----
-  const margin = { top: 40, right: 30, bottom: 50, left: 65 };
+  const margin = { top: 16, right: 30, bottom: 50, left: 65 };
   const fullWidth = container.node()?.getBoundingClientRect().width || 800;
   const width = Math.max(300, fullWidth - margin.left - margin.right);
   const height = 380 - margin.top - margin.bottom;
@@ -186,7 +194,7 @@ export function createChart(opts: CreateChartOptions): ChartState | null {
     .attr('viewBox', `0 0 ${width + margin.left + margin.right} ${height + margin.top + margin.bottom}`)
     .attr('preserveAspectRatio', 'xMidYMid meet')
     .attr('role', 'img')
-    .attr('aria-label', `${title} chart`);
+    .attr('aria-label', [title, opts.operation, 'chart'].filter(Boolean).join(' '));
 
   // Clip path for chart area
   const clipId = `clip-${CLIP_SEQ++}`;
@@ -257,14 +265,6 @@ export function createChart(opts: CreateChartOptions): ChartState | null {
   const gridGroup = svg.append('g').attr('class', 'grid') as unknown as d3.Selection<SVGGElement, unknown, SVGGElement, unknown>;
   const xAxisGroup = svg.append('g').attr('class', 'x-axis').attr('transform', `translate(0,${height})`);
   const yAxisGroup = svg.append('g').attr('class', 'y-axis');
-
-  // ---- Title ----
-  svg.append('text')
-    .attr('class', 'chart-title')
-    .attr('x', width / 2)
-    .attr('y', -12)
-    .attr('text-anchor', 'middle')
-    .text(title);
 
   // ---- Y-axis label ----
   svg.append('text')

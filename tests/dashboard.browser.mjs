@@ -239,6 +239,15 @@ test('dashboard browser regressions', { skip: !existsSync(browser) ? 'Set BROWSE
       await click('#chartsTogether');
       assert.equal(await panels(), 4);
       assert.equal(await evaluate(`new URLSearchParams(location.search).has('split')`), false);
+      await load('?view=compare&branches=main,feature%2Ftest&split=1');
+      assert.equal(await evaluate(`document.querySelector('.chart-heading h4').textContent`), 'IOPS');
+      assert.equal(await evaluate(`document.querySelector('.chart-operation-badge').textContent`), '● Read');
+      assert.equal(await evaluate(`document.querySelector('#compareSummary .compare-summary-note').textContent.includes('Base: main')`), true);
+      assert.equal(await evaluate(`document.querySelectorAll('#compareSummary .compare-summary-delta').length`), 8);
+      await click('.chart-layout .op-btn[data-op="write"]');
+      assert.equal(await evaluate(`document.querySelectorAll('#compareSummary .compare-summary-delta').length`), 4);
+      assert.equal(await evaluate(`[...document.querySelectorAll('#compareSummary .compare-summary-delta')].every(el => el.textContent.includes('write'))`), true);
+
     });
     await t.test('two-branch delta stays compact on wide screens and fits narrow screens', async () => {
       await call('Emulation.setDeviceMetricsOverride', {width:1920,height:1080,deviceScaleFactor:1,mobile:false});

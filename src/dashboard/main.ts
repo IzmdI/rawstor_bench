@@ -6,7 +6,7 @@ import { CHART_KEYS_BY_CONFIG, asOperationFilter, asViewMode, asSnapMode,
          MAX_COMPARE_BRANCHES, DEFAULT_COMPARE_CONFIGS } from './types';
 import { loadData } from './data-loader';
 import { createChart } from './charts';
-import { computeSnapshotSections, renderSnapshot, renderCompareControls } from './compare';
+import { computeSnapshotSections, renderCompareSummary, renderSnapshot, renderCompareControls } from './compare';
 import { stripBranchPrefix, getColor } from './utils';
 
 class DashboardApp {
@@ -379,6 +379,7 @@ class DashboardApp {
     const toolbar = document.createElement('div');
     toolbar.className = 'chart-layout';
     toolbar.innerHTML = `
+      <h2 class="chart-layout-title">Charts</h2>
       <div class="chart-layout-choice">
         <span class="chart-layout-label" id="chartLayoutLabel">Read / Write layout</span>
         <div class="snap-toggle" role="group" aria-labelledby="chartLayoutLabel">
@@ -388,7 +389,7 @@ class DashboardApp {
       </div>
       <div class="chart-layout-choice">
         <span class="chart-layout-label" id="chartOperationsLabel">Operations</span>
-        <div class="toggle-group" role="radiogroup" aria-labelledby="chartOperationsLabel">
+        <div class="snap-toggle" role="radiogroup" aria-labelledby="chartOperationsLabel">
           <button class="op-btn" data-op="read" role="radio" aria-checked="false">Read</button>
           <button class="op-btn" data-op="write" role="radio" aria-checked="false">Write</button>
           <button class="op-btn active" data-op="both" role="radio" aria-checked="true">Both</button>
@@ -457,6 +458,9 @@ class DashboardApp {
     const grid = document.createElement('div');
     grid.className = 'compare-charts-grid';
     grid.id = 'compareChartsGrid';
+    const summary = document.createElement('section');
+    summary.id = 'compareSummary';
+    app.appendChild(summary);
     this.renderChartLayout(app);
     app.appendChild(grid);
 
@@ -582,7 +586,7 @@ class DashboardApp {
 
   private chartSpecs(prefix: string) {
     const keys = CHART_KEYS_BY_CONFIG;
-    const metrics = [
+    const metrics: { id: string; title: string; metricType: MetricType; keys: string[]; operation?: ChartDataPoint['operation'] }[] = [
       { id: `${prefix}-iops`, title: 'IOPS', metricType: 'iops' as const, keys: keys.slice(0, 2) },
       { id: `${prefix}-latency`, title: 'Latency', metricType: 'latency' as const, keys: keys.slice(2, 4) },
     ];
@@ -590,7 +594,7 @@ class DashboardApp {
     const operations = ['read', 'write'] as const;
     return metrics.flatMap(metric => operations.flatMap((op, i) =>
       this.operation === 'both' || this.operation === op
-        ? [{ ...metric, id: `${metric.id}-${op}`, title: `${metric.title} · ${op === 'read' ? 'Read' : 'Write'}`, keys: [metric.keys[i]] }]
+        ? [{ ...metric, id: `${metric.id}-${op}`, operation: op, keys: [metric.keys[i]] }]
         : []));
   }
 
@@ -619,6 +623,7 @@ class DashboardApp {
       const chart = createChart({
         container: d3.select(container) as unknown as d3.Selection<HTMLDivElement, unknown, HTMLElement, unknown>,
         title: cfg.title,
+        operation: cfg.operation,
         data: branchFiltered,
         metricType: cfg.metricType,
         timeRangeDays: this.timeRange,
@@ -682,6 +687,7 @@ class DashboardApp {
         const chart = createChart({
           container: d3.select(container) as unknown as d3.Selection<HTMLDivElement, unknown, HTMLElement, unknown>,
           title: mc.title,
+          operation: mc.operation,
           data,
           metricType: mc.metricType,
           timeRangeDays: this.compareDays,
@@ -744,6 +750,8 @@ class DashboardApp {
     if (!panel || !this.data) return;
     const sections = computeSnapshotSections(
       this.data, this.compareBranches, this.compareConfigs, this.compareN, this.operation);
+    const summary = document.getElementById('compareSummary');
+    if (summary) renderCompareSummary(summary, sections, this.compareBranches, this.compareN);
     const emptyMsg = this.compareBranches.length < 2
       ? 'Add at least one more branch to compare — Δ% needs a base and another branch'
       : undefined;
@@ -991,7 +999,7 @@ class DashboardApp {
       const btn = btnEl as HTMLButtonElement;
       btn.addEventListener('click', () => selectOperation(btn), { signal });
       btn.addEventListener('keydown', ((e: KeyboardEvent) => {
-        const container = btn.closest('.toggle-group');
+        const container = btn.closest('[role="radiogroup"]');
         if (!container) return;
         const radios = Array.from(container.querySelectorAll('[role="radio"]')) as HTMLElement[];
         const idx = radios.indexOf(btn);
