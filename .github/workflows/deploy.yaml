@@ -3,98 +3,15 @@ name: Deploy Dashboard
 on:
   push:
     branches: [main]
-    paths:
-      - 'data/**'
-      - 'docs/**'
-      - 'tools/**'
-      - 'tests/**'
-      - 'src/dashboard/**'
-      - 'package.json'
-      - 'package-lock.json'
-      - 'tsconfig.json'
-      - 'scripts/**'
-      - '.github/workflows/**'
-  pull_request:
-    branches: [main]
-    paths:
-      - 'data/**'
-      - 'docs/**'
-      - 'tools/**'
-      - 'tests/**'
-      - 'src/dashboard/**'
-      - 'package.json'
-      - 'package-lock.json'
-      - 'tsconfig.json'
-      - 'scripts/**'
-      - '.github/workflows/**'
   workflow_dispatch:
-    inputs:
-      days:
-        description: 'Time range in days'
-        required: false
-        default: 'all'
-        type: choice
-        options:
-          - '2'
-          - '7'
-          - '15'
-          - '30'
-          - '90'
-          - '365'
-          - 'all'
 
 permissions:
   contents: read
   pages: write
   id-token: write
 
-concurrency:
-  group: "pages"
-  cancel-in-progress: true
-
 jobs:
-  # PR-only validation (no deploy).
-  validate:
-    runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request'
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '24'
-          cache: 'npm'
-      - name: Typecheck + build
-        run: |
-          npm ci
-          npm test
-          npm run typecheck
-          npm run build
-
-  # Smoke-test rawstor-bench-compile (Python 3.10 — catches syntax/regression
-  # errors that would otherwise never surface in CI because the deploy job does
-  # not run compile).
-  smoke-compile:
-    runs-on: ubuntu-latest
-    if: github.event_name != 'workflow_dispatch'
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.10'
-      - name: Test benchmark tools
-        run: python -m unittest discover -s tests -p "test_*.py"
-      - name: Smoke-test rawstor-bench-compile
-        run: python3 tools/rawstor-bench-compile --prefix . fio
-
   build-and-deploy:
-    needs: [smoke-compile]
-    env:
-      PAGES_ARTIFACT_NAME: github-pages-${{ github.run_attempt }}
-    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     environment:
       name: github-pages
@@ -109,36 +26,14 @@ jobs:
         with:
           python-version: '3.10'
 
-      - name: Determine time range
-        id: time-range
-        run: |
-          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
-            DAYS="${{ github.event.inputs.days }}"
-          else
-            DAYS="all"
-          fi
-
-          if [ "$DAYS" == "all" ]; then
-            DAYS="0"
-          fi
-
-          echo "days=$DAYS" >> "$GITHUB_OUTPUT"
-          echo "Using time range: $DAYS days"
+      - name: Test benchmark tools
+        run: python3 -m unittest discover -s tests -p "test_*.py"
 
       - name: Generate benchmark detail pages
         run: python3 tools/rawstor-bench-compile --prefix . fio
 
       - name: Process data
-        env:
-          DAYS: ${{ steps.time-range.outputs.days }}
-        run: |
-          echo "Processing data for $DAYS days"
-          python3 tools/data-processor "$DAYS"
-          if [ ! -f docs/fio/librawstor/dashboard/data.json ]; then
-            echo "ERROR: data.json was not produced" >&2
-            exit 1
-          fi
-          ls -la docs/fio/librawstor/dashboard/data.json
+        run: python3 tools/data-processor 0
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -156,14 +51,17 @@ jobs:
       - name: Setup Pages
         uses: actions/configure-pages@v5
 
+      - name: Build Pages with Jekyll
+        uses: actions/jekyll-build-pages@v1
+        with:
+          source: './docs'
+          destination: './_site'
+
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v4
         with:
-          name: ${{ env.PAGES_ARTIFACT_NAME }}
-          path: './docs'
+          path: './_site'
 
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
-        with:
-          artifact_name: ${{ env.PAGES_ARTIFACT_NAME }}

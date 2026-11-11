@@ -5,11 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Rawstor Benchmark Dashboard</title>
   <link rel="stylesheet" href="styles.css">
-  <script type="importmap">{ "imports": { "d3": "https://cdn.jsdelivr.net/npm/d3@7/+esm" }}</script>
   <script>
-    // Start fetching chart data as early as possible — in parallel with
-    // bundle.js and d3 — so rendering begins as soon as all three are ready
-    // instead of waiting for the script chain to finish first.
+    // Fetch chart data while the browser loads the dashboard bundle.
     // Consumed once by the data loader; the Refresh button issues its own fetch.
     window.__rawstorDataPreload = fetch('./data.json');
   </script>

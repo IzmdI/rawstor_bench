@@ -345,7 +345,9 @@ class DashboardApp {
           <dt>Chart time range</dt>
           <dd>Filters the time-series charts only</dd>
           <dt>Snapshot: last N daily points</dt>
-          <dd>The snapshot block shows the median of the last N daily points per (config, metric, branch). <strong>N affects only the snapshot</strong>, not the charts.</dd>
+          <dd>For each UTC day, branch, and configuration, each metric uses the latest run that reported it.
+            The snapshot shows the median of the most recent N available daily points in each series.
+            <strong>N applies only to the snapshot.</strong></dd>
         </dl>
         <p><strong>Δ%:</strong> green = improvement (IOPS up, latency down), red = regression, <code>—</code> = no data.</p>
         <p><strong>Snapshot views:</strong> Dots — values on a shared scale, dashed line = base; Bars — heights, outlined bar = base; Table — exact numbers.</p>

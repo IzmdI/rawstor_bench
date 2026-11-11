@@ -397,7 +397,7 @@ export function createChart(opts: CreateChartOptions): ChartState | null {
       const pt = dotDataMap.get(target);
       if (!pt) return;
       const url = pt.test_url;
-      if (/^\.\.?\//.test(url)) {
+      if (/^\.\.?\//.test(url) || /^https:\/\/github\.com\/[\w.-]+\/[\w.-]+\/blob\//.test(url)) {
         window.open(url, '_blank', 'noopener,noreferrer');
       }
     });

@@ -7,7 +7,7 @@ from pathlib import Path
 import shutil
 
 
-# Maximum commits shown per test name in the repo README summary table.
+# Maximum detail pages and summary rows per test name.
 REPO_TABLE_COMMIT_LIMIT = 10
 
 
@@ -42,6 +42,9 @@ def load_meta(meta_path):
         for field in ('repo', 'name'):
             if not isinstance(meta.get(field), str) or not meta[field]:
                 raise ValueError(f"missing/invalid '{field}' in {meta_path}")
+        commit = meta.get("commit")
+        if not isinstance(commit, str) or not commit.strip() or any(c in commit for c in "/\\\0"):
+            meta["commit"] = meta_path.stem
         date_raw = meta.get("date")
         if not date_raw:
             raise ValueError(f"missing 'date' in {meta_path}")
@@ -85,7 +88,7 @@ def compile_commit_md(
 
     dest_abspath.mkdir(parents=True, exist_ok=True)
 
-    commit_sha = meta_path.stem
+    commit_sha = meta["commit"]
 
     url = f"{dest_path}/{commit_sha}.md"
     filename = dest_abspath / f"{commit_sha}.md"
@@ -151,7 +154,6 @@ def compile_repo_md(dest_abspath, dest_path, repo_name, repo):
         repo_md.write(f"# [&lt;](..) {repo_name} tests\n\n")
         for name, metas in repo:
             fios = []
-            # Generate every detail page; retain only the summary rows in memory.
             for meta_path, meta in metas:
                 try:
                     fio = read_fio_json(meta_path, meta)
@@ -159,8 +161,9 @@ def compile_repo_md(dest_abspath, dest_path, repo_name, repo):
                         dest_abspath / name, name, repo_name,
                         meta_path, meta, fio, name,
                     )
-                    if len(fios) < REPO_TABLE_COMMIT_LIMIT:
-                        fios.append((meta_path, meta, fio, commit_md_url))
+                    fios.append((meta_path, meta, fio, commit_md_url))
+                    if len(fios) == REPO_TABLE_COMMIT_LIMIT:
+                        break
                 except (OSError, json.JSONDecodeError, KeyError) as e:
                     print(f"  Skipping {meta_path}: {e}")
                     continue
@@ -206,7 +209,7 @@ def compile_repo_md(dest_abspath, dest_path, repo_name, repo):
             repo_md.write("\n")
 
             for meta_path, meta, fio, commit_md_url in fios:
-                commit_sha = meta_path.stem
+                commit_sha = meta["commit"]
 
                 repo_md.write(
                     f"| "
@@ -248,26 +251,6 @@ def compile_index_md(dest_abspath, repos):
             index_md.write(f"[{repo_name} tests]({repo_md_url})\n")
 
 
-def _clean_compiled(dest_abspath):
-    """Remove previously compiled markdown while preserving dashboard assets
-    and hand-maintained files (e.g. index.md). Does not nuke dest_abspath."""
-    if not dest_abspath.exists():
-        return
-    for entry in dest_abspath.iterdir():
-        if entry.is_dir():
-            for child in entry.iterdir():
-                if child.is_dir() and child.name == "dashboard":
-                    continue
-                if child.is_dir():
-                    # Test-name subdir: regenerated below.
-                    shutil.rmtree(child, ignore_errors=True)
-                elif child.is_file() and child.suffix == ".md" \
-                        and child.name != "index.md":
-                    child.unlink()
-        elif entry.is_file() and entry.suffix == ".md" and entry.name != "index.md":
-            entry.unlink()
-
-
 def compile_fio(prefix=None, **kwargs):
     prefix = Path(prefix)
     src_dir = prefix / "data" / "fio"
@@ -289,7 +272,7 @@ def compile_fio(prefix=None, **kwargs):
     repos = sorted(list(repos.items()))
 
     dest_abspath = Path(prefix) / "docs" / "fio"
-    _clean_compiled(dest_abspath)
+    shutil.rmtree(dest_abspath, ignore_errors=True)
     compile_index_md(dest_abspath, repos)
 
 

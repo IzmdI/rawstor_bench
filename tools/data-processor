@@ -10,13 +10,16 @@ Usage:
     python3 tools/data-processor [DAYS]
 
 DAYS=0 means include all available data.
+Positive DAYS includes only dated results in that window.
 """
 
 import json
+import os
 import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple
+from urllib.parse import quote
 
 METRICS = ['iops_read', 'iops_write', 'latency_read', 'latency_write']
 TIMESTAMP_FORMATS = [
@@ -47,29 +50,25 @@ def main() -> None:
         days = 0
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
-    results = collect_raw_data(data_path, cutoff_date)
-    applied = days > 0 and bool(results)
-    if not results:
-        print(f"No results for last {days} days, falling back to all data")
-        results = collect_raw_data(data_path)
-        applied = False
+    reports_path = output_path.parent.parent
+    results = collect_raw_data(data_path, cutoff_date, reports_path)
 
     charts = prepare_charts_data(results)
-    summary = build_summary(results, charts, cutoff_date)
+    summary = build_summary(results)
 
     output = {
         'generated_at': _utc_iso(datetime.now(tz=timezone.utc)),
         'filter': {
             'days': days,
             'cutoff_date': _utc_iso(cutoff_date),
-            'applied': applied,
+            'applied': cutoff_date is not None,
         },
         'charts': charts,
         'summary': summary,
     }
 
     with output_path.open('w', encoding='utf-8') as f:
-        json.dump(output, f, indent=2, ensure_ascii=False)
+        json.dump(output, f, separators=(',', ':'), ensure_ascii=False)
 
     size_mb = output_path.stat().st_size / (1024 * 1024)
     print(f"data.json: {len(results)} tests, {size_mb:.1f} MB, {days or 'all'} days")
@@ -127,9 +126,14 @@ def _utc_iso(dt: Optional[datetime]) -> Optional[str]:
 def collect_raw_data(
     data_path: Path,
     cutoff_date: Optional[datetime] = None,
+    reports_path: Optional[Path] = None,
 ) -> List[Dict[str, Any]]:
     """Collect test results from all config directories, optionally filtered by date."""
     results: List[Dict[str, Any]] = []
+    published_reports = {
+        path.relative_to(reports_path) for path in reports_path.glob('*/*.md')
+        if path.is_file()
+    } if reports_path is not None else set()
 
     for config_dir in sorted(data_path.iterdir()):
         if not config_dir.is_dir():
@@ -137,7 +141,7 @@ def collect_raw_data(
 
         for json_file in config_dir.rglob('*.json'):
             try:
-                result = _process_test_file(config_dir.name, json_file, cutoff_date)
+                result = _process_test_file(data_path, json_file, cutoff_date, published_reports)
                 if result:
                     results.append(result)
             except (OSError, UnicodeDecodeError) as e:
@@ -149,11 +153,12 @@ def collect_raw_data(
 
 
 def _process_test_file(
-    config_name: str,
+    data_path: Path,
     json_file: Path,
     cutoff_date: Optional[datetime],
+    published_reports: Set[Path],
 ) -> Optional[Dict[str, Any]]:
-    commit_sha = json_file.stem
+    config_name = json_file.relative_to(data_path).parts[0]
     meta_file = json_file.with_suffix('.meta')
 
     test_data = json.loads(json_file.read_text(encoding='utf-8'))
@@ -161,8 +166,12 @@ def _process_test_file(
     if meta_file.exists():
         meta_data = json.loads(meta_file.read_text(encoding='utf-8'))
 
+    commit_sha = meta_data.get('commit')
+    if not isinstance(commit_sha, str) or not commit_sha.strip() or any(c in commit_sha for c in '/\\\0'):
+        commit_sha = json_file.stem
+
     timestamp = parse_timestamp(meta_data.get('date', ''))
-    if cutoff_date and not _is_recent(timestamp, cutoff_date):
+    if cutoff_date is not None and (timestamp is None or timestamp < cutoff_date):
         return None
 
     metrics = extract_fio_metrics(test_data)
@@ -170,6 +179,11 @@ def _process_test_file(
         return None
 
     ts_str = _utc_iso(timestamp) or 'Unknown date'
+    report = Path(config_name) / f'{commit_sha}.md'
+    if report in published_reports:
+        test_url = f"../{quote(report.with_suffix('.html').as_posix())}"
+    else:
+        test_url = _source_report_url(data_path, json_file, meta_data)
 
     return {
         'config': config_name,
@@ -177,13 +191,23 @@ def _process_test_file(
         'timestamp': ts_str,
         'timestamp_obj': timestamp,
         'branch': meta_data.get('branch', 'unknown'),
-        'test_url': f'../{config_name}/{commit_sha}.md',
+        'test_url': test_url,
         **metrics,
     }
 
 
-def _is_recent(timestamp: Optional[datetime], cutoff_date: datetime) -> bool:
-    return timestamp is None or timestamp >= cutoff_date
+def _source_report_url(data_path: Path, json_file: Path, meta_data: Dict[str, Any]) -> str:
+    files = meta_data.get('data')
+    txt_name = files.get('txt') if isinstance(files, dict) else None
+    txt_file = json_file.with_suffix('.txt')
+    if isinstance(txt_name, str) and txt_name and Path(txt_name).name == txt_name:
+        txt_file = json_file.with_name(txt_name)
+
+    source = txt_file if txt_file.is_file() else json_file
+    source_path = quote(source.relative_to(data_path.parent).as_posix())
+    repo = os.getenv('GITHUB_REPOSITORY', 'rawstor/rawstor_bench')
+    ref = os.getenv('GITHUB_SHA', 'main')
+    return f'https://github.com/{repo}/blob/{ref}/data/fio/{source_path}'
 
 
 def extract_fio_metrics(test_data: Dict[str, Any]) -> Dict[str, float]:
@@ -304,11 +328,7 @@ def downsample_daily(points: List[Dict]) -> List[Dict]:
     )
 
 
-def build_summary(
-    results: List[Dict[str, Any]],
-    charts: Dict[str, List[Dict]],
-    cutoff_date: datetime,
-) -> Dict[str, Any]:
+def build_summary(results: List[Dict[str, Any]]) -> Dict[str, Any]:
     """Build summary metadata for the dashboard."""
     configs = sorted({r['config'] for r in results})
     branches = sorted({r['branch'] for r in results})
