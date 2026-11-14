@@ -1,5 +1,5 @@
 // Integration tests against the production bundle. Requires Node >=22
-// and Edge/Chromium (BROWSER_PATH on other systems).
+// and Edge/Chromium (set BROWSER_PATH to the executable's full path).
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { createServer } from 'node:http';
@@ -10,10 +10,11 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
-const browser = process.env.BROWSER_PATH ?? 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe';
+const browser = process.env.BROWSER_PATH;
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 
-test('dashboard browser regressions', { skip: !existsSync(browser) ? 'Set BROWSER_PATH to Edge or Chromium' : false, timeout: 90000 }, async t => {
+test('dashboard browser regressions', { skip: !browser ? 'Set BROWSER_PATH to Edge or Chromium' : false, timeout: 90000 }, async t => {
+  assert.ok(existsSync(browser), `BROWSER_PATH does not exist: ${browser}`);
   const buildDir = mkdtempSync(join(tmpdir(), 'rawstor-browser-build-'));
   t.after(() => rmSync(buildDir, { recursive: true, force: true }));
   execFileSync(process.execPath, [join(root, 'scripts/build.js'), buildDir], { stdio: 'inherit' });

@@ -1,6 +1,4 @@
-import contextlib
 import datetime
-import io
 import json
 import os
 from pathlib import Path
@@ -148,7 +146,7 @@ class BenchToolsTests(unittest.TestCase):
             links = {point['commit_sha']: point['test_url'] for point in charts['iops_read_by_config']}
             self.assertEqual(links, {commit: f'../test/{commit}.html', 'abc123': '../test/abc123.html'})
 
-    def test_compile_skips_metadata_without_data_filenames(self):
+    def test_compile_rejects_metadata_without_data_filenames(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             source = root / 'data/fio/librawstor/test/ab'
@@ -156,11 +154,9 @@ class BenchToolsTests(unittest.TestCase):
             (source / 'abcdef.meta').write_text(json.dumps({
                 'repo': 'librawstor', 'name': 'test', 'date': '2026-01-01', 'data': {},
             }))
-            log = io.StringIO()
-            with contextlib.redirect_stdout(log):
+            with self.assertRaisesRegex(ValueError, 'data.txt'):
                 COMPILE['compile_fio'](prefix=root)
-            self.assertIn('Skipping', log.getvalue())
-            self.assertTrue((root / 'docs/fio/README.md').is_file())
+            self.assertFalse((root / 'docs/fio').exists())
 
 
     def test_compile_accepts_mixed_timezone_dates(self):
@@ -194,7 +190,7 @@ class BenchToolsTests(unittest.TestCase):
             self.assertFalse((docs / 'index.md').exists())
             self.assertFalse((docs / 'librawstor').exists())
 
-    def test_compile_skips_malformed_metadata_and_missing_identity(self):
+    def test_compile_rejects_malformed_metadata_and_missing_identity(self):
         for content in [[], {'repo': 'librawstor', 'name': 'test', 'date': '2026-01-01', 'data': 'invalid'},
                         {'date': '2026-01-01', 'data': {'txt': 'a.txt', 'json': 'a.json'}}]:
             with self.subTest(content=content), tempfile.TemporaryDirectory() as tmp:
@@ -202,9 +198,35 @@ class BenchToolsTests(unittest.TestCase):
                 source = root / 'data/fio/librawstor/test/ab'
                 source.mkdir(parents=True)
                 (source / 'abcdef.meta').write_text(json.dumps(content))
-                with contextlib.redirect_stdout(io.StringIO()):
+                with self.assertRaises(ValueError):
                     COMPILE['compile_fio'](prefix=root)
-                self.assertTrue((root / 'docs/fio/README.md').is_file())
+                self.assertFalse((root / 'docs/fio').exists())
+
+    def test_compile_cli_fails_on_corrupt_metadata_or_report(self):
+        for broken in ('meta', 'json', 'missing_json', 'missing_txt'):
+            with self.subTest(broken=broken), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                source = root / 'data/fio/librawstor/test/ab'
+                source.mkdir(parents=True)
+                for sha, date in [('abcdef', '2026-01-02'), ('abc123', '2026-01-01')]:
+                    (source / f'{sha}.txt').write_text('fio output')
+                    (source / f'{sha}.json').write_text('{"jobs": []}')
+                    (source / f'{sha}.meta').write_text(json.dumps({
+                        'repo': 'librawstor', 'name': 'test', 'branch': 'main',
+                        'commit': sha, 'date': date,
+                        'data': {'txt': f'{sha}.txt', 'json': f'{sha}.json'},
+                    }))
+                if broken.startswith('missing_'):
+                    (source / f'abcdef.{broken.removeprefix("missing_")}').unlink()
+                else:
+                    (source / f'abcdef.{broken}').write_text('{broken json')
+                result = subprocess.run([
+                    sys.executable, str(ROOT / 'tools/rawstor-bench-compile'),
+                    '--prefix', str(root), 'fio',
+                ], capture_output=True, text=True)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertNotIn('Compiled successfully', result.stdout)
+                self.assertFalse((root / 'docs/fio/librawstor/test/abc123.md').exists())
 
 
 if __name__ == '__main__':

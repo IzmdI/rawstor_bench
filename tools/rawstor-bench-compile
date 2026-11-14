@@ -155,18 +155,14 @@ def compile_repo_md(dest_abspath, dest_path, repo_name, repo):
         for name, metas in repo:
             fios = []
             for meta_path, meta in metas:
-                try:
-                    fio = read_fio_json(meta_path, meta)
-                    commit_md_url = compile_commit_md(
-                        dest_abspath / name, name, repo_name,
-                        meta_path, meta, fio, name,
-                    )
-                    fios.append((meta_path, meta, fio, commit_md_url))
-                    if len(fios) == REPO_TABLE_COMMIT_LIMIT:
-                        break
-                except (OSError, json.JSONDecodeError, KeyError) as e:
-                    print(f"  Skipping {meta_path}: {e}")
-                    continue
+                fio = read_fio_json(meta_path, meta)
+                commit_md_url = compile_commit_md(
+                    dest_abspath / name, name, repo_name,
+                    meta_path, meta, fio, name,
+                )
+                fios.append((meta_path, meta, fio, commit_md_url))
+                if len(fios) == REPO_TABLE_COMMIT_LIMIT:
+                    break
 
             job_names = set()
             for meta_path, meta, fio, commit_md_url in fios:
@@ -257,11 +253,7 @@ def compile_fio(prefix=None, **kwargs):
 
     metas = []
     for meta_path in src_dir.glob("**/*.meta"):
-        try:
-            metas.append((meta_path, load_meta(meta_path)))
-        except (OSError, json.JSONDecodeError, ValueError, KeyError) as e:
-            print(f"  Skipping {meta_path}: {e}")
-            continue
+        metas.append((meta_path, load_meta(meta_path)))
 
     metas.sort(key=lambda meta: meta[1]["date"], reverse=True)
 

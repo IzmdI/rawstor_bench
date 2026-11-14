@@ -2,7 +2,7 @@
 
 This repository stores fio benchmark results for [librawstor](https://github.com/rawstor/librawstor). Each result includes the fio JSON and text output, along with metadata for the commit, branch, test configuration, and date.
 
-Browse the [benchmark reports](docs/) or try the [interactive dashboard preview](https://izmdi.github.io/rawstor_bench/fio/librawstor/dashboard/).
+Browse the [benchmark reports and dashboard](docs/).
 
 ## Dashboard
 
@@ -40,7 +40,7 @@ Regenerate the reports and dashboard data with the commands above after importin
 
 - `npm test` runs the dashboard unit tests.
 - `npm run test:python` tests imports, report generation, and data processing.
-- `npm run test:browser` exercises the dashboard in headless Edge or Chromium. Set `BROWSER_PATH` if Edge is unavailable at the default Windows path. The tests serve the production bundle and local fixtures and can run offline after `npm ci`.
+- `npm run test:browser` exercises the dashboard in headless Edge or Chromium. Set `BROWSER_PATH` to the browser executable's full path; without it, browser tests are skipped. The tests serve the production bundle and local fixtures and can run offline after `npm ci`.
 - `npm run typecheck` and `npm run build` verify the TypeScript and production bundle.
 
 ## Publishing
