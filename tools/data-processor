@@ -51,7 +51,10 @@ def main() -> None:
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
     reports_path = output_path.parent.parent
-    results = collect_raw_data(data_path, cutoff_date, reports_path)
+    try:
+        results = collect_raw_data(data_path, cutoff_date, reports_path)
+    except ValueError as error:
+        sys.exit(str(error))
 
     charts = prepare_charts_data(results)
     summary = build_summary(results)
@@ -140,16 +143,21 @@ def collect_raw_data(
             continue
 
         for json_file in config_dir.rglob('*.json'):
-            try:
-                result = _process_test_file(data_path, json_file, cutoff_date, published_reports)
-                if result:
-                    results.append(result)
-            except (OSError, UnicodeDecodeError) as e:
-                print(f"  I/O error reading {json_file.name}: {e}")
-            except (json.JSONDecodeError, KeyError, TypeError, ValueError) as e:
-                print(f"  Bad data in {json_file.name}: {e}")
+            result = _process_test_file(data_path, json_file, cutoff_date, published_reports)
+            if result:
+                results.append(result)
 
     return results
+
+
+def _read_json(path: Path) -> Dict[str, Any]:
+    try:
+        data = json.loads(path.read_text(encoding='utf-8'))
+    except (OSError, ValueError) as error:
+        raise ValueError(f'Cannot read {path}: {error}') from error
+    if not isinstance(data, dict):
+        raise ValueError(f'Expected a JSON object in {path}')
+    return data
 
 
 def _process_test_file(
@@ -161,10 +169,10 @@ def _process_test_file(
     config_name = json_file.relative_to(data_path).parts[0]
     meta_file = json_file.with_suffix('.meta')
 
-    test_data = json.loads(json_file.read_text(encoding='utf-8'))
+    test_data = _read_json(json_file)
     meta_data = {}
     if meta_file.exists():
-        meta_data = json.loads(meta_file.read_text(encoding='utf-8'))
+        meta_data = _read_json(meta_file)
 
     commit_sha = meta_data.get('commit')
     if not isinstance(commit_sha, str) or not commit_sha.strip() or any(c in commit_sha for c in '/\\\0'):

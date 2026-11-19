@@ -12,6 +12,24 @@ PROCESS = runpy.run_path(str(SCRIPT))
 
 
 class DataProcessorTests(unittest.TestCase):
+    def test_cli_fails_on_unreadable_or_malformed_inputs(self):
+        for filename, content in [('abc.json', b'{'), ('abc.json', b'\xff'),
+                                  ('abc.meta', b'{')]:
+            with self.subTest(filename=filename, content=content), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                script = root / 'tools/data-processor'
+                script.parent.mkdir()
+                script.write_bytes(SCRIPT.read_bytes())
+                source = root / 'data/fio/librawstor/test/ab'
+                source.mkdir(parents=True)
+                (source / 'abc.json').write_text('{"jobs": []}')
+                (source / filename).write_bytes(content)
+                result = subprocess.run([sys.executable, str(script), '0'],
+                                        capture_output=True, text=True)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn(filename, result.stderr)
+                self.assertFalse((root / 'docs/fio/librawstor/dashboard/data.json').exists())
+
     def test_days_filter_excludes_undated_runs_and_keeps_empty_windows(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

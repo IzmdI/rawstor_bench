@@ -15,6 +15,17 @@ IMPORT = runpy.run_path(str(ROOT / 'tools/rawstor-bench-import'))
 COMPILE = runpy.run_path(str(ROOT / 'tools/rawstor-bench-compile'))
 
 
+def fio_report():
+    return {'jobs': [{
+        'job options': {'name': 'randread', 'rw': 'randread', 'bs': '4k',
+                        'iodepth': '1', 'numjobs': '1'},
+        'read': {'io_bytes': 4096, 'iops': 100, 'iops_mean': 123,
+                 'lat_ns': {'mean': 1000000}},
+        'write': {'io_bytes': 0, 'iops': 0, 'iops_mean': 0,
+                  'lat_ns': {'mean': 0}},
+    }]}
+
+
 class BenchToolsTests(unittest.TestCase):
     def test_import_accepts_different_source_filenames_and_preserves_branch_refs(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -74,9 +85,7 @@ class BenchToolsTests(unittest.TestCase):
             for i in range(12):
                 sha = f'{i:040x}'
                 txt_name = f'{sha}.txt' if i else 'original report.txt'
-                (source / f'{sha}.json').write_text(json.dumps({'jobs': [{'read': {
-                    'io_bytes': 4096, 'iops': 100, 'lat_ns': {'mean': 1000000},
-                }}]}))
+                (source / f'{sha}.json').write_text(json.dumps(fio_report()))
                 if i != 1:
                     (source / txt_name).write_text('fio output')
                 (source / f'{sha}.meta').write_text(json.dumps({
@@ -93,6 +102,7 @@ class BenchToolsTests(unittest.TestCase):
             summary = (output / 'README.md').read_text()
             self.assertEqual(sum(line.startswith('| [') for line in summary.splitlines()), 10)
             self.assertNotIn(f'test/{0:040x}.md', summary)
+            self.assertIn('| 123.00 | 1000000.00 | 0.00 | 0.00 |', summary)
             processor = runpy.run_path(str(ROOT / 'tools/data-processor'))
             with patch.dict(os.environ, {'GITHUB_REPOSITORY': 'owner/rawstor_bench', 'GITHUB_SHA': 'abc123'}):
                 raw = processor['collect_raw_data'](root / 'data/fio/librawstor', reports_path=output)
@@ -118,9 +128,7 @@ class BenchToolsTests(unittest.TestCase):
                 ('abc123', '', '2026-01-02'),
             ]:
                 (source / f'{stem}.txt').write_text('fio output')
-                (source / f'{stem}.json').write_text(json.dumps({
-                    'jobs': [{'read': {'io_bytes': 4096, 'iops': 100}}],
-                }))
+                (source / f'{stem}.json').write_text(json.dumps(fio_report()))
                 (source / f'{stem}.meta').write_text(json.dumps({
                     'repo': 'librawstor', 'name': 'test', 'branch': 'main',
                     'commit': commit, 'date': date,
@@ -167,7 +175,7 @@ class BenchToolsTests(unittest.TestCase):
             for sha, date in [('abcdef', '2026-01-01T10:00:00'),
                               ('abcdff', '2026-01-01T14:00:00+03:00')]:
                 (source / f'{sha}.txt').write_text('fio output')
-                (source / f'{sha}.json').write_text('{"jobs": []}')
+                (source / f'{sha}.json').write_text(json.dumps(fio_report()))
                 (source / f'{sha}.meta').write_text(json.dumps({
                     'repo': 'librawstor', 'name': 'test', 'branch': 'main', 'date': date,
                     'data': {'txt': f'{sha}.txt', 'json': f'{sha}.json'},
@@ -203,14 +211,15 @@ class BenchToolsTests(unittest.TestCase):
                 self.assertFalse((root / 'docs/fio').exists())
 
     def test_compile_cli_fails_on_corrupt_metadata_or_report(self):
-        for broken in ('meta', 'json', 'missing_json', 'missing_txt'):
+        for broken in ('meta', 'json', 'missing_json', 'missing_txt', 'jobs', 'empty_jobs',
+                       'read', 'write', 'numjobs', 'iops_mean', 'lat_ns'):
             with self.subTest(broken=broken), tempfile.TemporaryDirectory() as tmp:
                 root = Path(tmp)
                 source = root / 'data/fio/librawstor/test/ab'
                 source.mkdir(parents=True)
                 for sha, date in [('abcdef', '2026-01-02'), ('abc123', '2026-01-01')]:
                     (source / f'{sha}.txt').write_text('fio output')
-                    (source / f'{sha}.json').write_text('{"jobs": []}')
+                    (source / f'{sha}.json').write_text(json.dumps(fio_report()))
                     (source / f'{sha}.meta').write_text(json.dumps({
                         'repo': 'librawstor', 'name': 'test', 'branch': 'main',
                         'commit': sha, 'date': date,
@@ -218,15 +227,27 @@ class BenchToolsTests(unittest.TestCase):
                     }))
                 if broken.startswith('missing_'):
                     (source / f'abcdef.{broken.removeprefix("missing_")}').unlink()
-                else:
+                elif broken in ('meta', 'json'):
                     (source / f'abcdef.{broken}').write_text('{broken json')
+                else:
+                    fio = fio_report()
+                    job = fio['jobs'][0]
+                    if broken == 'empty_jobs':
+                        fio['jobs'].clear()
+                    else:
+                        fields = {'jobs': fio, 'read': job, 'write': job,
+                                  'numjobs': job['job options'],
+                                  'iops_mean': job['read'], 'lat_ns': job['write']}
+                        del fields[broken][broken]
+                    (source / 'abcdef.json').write_text(json.dumps(fio))
                 result = subprocess.run([
                     sys.executable, str(ROOT / 'tools/rawstor-bench-compile'),
                     '--prefix', str(root), 'fio',
                 ], capture_output=True, text=True)
                 self.assertNotEqual(result.returncode, 0)
                 self.assertNotIn('Compiled successfully', result.stdout)
-                self.assertFalse((root / 'docs/fio/librawstor/test/abc123.md').exists())
+                if broken in ('meta', 'json', 'missing_json', 'missing_txt'):
+                    self.assertFalse((root / 'docs/fio/librawstor/test/abc123.md').exists())
 
 
 if __name__ == '__main__':
